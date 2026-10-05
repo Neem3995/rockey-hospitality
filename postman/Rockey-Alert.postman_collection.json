@@ -1,0 +1,519 @@
+{
+  "info": {
+    "name": "Rockey Slice 9 - Alerts and Automation",
+    "description": "Live execution requires an initialized backend and runtime STAFF/ADMIN/USER tokens. Prepare source conditions through existing APIs: active non-READY Room with arrival now..now+2h and active Housekeeping recipients; assigned non-terminal overdue or HIGH/URGENT Task; active Inventory at/below threshold with Purchasing or active ADMIN fallback. The five-minute scheduler generates alerts; no manual creation/scan API exists. Start with at least one unresolved UNREAD alert owned by STAFF. Keep that source condition true during API checks. Capture another employee alert id manually for ownership checks. Tokens must not be saved.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{staffAccessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "staffAccessToken",
+      "value": ""
+    },
+    {
+      "key": "adminAccessToken",
+      "value": ""
+    },
+    {
+      "key": "userAccessToken",
+      "value": ""
+    },
+    {
+      "key": "alertId",
+      "value": ""
+    },
+    {
+      "key": "ownEmployeeId",
+      "value": ""
+    },
+    {
+      "key": "otherAlertId",
+      "value": ""
+    },
+    {
+      "key": "otherEmployeeId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "STAFF active own alerts and capture unread fixture",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/alerts?page=0&size=20&sort=createdAt,desc"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Canonical page and no resolved rows', () => { const x=pm.response.json(); pm.expect(x).to.include.keys('content','page','size','totalElements','totalPages','last'); x.content.forEach(a=>pm.expect(a.status).not.to.eql('RESOLVED')); });",
+              "const fixture=pm.response.json().content.find(a=>a.status==='UNREAD'); pm.test('Unread STAFF fixture available', () => pm.expect(fixture).to.exist); if(fixture){pm.collectionVariables.set('alertId',fixture.id);pm.collectionVariables.set('ownEmployeeId',fixture.employee.id);}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Own alert detail is shallow and safe",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/alerts/{{alertId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Safe DTO', () => {const x=pm.response.json(); pm.expect(x.employee).to.have.keys('id','name'); if(x.task)pm.expect(x.task).to.have.keys('id','title'); ['password','passwordHash','accessToken','refreshToken','refreshTokenHash'].forEach(k=>pm.expect(x).not.to.have.property(k)); pm.expect(x).to.include.keys('type','severity','status','sourceKey','createdAt','readAt','resolvedAt');});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Own employee/status filter",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/alerts?employeeId={{ownEmployeeId}}&status=UNREAD&page=0&size=5"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Own scope', ()=>pm.response.json().content.forEach(x=>pm.expect(String(x.employee.id)).to.eql(String(pm.collectionVariables.get('ownEmployeeId')))));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ADMIN oversight list",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/alerts?page=0&size=20",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{adminAccessToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ADMIN oversight detail",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/alerts/{{alertId}}",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{adminAccessToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ADMIN may not mark STAFF alert READ",
+      "request": {
+        "method": "PUT",
+        "url": "{{baseUrl}}/api/alerts/{{alertId}}/read",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{adminAccessToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 403', () => pm.response.to.have.status(403));",
+              "pm.test('Canonical error', () => pm.expect(pm.response.json().status).to.eql(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Other employee filter denied to STAFF",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/alerts?employeeId={{otherEmployeeId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 403', () => pm.response.to.have.status(403));",
+              "pm.test('Canonical error', () => pm.expect(pm.response.json().status).to.eql(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Other recipient detail denied to STAFF",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/alerts/{{otherAlertId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 403', () => pm.response.to.have.status(403));",
+              "pm.test('Canonical error', () => pm.expect(pm.response.json().status).to.eql(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Other recipient READ denied to STAFF",
+      "request": {
+        "method": "PUT",
+        "url": "{{baseUrl}}/api/alerts/{{otherAlertId}}/read"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 403', () => pm.response.to.have.status(403));",
+              "pm.test('Canonical error', () => pm.expect(pm.response.json().status).to.eql(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Other recipient resolve denied to STAFF",
+      "request": {
+        "method": "DELETE",
+        "url": "{{baseUrl}}/api/alerts/{{otherAlertId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 403', () => pm.response.to.have.status(403));",
+              "pm.test('Canonical error', () => pm.expect(pm.response.json().status).to.eql(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mark own UNREAD alert READ without request body",
+      "request": {
+        "method": "PUT",
+        "url": "{{baseUrl}}/api/alerts/{{alertId}}/read"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('READ timestamp', ()=>{const x=pm.response.json();pm.expect(x.status).to.eql('READ');pm.expect(x.readAt).to.be.a('string');pm.expect(x.resolvedAt).to.eql(null);});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Repeated READ is invalid transition",
+      "request": {
+        "method": "PUT",
+        "url": "{{baseUrl}}/api/alerts/{{alertId}}/read"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 409', () => pm.response.to.have.status(409));",
+              "pm.test('Canonical error', () => pm.expect(pm.response.json().status).to.eql(409));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dismiss own alert preserving history",
+      "request": {
+        "method": "DELETE",
+        "url": "{{baseUrl}}/api/alerts/{{alertId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 204', () => pm.response.to.have.status(204));",
+              "pm.test('No body', () => pm.expect(pm.response.text()).to.eql(''));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Resolved history remains readable",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/alerts/{{alertId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Preserved RESOLVED history', ()=>{const x=pm.response.json();pm.expect(x.status).to.eql('RESOLVED');pm.expect(x.readAt).to.be.a('string');pm.expect(x.resolvedAt).to.be.a('string');});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Explicit resolved-history list",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/alerts?status=RESOLVED"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Resolved filter', ()=>pm.response.json().content.forEach(x=>pm.expect(x.status).to.eql('RESOLVED')));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Already resolved delete returns conflict",
+      "request": {
+        "method": "DELETE",
+        "url": "{{baseUrl}}/api/alerts/{{alertId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 409', () => pm.response.to.have.status(409));",
+              "pm.test('Canonical error', () => pm.expect(pm.response.json().status).to.eql(409));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Resolved alert cannot become READ",
+      "request": {
+        "method": "PUT",
+        "url": "{{baseUrl}}/api/alerts/{{alertId}}/read"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 409', () => pm.response.to.have.status(409));",
+              "pm.test('Canonical error', () => pm.expect(pm.response.json().status).to.eql(409));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "USER has no operational alert access",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/alerts",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{userAccessToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 403', () => pm.response.to.have.status(403));",
+              "pm.test('Canonical error', () => pm.expect(pm.response.json().status).to.eql(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Anonymous denied",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/alerts",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 401', () => pm.response.to.have.status(401));",
+              "pm.test('Canonical error', () => pm.expect(pm.response.json().status).to.eql(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Missing alert",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/alerts/9223372036854775807"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 404', () => pm.response.to.have.status(404));",
+              "pm.test('Canonical error', () => pm.expect(pm.response.json().status).to.eql(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invalid alert type",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/alerts?type=INVALID"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 400', () => pm.response.to.have.status(400));",
+              "pm.test('Canonical error', () => pm.expect(pm.response.json().status).to.eql(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Page size above 100 denied",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/alerts?size=101"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 400', () => pm.response.to.have.status(400));",
+              "pm.test('Canonical error', () => pm.expect(pm.response.json().status).to.eql(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Manual Alert POST is not approved",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/alerts",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{adminAccessToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 403', () => pm.response.to.have.status(403));",
+              "pm.test('Canonical error', () => pm.expect(pm.response.json().status).to.eql(403));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
