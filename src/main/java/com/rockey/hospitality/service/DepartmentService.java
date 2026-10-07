@@ -1,25 +1,33 @@
 package com.rockey.hospitality.service;
 
 import com.rockey.hospitality.entity.Department;
-import com.rockey.hospitality.entity.EmployeeStatus;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
+import com.rockey.hospitality.entity.Employee;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.repository.DepartmentRepository;
 import com.rockey.hospitality.repository.EmployeeRepository;
 import com.rockey.hospitality.repository.InventoryItemRepository;
 import com.rockey.hospitality.repository.TaskRepository;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-
 /**
- * Manages Department lifecycle and name uniqueness.
- * Deactivation preserves the row and is blocked while active employees, inventory, or non-terminal tasks reference it.
+ * STUDY NOTE: A Service holds business rules and coordinates an application workflow.
+ * Here, @Service lets Spring manage and inject this component; @Transactional groups database work so unchecked
+ * failures roll back writes.
+ * DepartmentService checks name uniqueness and prevents deactivation while active profiles, work or stock
+ * reference a Department.
+ * DepartmentController delegates here; Department, Employee, Task and Inventory repositories provide the
+ * persisted data through JPA/Hibernate.
  */
-// Registers this business/security service for constructor injection.
 @Service
 public class DepartmentService {
+
+    // Transaction study key: Spring applies @Transactional when another component calls this managed service.
+    // readOnly=true requests a read-oriented transaction; it keeps lazy reads and DTO mapping inside the
+    // persistence boundary.
+    // readOnly is not an authorization rule; repositories still run only after the service's scope checks.
 
     /**
      * Injected DepartmentRepository for database lookup and persistence, keeping SQL access out of controller code.
@@ -57,7 +65,6 @@ public class DepartmentService {
      * Returns Departments alphabetically, optionally filtering active or inactive rows.
      * The controller maps these internal entities to response DTOs.
      */
-    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public List<Department> listDepartments(Boolean active) {
         if (active == null) {
@@ -69,7 +76,6 @@ public class DepartmentService {
     /**
      * Trims the requested name, checks case-insensitive uniqueness, and saves a new active Department.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public Department createDepartment(String name, String description) {
         String normalizedName = normalizeName(name);
@@ -82,7 +88,6 @@ public class DepartmentService {
     /**
      * Loads one Department or raises the standard missing-resource error.
      */
-    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public Department getDepartment(Long departmentId) {
         return findDepartment(departmentId);
@@ -91,7 +96,6 @@ public class DepartmentService {
     /**
      * Updates the name and description after checking that another Department does not own the normalized name.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public Department updateDepartment(Long departmentId, String name, String description) {
         Department department = findDepartment(departmentId);
@@ -107,7 +111,6 @@ public class DepartmentService {
      * Locks the Department and checks for active Employees, active Inventory, and non-terminal Tasks before setting active=false.
      * The row and related history remain stored.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public void deactivateDepartment(Long departmentId) {
         // Preserve history; active Employees/Inventory and non-terminal Tasks block deactivation.
@@ -117,7 +120,7 @@ public class DepartmentService {
                 ));
         if (employeeRepository.existsByDepartmentIdAndStatus(
                 departmentId,
-                EmployeeStatus.ACTIVE
+                Employee.Status.ACTIVE
         )) {
             throw new ConflictException(
                     "Department cannot be deactivated while active employees are assigned."

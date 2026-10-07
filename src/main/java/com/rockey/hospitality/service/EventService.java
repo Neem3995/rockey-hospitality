@@ -1,36 +1,43 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.event.CreateEventRequest;
-import com.rockey.hospitality.dto.event.EventResponse;
-import com.rockey.hospitality.dto.event.EventSummary;
-import com.rockey.hospitality.dto.event.UpdateEventRequest;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.EventDtos.CreateEventRequest;
+import com.rockey.hospitality.dto.EventDtos.EventResponse;
+import com.rockey.hospitality.dto.EventDtos.EventSummary;
+import com.rockey.hospitality.dto.EventDtos.UpdateEventRequest;
 import com.rockey.hospitality.entity.Event;
-import com.rockey.hospitality.entity.EventStatus;
-import com.rockey.hospitality.entity.TaskStatus;
-import com.rockey.hospitality.exception.BadRequestException;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
+import com.rockey.hospitality.entity.Task;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.repository.EventRepository;
 import com.rockey.hospitality.repository.TaskRepository;
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-
 /**
- * Manages Event lifecycle and returns registration and preparation-task counts.
- * Cancellation preserves Event, registration, and Task history.
+ * STUDY NOTE: A Service holds business rules and coordinates an application workflow.
+ * Here, @Service lets Spring manage and inject this component; @Transactional groups database work so unchecked
+ * failures roll back writes.
+ * EventService enforces Event lifecycle, preserves cancellation history and supplies
+ * registration/preparation counts.
+ * EventController delegates here; Event and Task repositories provide the persisted data through
+ * JPA/Hibernate.
  */
-// Registers this business/security service for constructor injection.
 @Service
 public class EventService {
+
+    // Transaction study key: Spring applies @Transactional when another component calls this managed service.
+    // readOnly=true requests a read-oriented transaction; it keeps lazy reads and DTO mapping inside the
+    // persistence boundary.
+    // readOnly is not an authorization rule; repositories still run only after the service's scope checks.
 
     /**
      * Maximum of 100 rows per requested page, shared by this service's pagination checks.
@@ -51,25 +58,25 @@ public class EventService {
     /**
      * COMPLETED and CANCELLED Event states are terminal and cannot be edited.
      */
-    private static final Set<EventStatus> TERMINAL_STATUSES = Set.of(
-            EventStatus.COMPLETED,
-            EventStatus.CANCELLED
+    private static final Set<Event.Status> TERMINAL_STATUSES = Set.of(
+            Event.Status.COMPLETED,
+            Event.Status.CANCELLED
     );
     /**
      * Explicit allowed next-status map used to reject skipped or terminal lifecycle changes.
      */
-    private static final Map<EventStatus, Set<EventStatus>> ALLOWED_TRANSITIONS = Map.of(
-            EventStatus.DRAFT,
-            Set.of(EventStatus.OPEN, EventStatus.CANCELLED),
-            EventStatus.OPEN,
-            Set.of(EventStatus.CLOSED, EventStatus.IN_PROGRESS, EventStatus.CANCELLED),
-            EventStatus.CLOSED,
-            Set.of(EventStatus.IN_PROGRESS, EventStatus.CANCELLED),
-            EventStatus.IN_PROGRESS,
-            Set.of(EventStatus.COMPLETED),
-            EventStatus.COMPLETED,
+    private static final Map<Event.Status, Set<Event.Status>> ALLOWED_TRANSITIONS = Map.of(
+            Event.Status.DRAFT,
+            Set.of(Event.Status.OPEN, Event.Status.CANCELLED),
+            Event.Status.OPEN,
+            Set.of(Event.Status.CLOSED, Event.Status.IN_PROGRESS, Event.Status.CANCELLED),
+            Event.Status.CLOSED,
+            Set.of(Event.Status.IN_PROGRESS, Event.Status.CANCELLED),
+            Event.Status.IN_PROGRESS,
+            Set.of(Event.Status.COMPLETED),
+            Event.Status.COMPLETED,
             Set.of(),
-            EventStatus.CANCELLED,
+            Event.Status.CANCELLED,
             Set.of()
     );
 
@@ -94,10 +101,9 @@ public class EventService {
      * Validates the date range and pages Events using optional status and inclusive date bounds.
      * Each response includes persisted registration and preparation counts.
      */
-    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public PagedResponse<EventResponse> listEvents(
-            EventStatus status,
+            Event.Status status,
             LocalDateTime dateFrom,
             LocalDateTime dateTo,
             int page,
@@ -126,14 +132,13 @@ public class EventService {
     /**
      * Requires a future date and an initial DRAFT or OPEN status before saving the normalized Event.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public EventResponse createEvent(CreateEventRequest request) {
         validateFutureEventDate(request.getEventDateTime(), LocalDateTime.now());
-        EventStatus initialStatus = request.getInitialStatus() == null
-                ? EventStatus.DRAFT
+        Event.Status initialStatus = request.getInitialStatus() == null
+                ? Event.Status.DRAFT
                 : request.getInitialStatus();
-        if (initialStatus != EventStatus.DRAFT && initialStatus != EventStatus.OPEN) {
+        if (initialStatus != Event.Status.DRAFT && initialStatus != Event.Status.OPEN) {
             throw new ConflictException("New events must begin in DRAFT or OPEN status.");
         }
         Event event = new Event(
@@ -150,7 +155,6 @@ public class EventService {
     /**
      * Loads one Event and assembles its safe details and aggregate counts.
      */
-    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public EventResponse getEvent(Long eventId) {
         return toResponse(findEvent(eventId));
@@ -159,7 +163,6 @@ public class EventService {
     /**
      * Locks a non-terminal Event, protects registered capacity, and validates changed dates and status transitions before updating details.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public EventResponse updateEvent(Long eventId, UpdateEventRequest request) {
         Event event = findEventForUpdate(eventId);
@@ -176,11 +179,11 @@ public class EventService {
             );
         }
 
-        EventStatus requestedStatus = request.getStatus();
+        Event.Status requestedStatus = request.getStatus();
         if (event.getStatus() != requestedStatus) {
             ensureTransitionAllowed(event.getStatus(), requestedStatus);
         }
-        if (requestedStatus == EventStatus.OPEN
+        if (requestedStatus == Event.Status.OPEN
                 && !request.getEventDateTime().isAfter(now)) {
             throw new ConflictException("OPEN events must be scheduled in the future.");
         }
@@ -200,13 +203,12 @@ public class EventService {
      * Locks an eligible Event and transitions it to CANCELLED.
      * Registrations, linked Tasks, and the Event row remain intact.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public EventResponse cancelEvent(Long eventId) {
         // Cancellation keeps registration and preparation-Task history instead of deleting rows.
         Event event = findEventForUpdate(eventId);
         ensureNotTerminal(event);
-        ensureTransitionAllowed(event.getStatus(), EventStatus.CANCELLED);
+        ensureTransitionAllowed(event.getStatus(), Event.Status.CANCELLED);
         event.cancel();
         return toResponse(eventRepository.save(event));
     }
@@ -219,7 +221,7 @@ public class EventService {
         long taskCount = taskRepository.countByEventId(event.getId());
         long completedTaskCount = taskRepository.countByEventIdAndStatus(
                 event.getId(),
-                TaskStatus.COMPLETED
+                Task.Status.COMPLETED
         );
         return new EventResponse(
                 event.getId(),
@@ -284,7 +286,7 @@ public class EventService {
     /**
      * Checks the explicit Event transition map rather than accepting arbitrary status changes.
      */
-    private void ensureTransitionAllowed(EventStatus current, EventStatus requested) {
+    private void ensureTransitionAllowed(Event.Status current, Event.Status requested) {
         if (!ALLOWED_TRANSITIONS.getOrDefault(current, Set.of()).contains(requested)) {
             throw new ConflictException(
                     "Event transition from " + current + " to " + requested

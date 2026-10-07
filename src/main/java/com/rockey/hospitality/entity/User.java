@@ -21,16 +21,17 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
-
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Persists the login account, BCrypt password hash, and one opaque refresh session's hash and expiry.
- * Its security role differs from an Employee's descriptive job role.
+ * STUDY NOTE: An Entity is a Java class JPA/Hibernate maps to stored database rows.
+ * Here, @Entity marks this persistent class, while @Table selects the users MySQL table.
+ * User stores login identity, BCrypt password hash, security role and one refresh-session hash/expiry for
+ * authentication services.
+ * schema.sql creates the tables; Hibernate validates their shape instead of creating them.
  */
-// Marks a JPA-mapped database entity; the configured application validates the supplied schema instead of creating it.
 @Entity
 // Maps to the existing users table; @UniqueConstraint describes unique keys. These mappings do not create the application schema.
 @Table(
@@ -45,23 +46,40 @@ import java.util.Set;
 )
 public class User {
 
+    // Persistence study key:
+    // @JoinTable selects the association table; its two join columns link Users with Events.
+    // @JoinColumn names a foreign-key column linking this row to another table's primary key.
+    // @Id marks the primary key; @GeneratedValue(IDENTITY) lets MySQL generate it on insertion.
+    // @Column maps a Java field to a SQL column; nullable/length settings describe the supplied schema.
+    // @Enumerated(STRING) stores enum names such as USER, not positions such as 0 or 1.
+    // @PrePersist runs before the first insert; the callback supplies lifecycle defaults and timestamps.
+    // @PreUpdate runs before an entity update; the callback refreshes its update timestamp.
+    // @UniqueConstraint describes a unique key so duplicate field values or join pairs cannot be stored.
+    // Time study key: callbacks use server-local LocalDateTime; Hibernate's JDBC time-zone setting is UTC.
+    // MySQL DATETIME has no zone label; do not silently treat every operational API LocalDateTime as UTC.
+    // Refresh-session expiry is explicitly UTC; BCrypt hashes passwords and cannot be decrypted to recover
+    // them.
+    // User.Role grants permissions; Employee.jobRole and Department describe work context, not roles.
+    // Validation study key (the numbers/patterns are specified on each annotated field):
+    // @NotBlank requires non-null text containing at least one non-whitespace character.
+    // @Size checks length/count against the declared min/max (text length for the fields here).
+    // @Email checks email format; required text needs @NotBlank separately.
+    // @Positive checks that a supplied number is greater than zero.
+    // @PositiveOrZero allows zero but rejects a negative supplied number.
+    // Most shape/range validators accept null; @NotNull or @NotBlank supplies required-value checks.
+
     /**
      * Database identifier used to refer to this resource in requests and relationships.
      */
-    // Identifies the entity's primary-key field.
     @Id
-    // Uses the database IDENTITY mechanism to generate the primary key.
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    // Requires a supplied number to be greater than zero; null is handled separately.
     @Positive
     private Long id;
 
     /**
      * Stored display name for this record; it grants no permissions.
      */
-    // Requires non-null text containing at least one non-whitespace character.
     @NotBlank
-    // Checks supplied text length from 2 to 100 characters; required text is checked separately.
     @Size(min = 2, max = 100)
     // Maps this field to its matching SQL column (non-null, length 100) in the supplied schema.
     @Column(nullable = false, length = 100)
@@ -70,11 +88,8 @@ public class User {
     /**
      * Profile or account email; service-level normalization and uniqueness checks depend on the owning resource.
      */
-    // Requires non-null text containing at least one non-whitespace character.
     @NotBlank
-    // Checks email format when a value is present; required text is enforced separately.
     @Email
-    // Checks supplied text length up to 120 characters; required text is checked separately.
     @Size(max = 120)
     // Maps this field to its matching SQL column (non-null, length 120) in the supplied schema.
     @Column(nullable = false, length = 120)
@@ -83,9 +98,7 @@ public class User {
     /**
      * BCrypt password hash used only for matching credentials; no response DTO exposes it.
      */
-    // Requires non-null text containing at least one non-whitespace character.
     @NotBlank
-    // Checks supplied text length up to 255 characters; required text is checked separately.
     @Size(max = 255)
     // Maps this field to password_hash SQL column (non-null, length 255) in the supplied schema.
     @Column(name = "password_hash", nullable = false, length = 255)
@@ -94,16 +107,15 @@ public class User {
     /**
      * USER/STAFF/ADMIN security role used by backend authorization.
      */
-    // Stores the enum's name as text, not its numeric ordinal.
     @Enumerated(EnumType.STRING)
     // Maps this field to its matching SQL column (non-null, length 20) in the supplied schema.
     @Column(nullable = false, length = 20)
-    private Role role = Role.USER;
+    private User.Role role = User.Role.USER;
 
     /**
      * Optional authorization Department; EmployeeService keeps it equal to a linked Employee's Department.
      */
-    // Many rows can reference the same related entity; LAZY loads the relationship when it is needed within the service transaction.
+    // @ManyToOne lets many User rows reference the same Department; LAZY defers loading it until needed.
     @ManyToOne(fetch = FetchType.LAZY)
     // Stores this relationship's foreign key in department_id, which may be null.
     @JoinColumn(name = "department_id")
@@ -112,16 +124,15 @@ public class User {
     /**
      * Lifecycle enum value interpreted by this resource's service and transition rules.
      */
-    // Stores the enum's name as text, not its numeric ordinal.
     @Enumerated(EnumType.STRING)
     // Maps this field to its matching SQL column (non-null, length 20) in the supplied schema.
     @Column(nullable = false, length = 20)
-    private UserStatus status = UserStatus.ACTIVE;
+    private User.Status status = User.Status.ACTIVE;
 
     /**
      * User-owned Event memberships persisted through event_registrations, not a separate registration entity.
      */
-    // Stores User/Event membership through a join table; LAZY defers loading the collection until accessed.
+    // @ManyToMany means many Users can join many Events; LAZY defers reading the membership collection.
     @ManyToMany(fetch = FetchType.LAZY)
     // Each membership is a User/Event pair in event_registrations, not a separate account type.
     // Uses event_registrations for User/Event membership: nested @JoinColumn maps both foreign keys and @UniqueConstraint prevents duplicate pairs.
@@ -148,7 +159,6 @@ public class User {
     /**
      * SHA-256 hexadecimal hash of the single active refresh token; never the raw cookie value.
      */
-    // Checks supplied text length up to 64 characters; required text is checked separately.
     @Size(max = 64)
     // Maps this field to refresh_token_hash SQL column (length 64) in the supplied schema.
     @Column(name = "refresh_token_hash", length = 64)
@@ -193,15 +203,14 @@ public class User {
     /**
      * Defaults USER role, ACTIVE status, and the legacy token version and initializes creation/update timestamps from server-local time.
      */
-    // Runs this lifecycle callback before the entity's first insert.
     @PrePersist
     void prepareForInsert() {
         LocalDateTime now = LocalDateTime.now();
         if (role == null) {
-            role = Role.USER;
+            role = User.Role.USER;
         }
         if (status == null) {
-            status = UserStatus.ACTIVE;
+            status = User.Status.ACTIVE;
         }
         if (tokenVersion == null) {
             tokenVersion = 0;
@@ -213,7 +222,6 @@ public class User {
     /**
      * Refreshes updatedAt using server-local time before Hibernate writes an entity update.
      */
-    // Runs this lifecycle callback before a changed entity is written.
     @PreUpdate
     void prepareForUpdate() {
         updatedAt = LocalDateTime.now();
@@ -239,10 +247,10 @@ public class User {
     /**
      * Sets the internal login role, Department, and active status after EmployeeService restricts provisioning to STAFF/ADMIN.
      */
-    public void provisionEmployeeAccess(Role role, Department department) {
+    public void provisionEmployeeAccess(User.Role role, Department department) {
         this.role = role;
         this.department = department;
-        this.status = UserStatus.ACTIVE;
+        this.status = User.Status.ACTIVE;
     }
 
     /**
@@ -255,9 +263,9 @@ public class User {
     /**
      * Matches linked account status to Employee lifecycle and revokes refresh state when the account becomes inactive.
      */
-    public void synchronizeEmployeeStatus(UserStatus status) {
+    public void synchronizeEmployeeStatus(User.Status status) {
         this.status = status;
-        if (status == UserStatus.INACTIVE) {
+        if (status == User.Status.INACTIVE) {
             clearRefreshSession();
         }
     }
@@ -296,7 +304,7 @@ public class User {
         return passwordHash;
     }
 
-    public Role getRole() {
+    public User.Role getRole() {
         return role;
     }
 
@@ -304,7 +312,7 @@ public class User {
         return department;
     }
 
-    public UserStatus getStatus() {
+    public User.Status getStatus() {
         return status;
     }
 
@@ -326,5 +334,42 @@ public class User {
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+
+    /**
+     * User.Role is an enum: a Java type limited to a fixed set of valid choices.
+     * Defines backend security roles: USER for attendee actions, STAFF for authorized operational scope, and ADMIN for oversight.
+     * These are not Employee job titles or Department names.
+     */
+    public enum Role {
+        /**
+         * Attendee account permissions, including own Event registration.
+         */
+        USER,
+        /**
+         * Operational permissions restricted by eligible identity and Department scope.
+         */
+        STAFF,
+        /**
+         * Operational oversight and management permissions.
+         */
+        ADMIN
+    }
+
+    /**
+     * User.Status is an enum: a Java type limited to a fixed set of valid choices.
+     * Controls whether an account is ACTIVE or INACTIVE.
+     * JWT authentication reloads this state, and Employee deactivation also clears linked refresh state.
+     */
+    public enum Status {
+        /**
+         * Account eligible for authentication.
+         */
+        ACTIVE,
+        /**
+         * Retained account that cannot authenticate.
+         */
+        INACTIVE
     }
 }

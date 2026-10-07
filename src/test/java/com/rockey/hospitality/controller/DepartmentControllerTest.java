@@ -4,10 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.rockey.hospitality.entity.Department;
-import com.rockey.hospitality.exception.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.exception.GlobalExceptionHandler;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
 import com.rockey.hospitality.service.DepartmentService;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,10 +21,6 @@ import org.springframework.http.converter.json.MappingJackson2HttpMessageConvert
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;

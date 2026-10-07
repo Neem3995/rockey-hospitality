@@ -1,18 +1,17 @@
 package com.rockey.hospitality.controller;
 
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
-import com.rockey.hospitality.exception.ApiError;
-
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.inventory.CreateInventoryItemRequest;
-import com.rockey.hospitality.dto.inventory.InventoryItemResponse;
-import com.rockey.hospitality.dto.inventory.UpdateInventoryItemRequest;
+import com.rockey.hospitality.dto.CommonDtos.ApiError;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.InventoryDtos.CreateInventoryItemRequest;
+import com.rockey.hospitality.dto.InventoryDtos.InventoryItemResponse;
+import com.rockey.hospitality.dto.InventoryDtos.UpdateInventoryItemRequest;
 import com.rockey.hospitality.security.RockeyUserPrincipal;
 import com.rockey.hospitality.service.InventoryService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,14 +27,34 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Binds Inventory HTTP requests and delegates business operations to its service layer.
- * Response DTOs and HTTP statuses are kept separate from JPA entities.
+ * STUDY NOTE: A Controller is the API entry point for HTTP requests from React or another client.
+ * Here, @RestController returns response data, normally JSON; @RequestMapping sets the shared /api/inventory URL.
+ * InventoryController handles stock reads, updates and soft deactivation and delegates business rules to
+ * InventoryService.
+ * DTOs describe input/output; Spring Security and service checks, not hidden frontend buttons, enforce
+ * permissions.
  */
-// Registers a web controller whose mapped return values are written as response bodies, normally JSON.
 @RestController
 // Groups this controller's routes under /api/inventory.
 @RequestMapping("/api/inventory")
 public class InventoryController {
+
+    // HTTP/annotation study key:
+    // @GetMapping handles HTTP GET reads; its path is appended to the controller's base URL.
+    // @PostMapping handles HTTP POST creation/actions, here creating an inventory item.
+    // @PutMapping handles HTTP PUT updates, here replacing stock details, including absolute restock quantities.
+    // @DeleteMapping handles DELETE requests; service rules may deactivate, cancel, resolve or withdraw rather
+    // than erase rows.
+    // @RequestBody reads request JSON into the declared DTO.
+    // @PathVariable reads an identifier directly from the URL path.
+    // @RequestParam reads a query-string value; required=false makes it optional and defaultValue supplies an
+    // omitted value.
+    // @Valid runs the DTO's Bean Validation checks before controller business delegation.
+    // @AuthenticationPrincipal supplies the identity established by Spring Security, not a client-chosen User
+    // ID.
+    // @Operation and @ApiResponses document the operation and its outcomes; they do not authorize or validate
+    // requests.
+    // @Content/@Schema describe documented bodies/types, not runtime validation or security.
 
     /**
      * Injected InventoryService collaborator; this layer delegates the operation rather than duplicating its rules.
@@ -53,29 +72,20 @@ public class InventoryController {
      * Department-scoped/all inventory.
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Department-scoped/all inventory", description = "Access: STAFF scoped, ADMIN. Canonical operation: GET /api/inventory.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "401", description = "Authentication required or invalid token", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "403", description = "Role, ownership or eligibility denied", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP GET to the controller's base route.
     @GetMapping
     public PagedResponse<InventoryItemResponse> listInventory(
-            // Binds an optional query parameter; omitted filters arrive as null.
             @RequestParam(required = false) Long departmentId,
-            // Binds an optional query parameter; omitted filters arrive as null.
             @RequestParam(required = false) Boolean active,
-            // Binds this query parameter, defaulting to 0 when omitted.
             @RequestParam(defaultValue = "0") int page,
-            // Binds this query parameter, defaulting to 20 when omitted.
             @RequestParam(defaultValue = "20") int size,
-            // Binds this query parameter, defaulting to name,asc when omitted.
             @RequestParam(defaultValue = "name,asc") String sort,
-            // Uses the identity established by backend authentication, not an ID supplied in JSON.
             @AuthenticationPrincipal RockeyUserPrincipal principal) {
         return inventoryService.listInventory(departmentId, active, page, size, sort,
                 principal.getId(), principal.getRole());
@@ -86,9 +96,7 @@ public class InventoryController {
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      * ResponseEntity sets 201 and returns the created DTO.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Create inventory item", description = "Access: ADMIN. Canonical operation: POST /api/inventory.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Created", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ApiError.class))),
@@ -96,12 +104,9 @@ public class InventoryController {
         @ApiResponse(responseCode = "404", description = "Resource not found", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "409", description = "Business or lifecycle conflict", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP POST to the controller's base route.
     @PostMapping
     public ResponseEntity<InventoryItemResponse> createInventoryItem(
-            // Validates the bound request DTO before the controller delegates to its service.
             @Valid
-            // Deserializes the request JSON into this writable DTO.
             @RequestBody CreateInventoryItemRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(inventoryService.createInventoryItem(request));
@@ -111,21 +116,16 @@ public class InventoryController {
      * Inventory detail.
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Inventory detail", description = "Access: STAFF scoped, ADMIN. Canonical operation: GET /api/inventory/{itemId}.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "401", description = "Authentication required or invalid token", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "403", description = "Role, ownership or eligibility denied", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "404", description = "Resource not found", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP GET to this /{itemId} suffix.
     @GetMapping("/{itemId}")
     public InventoryItemResponse getInventoryItem(
-            // Binds this value from the matching identifier in the route path.
             @PathVariable Long itemId,
-            // Uses the identity established by backend authentication, not an ID supplied in JSON.
             @AuthenticationPrincipal RockeyUserPrincipal principal) {
         return inventoryService.getInventoryItem(itemId, principal.getId(), principal.getRole());
     }
@@ -134,9 +134,7 @@ public class InventoryController {
      * Update/restock item.
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Update/restock item", description = "Access: ADMIN. Canonical operation: PUT /api/inventory/{itemId}.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ApiError.class))),
@@ -144,14 +142,10 @@ public class InventoryController {
         @ApiResponse(responseCode = "404", description = "Resource not found", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "409", description = "Business or lifecycle conflict", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP PUT to this /{itemId} suffix.
     @PutMapping("/{itemId}")
     public InventoryItemResponse updateInventoryItem(
-            // Binds this value from the matching identifier in the route path.
             @PathVariable Long itemId,
-            // Validates the bound request DTO before the controller delegates to its service.
             @Valid
-            // Deserializes the request JSON into this writable DTO.
             @RequestBody UpdateInventoryItemRequest request) {
         return inventoryService.updateInventoryItem(itemId, request);
     }
@@ -161,19 +155,15 @@ public class InventoryController {
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      * ResponseEntity returns 204 with no body after the service finishes.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Deactivate inventory item", description = "Access: ADMIN. Canonical operation: DELETE /api/inventory/{itemId}.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "No Content", content = @Content),
         @ApiResponse(responseCode = "403", description = "Role, ownership or eligibility denied", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "404", description = "Resource not found", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "409", description = "Business or lifecycle conflict", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP DELETE to this /{itemId} suffix.
     @DeleteMapping("/{itemId}")
     public ResponseEntity<Void> deactivateInventoryItem(
-            // Binds this value from the matching identifier in the route path.
             @PathVariable Long itemId) {
         inventoryService.deactivateInventoryItem(itemId);
         return ResponseEntity.noContent().build();

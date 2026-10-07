@@ -4,10 +4,14 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
- * Starts the Spring Boot backend.
- * Component scanning begins in this package so controllers, services, repositories, and configuration below it can be discovered.
+ * STUDY NOTE: This is the entry point that starts the Spring Boot backend.
+ * Here, @SpringBootApplication combines configuration, automatic framework setup and component scanning below
+ * this package.
+ * SpringApplication creates Spring's application context (its managed objects) and starts the embedded HTTP
+ * server.
+ * The discovered controllers, services, repositories and configuration then work together to handle
+ * requests.
  */
-// Combines Boot configuration, automatic configuration, and component scanning from this package.
 @SpringBootApplication
 public class RockeyHospitalityApplication {
 

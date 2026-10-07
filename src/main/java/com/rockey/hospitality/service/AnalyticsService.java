@@ -1,19 +1,20 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.dto.analytics.*;
-import com.rockey.hospitality.dto.common.PagedResponse;
+import com.rockey.hospitality.dto.AnalyticsDtos.*;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
 import com.rockey.hospitality.entity.*;
-import com.rockey.hospitality.exception.BadRequestException;
-import com.rockey.hospitality.exception.ForbiddenException;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
+import com.rockey.hospitality.entity.Alert;
+import com.rockey.hospitality.entity.Employee;
+import com.rockey.hospitality.entity.Event;
+import com.rockey.hospitality.entity.Room;
+import com.rockey.hospitality.entity.Task;
+import com.rockey.hospitality.entity.User;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.repository.AnalyticsRepository;
 import com.rockey.hospitality.repository.DepartmentRepository;
 import com.rockey.hospitality.repository.EmployeeRepository;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -22,16 +23,28 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Builds read-only aggregates for the caller's permitted identity and department scope.
- * USER responses contain only registration counts; operational detail is restricted to STAFF and ADMIN.
+ * STUDY NOTE: A Service holds business rules and coordinates an application workflow.
+ * Here, @Service lets Spring manage and inject this component; @Transactional groups database work so unchecked
+ * failures roll back writes.
+ * AnalyticsService returns read-only role-scoped counts, with no hotel operational data for USER.
+ * AnalyticsController delegates here; Analytics and Department/Employee repositories provide the persisted
+ * data through JPA/Hibernate.
  */
-// Registers this business/security service for constructor injection.
 @Service
 // Class-level: every public method runs in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
 @Transactional(readOnly = true)
 public class AnalyticsService {
+
+    // Transaction study key: Spring applies @Transactional when another component calls this managed service.
+    // readOnly=true requests a read-oriented transaction; it keeps lazy reads and DTO mapping inside the
+    // persistence boundary.
+    // readOnly is not an authorization rule; repositories still run only after the service's scope checks.
     /**
      * Injected AnalyticsRepository for database lookup and persistence, keeping SQL access out of controller code.
      */
@@ -64,70 +77,70 @@ public class AnalyticsService {
      * Selects only the authenticated role's response section.
      * STAFF counts use its own Employee and Department; ADMIN counts use global queries.
      */
-    public DashboardResponse dashboard(Long userId, Role role) {
+    public DashboardResponse dashboard(Long userId, User.Role role) {
         // Aggregate only the permitted role/identity scope; React must never hide leaked global data.
         if (role == null || userId == null || userId <= 0) {
             throw new ForbiddenException("Dashboard requires an authenticated identity.");
         }
         OffsetDateTime asOf = asOf();
-        if (role == Role.USER) {
+        if (role == User.Role.USER) {
             return new DashboardResponse(role, asOf,
                     new DashboardResponse.UserDashboard(analytics.countRegistrations(userId)), null, null);
         }
-        if (role == Role.STAFF) {
+        if (role == User.Role.STAFF) {
             Employee employee = employees.findByUserId(userId)
                     .orElseThrow(() -> new ForbiddenException("An active employee profile is required."));
-            if (employee.getStatus() != EmployeeStatus.ACTIVE
+            if (employee.getStatus() != Employee.Status.ACTIVE
                     || employee.getDepartment() == null
                     || !Boolean.TRUE.equals(employee.getDepartment().getActive())) {
                 throw new ForbiddenException("An active employee profile is required.");
             }
             Long employeeId = employee.getId();
             Long departmentId = employee.getDepartment().getId();
-            Map<TaskStatus, Long> tasks = enumCounts(TaskStatus.class, analytics.taskCounts(null, employeeId));
-            Map<AlertStatus, Long> alerts = enumCounts(AlertStatus.class, analytics.alertCounts(employeeId));
+            Map<Task.Status, Long> tasks = enumCounts(Task.Status.class, analytics.taskCounts(null, employeeId));
+            Map<Alert.Status, Long> alerts = enumCounts(Alert.Status.class, analytics.alertCounts(employeeId));
             return new DashboardResponse(role, asOf, null, new DashboardResponse.StaffDashboard(
                     employeeId, departmentId, nonTerminalTasks(tasks),
                     analytics.overdueTaskCount(null, employeeId, asOf.toLocalDateTime()),
-                    alerts.get(AlertStatus.UNREAD), unresolvedAlerts(alerts),
+                    alerts.get(Alert.Status.UNREAD), unresolvedAlerts(alerts),
                     analytics.activeInventoryItemCount(departmentId), analytics.lowStockItemCount(departmentId)), null);
         }
         requireAdmin(role);
-        Map<RoomStatus, Long> rooms = enumCounts(RoomStatus.class, analytics.roomCounts(null));
-        Map<TaskStatus, Long> tasks = enumCounts(TaskStatus.class, analytics.taskCounts(null, null));
-        Map<AlertStatus, Long> alerts = enumCounts(AlertStatus.class, analytics.alertCounts(null));
-        Map<EventStatus, Long> events = enumCounts(EventStatus.class, analytics.eventCounts());
+        Map<Room.Status, Long> rooms = enumCounts(Room.Status.class, analytics.roomCounts(null));
+        Map<Task.Status, Long> tasks = enumCounts(Task.Status.class, analytics.taskCounts(null, null));
+        Map<Alert.Status, Long> alerts = enumCounts(Alert.Status.class, analytics.alertCounts(null));
+        Map<Event.Status, Long> events = enumCounts(Event.Status.class, analytics.eventCounts());
         return new DashboardResponse(role, asOf, null, null, new DashboardResponse.AdminDashboard(
-                total(rooms), rooms.get(RoomStatus.READY), nonTerminalTasks(tasks),
-                analytics.overdueTaskCount(null, null, asOf.toLocalDateTime()), tasks.get(TaskStatus.COMPLETED),
+                total(rooms), rooms.get(Room.Status.READY), nonTerminalTasks(tasks),
+                analytics.overdueTaskCount(null, null, asOf.toLocalDateTime()), tasks.get(Task.Status.COMPLETED),
                 analytics.activeDepartmentCount(), unresolvedAlerts(alerts),
                 analytics.activeInventoryItemCount(null), analytics.lowStockItemCount(null),
-                events.get(EventStatus.DRAFT) + events.get(EventStatus.OPEN)
-                        + events.get(EventStatus.CLOSED) + events.get(EventStatus.IN_PROGRESS),
+                events.get(Event.Status.DRAFT) + events.get(Event.Status.OPEN)
+                        + events.get(Event.Status.CLOSED) + events.get(Event.Status.IN_PROGRESS),
                 analytics.countRegistrations(null)));
     }
 
     /**
      * Returns ADMIN-only active Room counts by status with an optional validated floor filter.
      */
-    public RoomAnalyticsResponse rooms(Integer floor, Role role) {
+    public RoomAnalyticsResponse rooms(Integer floor, User.Role role) {
         requireAdmin(role);
         if (floor != null && (floor < 1 || floor > 99)) {
             throw new BadRequestException("Floor must be between 1 and 99.");
         }
         OffsetDateTime asOf = asOf();
-        Map<RoomStatus, Long> counts = enumCounts(RoomStatus.class, analytics.roomCounts(floor));
+        Map<Room.Status, Long> counts = enumCounts(Room.Status.class, analytics.roomCounts(floor));
         return new RoomAnalyticsResponse(asOf, floor, total(counts), counts);
     }
 
     /**
      * Returns ADMIN-only Task counts by status and strict overdue counts, optionally scoped to a Department.
      */
-    public TaskAnalyticsResponse tasks(Long departmentId, Role role) {
+    public TaskAnalyticsResponse tasks(Long departmentId, User.Role role) {
         requireAdmin(role);
         validateDepartmentId(departmentId);
         OffsetDateTime asOf = asOf();
-        Map<TaskStatus, Long> counts = enumCounts(TaskStatus.class, analytics.taskCounts(departmentId, null));
+        Map<Task.Status, Long> counts = enumCounts(Task.Status.class, analytics.taskCounts(departmentId, null));
         return new TaskAnalyticsResponse(asOf, departmentId, total(counts), counts,
                 analytics.overdueTaskCount(departmentId, null, asOf.toLocalDateTime()));
     }
@@ -136,7 +149,7 @@ public class AnalyticsService {
      * Paginates Department workload summaries in ID order, including inactive Department rows.
      * A requested missing Department returns 404; far-out pages remain safely empty.
      */
-    public DepartmentAnalyticsResponse departments(Long departmentId, int page, int size, Role role) {
+    public DepartmentAnalyticsResponse departments(Long departmentId, int page, int size, User.Role role) {
         requireAdmin(role);
         validateDepartmentId(departmentId);
         if (page < 0 || size < 1 || size > 100) {
@@ -166,11 +179,11 @@ public class AnalyticsService {
      * Combines active Inventory threshold counts with global Event registration and preparation counts.
      * The Department filter applies only to Inventory.
      */
-    public OperationsAnalyticsResponse operations(Long departmentId, Role role) {
+    public OperationsAnalyticsResponse operations(Long departmentId, User.Role role) {
         requireAdmin(role);
         validateDepartmentId(departmentId);
         OffsetDateTime asOf = asOf();
-        Map<EventStatus, Long> events = enumCounts(EventStatus.class, analytics.eventCounts());
+        Map<Event.Status, Long> events = enumCounts(Event.Status.class, analytics.eventCounts());
         return new OperationsAnalyticsResponse(asOf, new OperationsAnalyticsResponse.InventoryCounts(
                 departmentId, analytics.activeInventoryItemCount(departmentId), analytics.lowStockItemCount(departmentId)),
                 new OperationsAnalyticsResponse.EventCounts(total(events), events,
@@ -202,8 +215,8 @@ public class AnalyticsService {
     /**
      * Enforces ADMIN-only analytics in the service as well as at the route boundary.
      */
-    private void requireAdmin(Role role) {
-        if (role != Role.ADMIN) throw new ForbiddenException("Analytics requires ADMIN access.");
+    private void requireAdmin(User.Role role) {
+        if (role != User.Role.ADMIN) throw new ForbiddenException("Analytics requires ADMIN access.");
     }
 
     /**
@@ -239,13 +252,13 @@ public class AnalyticsService {
     /**
      * Adds OPEN, ASSIGNED, and IN_PROGRESS counts; completed and cancelled work is excluded.
      */
-    private long nonTerminalTasks(Map<TaskStatus, Long> counts) {
-        return counts.get(TaskStatus.OPEN) + counts.get(TaskStatus.ASSIGNED) + counts.get(TaskStatus.IN_PROGRESS);
+    private long nonTerminalTasks(Map<Task.Status, Long> counts) {
+        return counts.get(Task.Status.OPEN) + counts.get(Task.Status.ASSIGNED) + counts.get(Task.Status.IN_PROGRESS);
     }
     /**
      * Adds UNREAD and READ alerts; resolved history is excluded.
      */
-    private long unresolvedAlerts(Map<AlertStatus, Long> counts) {
-        return counts.get(AlertStatus.UNREAD) + counts.get(AlertStatus.READ);
+    private long unresolvedAlerts(Map<Alert.Status, Long> counts) {
+        return counts.get(Alert.Status.UNREAD) + counts.get(Alert.Status.READ);
     }
 }

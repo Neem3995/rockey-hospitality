@@ -1,38 +1,45 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.dto.auth.DepartmentSummary;
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.inventory.CreateInventoryItemRequest;
-import com.rockey.hospitality.dto.inventory.InventoryItemResponse;
-import com.rockey.hospitality.dto.inventory.UpdateInventoryItemRequest;
+import com.rockey.hospitality.dto.AuthDtos.DepartmentSummary;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.InventoryDtos.CreateInventoryItemRequest;
+import com.rockey.hospitality.dto.InventoryDtos.InventoryItemResponse;
+import com.rockey.hospitality.dto.InventoryDtos.UpdateInventoryItemRequest;
 import com.rockey.hospitality.entity.Department;
 import com.rockey.hospitality.entity.Employee;
-import com.rockey.hospitality.entity.EmployeeStatus;
 import com.rockey.hospitality.entity.InventoryItem;
-import com.rockey.hospitality.entity.Role;
-import com.rockey.hospitality.exception.BadRequestException;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ForbiddenException;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
+import com.rockey.hospitality.entity.User;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.repository.DepartmentRepository;
 import com.rockey.hospitality.repository.EmployeeRepository;
 import com.rockey.hospitality.repository.InventoryItemRepository;
+import java.util.Locale;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Locale;
-import java.util.Set;
-
 /**
- * Manages stock quantities and soft deactivation while checking Department eligibility.
- * STAFF reads are limited to active inventory in its own Department.
+ * STUDY NOTE: A Service holds business rules and coordinates an application workflow.
+ * Here, @Service lets Spring manage and inject this component; @Transactional groups database work so unchecked
+ * failures roll back writes.
+ * InventoryService checks SKU/quantity/Department rules, scopes STAFF reads and soft-deactivates stock
+ * without deleting history.
+ * InventoryController delegates here; Inventory and Department/Employee repositories provide the persisted
+ * data through JPA/Hibernate.
  */
-// Registers this business/security service for constructor injection.
 @Service
 public class InventoryService {
+
+    // Transaction study key: Spring applies @Transactional when another component calls this managed service.
+    // readOnly=true requests a read-oriented transaction; it keeps lazy reads and DTO mapping inside the
+    // persistence boundary.
+    // readOnly is not an authorization rule; repositories still run only after the service's scope checks.
     // Department scope protects STAFF reads; deactivation preserves stock history and its references.
 
     /**
@@ -70,18 +77,17 @@ public class InventoryService {
      * Pages filtered inventory and forces STAFF to active items in its own eligible Department.
      * ADMIN may use the requested Department and lifecycle filters.
      */
-    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public PagedResponse<InventoryItemResponse> listInventory(
             Long departmentId, Boolean active, int page, int size, String sort,
-            Long requesterUserId, Role requesterRole) {
+            Long requesterUserId, User.Role requesterRole) {
         ensureViewer(requesterRole);
         if (departmentId != null && departmentId <= 0) {
             throw new BadRequestException("Department filter must be positive.");
         }
         Long effectiveDepartment = departmentId;
         Boolean effectiveActive = active;
-        if (requesterRole == Role.STAFF) {
+        if (requesterRole == User.Role.STAFF) {
             Long ownDepartment = findStaffDepartment(requesterUserId).getId();
             if ((departmentId != null && !departmentId.equals(ownDepartment))
                     || Boolean.FALSE.equals(active)) {
@@ -103,11 +109,10 @@ public class InventoryService {
     /**
      * Returns a safe stock DTO after checking STAFF Department ownership and active-item eligibility.
      */
-    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
-    public InventoryItemResponse getInventoryItem(Long itemId, Long requesterUserId, Role requesterRole) {
+    public InventoryItemResponse getInventoryItem(Long itemId, Long requesterUserId, User.Role requesterRole) {
         ensureViewer(requesterRole);
-        Department ownDepartment = requesterRole == Role.STAFF
+        Department ownDepartment = requesterRole == User.Role.STAFF
                 ? findStaffDepartment(requesterUserId) : null;
         InventoryItem item = findItem(itemId);
         if (ownDepartment != null && (!Boolean.TRUE.equals(item.getActive())
@@ -120,7 +125,6 @@ public class InventoryService {
     /**
      * Normalizes name and SKU, checks nonnegative counts and SKU uniqueness, and locks an active destination Department before saving.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public InventoryItemResponse createInventoryItem(CreateInventoryItemRequest request) {
         String name = normalizeName(request.getName());
@@ -139,7 +143,6 @@ public class InventoryService {
      * Locks the item and Department before replacing quantities and details.
      * Moving or reactivating requires an active Department, while inactive history may keep its current inactive Department.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public InventoryItemResponse updateInventoryItem(Long itemId, UpdateInventoryItemRequest request) {
         String name = normalizeName(request.getName());
@@ -161,7 +164,6 @@ public class InventoryService {
     /**
      * Locks the stock row and sets active=false without erasing quantities, references, or history.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public void deactivateInventoryItem(Long itemId) {
         InventoryItem item = findItemForUpdate(itemId);
@@ -194,7 +196,7 @@ public class InventoryService {
     private Department findStaffDepartment(Long requesterUserId) {
         Employee employee = employeeRepository.findByUserId(requesterUserId)
                 .orElseThrow(() -> new ForbiddenException("STAFF requires an active employee department."));
-        if (employee.getStatus() != EmployeeStatus.ACTIVE
+        if (employee.getStatus() != Employee.Status.ACTIVE
                 || !Boolean.TRUE.equals(employee.getDepartment().getActive())) {
             throw new ForbiddenException("STAFF requires an active employee department.");
         }
@@ -204,8 +206,8 @@ public class InventoryService {
     /**
      * Restricts inventory access to STAFF and ADMIN.
      */
-    private void ensureViewer(Role role) {
-        if (role != Role.STAFF && role != Role.ADMIN) {
+    private void ensureViewer(User.Role role) {
+        if (role != User.Role.STAFF && role != User.Role.ADMIN) {
             throw new ForbiddenException("Inventory access is forbidden.");
         }
     }

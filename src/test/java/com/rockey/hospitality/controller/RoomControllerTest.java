@@ -1,21 +1,22 @@
 package com.rockey.hospitality.controller;
 
-import com.rockey.hospitality.dto.common.PageCriteria;
-import com.rockey.hospitality.dto.room.RoomSearchCriteria;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.room.CreateRoomRequest;
-import com.rockey.hospitality.dto.room.RoomResponse;
-import com.rockey.hospitality.dto.room.UpdateRoomRequest;
-import com.rockey.hospitality.entity.Role;
-import com.rockey.hospitality.entity.RoomStatus;
+import com.rockey.hospitality.dto.CommonDtos.PageCriteria;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.RoomDtos.CreateRoomRequest;
+import com.rockey.hospitality.dto.RoomDtos.RoomResponse;
+import com.rockey.hospitality.dto.RoomDtos.RoomSearchCriteria;
+import com.rockey.hospitality.dto.RoomDtos.UpdateRoomRequest;
+import com.rockey.hospitality.entity.Room;
 import com.rockey.hospitality.entity.User;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.exception.GlobalExceptionHandler;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
 import com.rockey.hospitality.security.RockeyUserPrincipal;
 import com.rockey.hospitality.service.RoomService;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,10 +31,6 @@ import org.springframework.security.web.method.annotation.AuthenticationPrincipa
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -79,10 +76,10 @@ class RoomControllerTest {
 
     @Test
     void listRoomsReturnsPageAndPassesCanonicalFilters() throws Exception {
-        when(roomService.listRooms(new RoomSearchCriteria(RoomStatus.DIRTY, 2, "STANDARD", true), new PageCriteria(1, 5, "createdAt,desc"), Role.STAFF)).thenReturn(new PagedResponse<>(List.of(response()), 1, 5, 6, 2, true));
+        when(roomService.listRooms(new RoomSearchCriteria(Room.Status.DIRTY, 2, "STANDARD", true), new PageCriteria(1, 5, "createdAt,desc"), User.Role.STAFF)).thenReturn(new PagedResponse<>(List.of(response()), 1, 5, 6, 2, true));
 
         mockMvc.perform(get("/api/rooms")
-                        .principal(authentication(21L, Role.STAFF))
+                        .principal(authentication(21L, User.Role.STAFF))
                         .param("status", "DIRTY")
                         .param("floor", "2")
                         .param("type", "STANDARD")
@@ -129,14 +126,14 @@ class RoomControllerTest {
 
     @Test
     void getRoomPassesRequesterRole() throws Exception {
-        when(roomService.getRoom(12L, Role.ADMIN)).thenReturn(response());
+        when(roomService.getRoom(12L, User.Role.ADMIN)).thenReturn(response());
 
         mockMvc.perform(get("/api/rooms/12")
-                        .principal(authentication(3L, Role.ADMIN)))
+                        .principal(authentication(3L, User.Role.ADMIN)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(12));
 
-        verify(roomService).getRoom(12L, Role.ADMIN);
+        verify(roomService).getRoom(12L, User.Role.ADMIN);
     }
 
     @Test
@@ -170,13 +167,13 @@ class RoomControllerTest {
     void patchStatusPassesAuthenticatedIdentityAndReturnsRoom() throws Exception {
         when(roomService.updateStatus(
                 12L,
-                RoomStatus.CLEANING,
+                Room.Status.CLEANING,
                 21L,
-                Role.STAFF
+                User.Role.STAFF
         )).thenReturn(response());
 
         mockMvc.perform(patch("/api/rooms/12/status")
-                        .principal(authentication(21L, Role.STAFF))
+                        .principal(authentication(21L, User.Role.STAFF))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"status":"CLEANING"}
@@ -186,16 +183,16 @@ class RoomControllerTest {
 
         verify(roomService).updateStatus(
                 12L,
-                RoomStatus.CLEANING,
+                Room.Status.CLEANING,
                 21L,
-                Role.STAFF
+                User.Role.STAFF
         );
     }
 
     @Test
     void invalidStatusValueReturnsCanonical400() throws Exception {
         mockMvc.perform(patch("/api/rooms/12/status")
-                        .principal(authentication(21L, Role.STAFF))
+                        .principal(authentication(21L, User.Role.STAFF))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"status":"AVAILABLE"}
@@ -206,11 +203,11 @@ class RoomControllerTest {
 
     @Test
     void missingRoomReturnsCanonical404() throws Exception {
-        when(roomService.getRoom(99L, Role.ADMIN))
+        when(roomService.getRoom(99L, User.Role.ADMIN))
                 .thenThrow(new ResourceNotFoundException("Room not found with id 99."));
 
         mockMvc.perform(get("/api/rooms/99")
-                        .principal(authentication(3L, Role.ADMIN)))
+                        .principal(authentication(3L, User.Role.ADMIN)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404));
     }
@@ -227,7 +224,7 @@ class RoomControllerTest {
                 """;
     }
 
-    private UsernamePasswordAuthenticationToken authentication(Long id, Role role) {
+    private UsernamePasswordAuthenticationToken authentication(Long id, User.Role role) {
         User user = new User("Test User", role.name().toLowerCase() + "@example.test", "hash");
         ReflectionTestUtils.setField(user, "id", id);
         ReflectionTestUtils.setField(user, "role", role);
@@ -247,7 +244,7 @@ class RoomControllerTest {
                 12L,
                 "218",
                 "STANDARD",
-                RoomStatus.DIRTY,
+                Room.Status.DIRTY,
                 2,
                 LocalDateTime.of(2030, 10, 3, 15, 0),
                 true,

@@ -1,47 +1,46 @@
 package com.rockey.hospitality.repository;
 
+import com.rockey.hospitality.dto.TaskDtos.TaskSearchCriteria;
 import com.rockey.hospitality.entity.Task;
-import com.rockey.hospitality.entity.TaskPriority;
-import com.rockey.hospitality.entity.TaskStatus;
-import com.rockey.hospitality.dto.task.TaskSearchCriteria;
+import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.LocalDateTime;
-import java.util.Collection;
-import java.util.List;
-
 /**
- * Spring Data JPA supplies standard persistence operations for Task entities through JpaRepository.
- * Domain services use the methods below for filtered reads, eligibility checks, and locked writes where declared.
+ * STUDY NOTE: A Repository is the data-access layer a Service uses to reach database data.
+ * JpaRepository lets Spring Data supply standard create/read/update/delete methods without writing basic
+ * SQL.
+ * TaskService and related services use filtered pages, assigned-work guards and Event preparation counts.
+ * Spring creates this interface's implementation and sends its queries through JPA/Hibernate to MySQL.
  */
 public interface TaskRepository extends JpaRepository<Task, Long> {
+
+    // Repository study key: findBy/existsBy/countBy names are interpreted by Spring Data as queries.
+    // @Query supplies fixed JPQL (entity/field-based query text), not string-interpolated user input.
+    // @Param binds a Java argument to a named query value instead of inserting it into query text.
 
     /**
      * Finds assigned non-terminal Tasks that are overdue or match selected priorities.
      */
-    // Executes this fixed JPQL query; supplied filter values are bound parameters rather than query text.
     @Query("""
             SELECT task FROM Task task
             WHERE task.assignedEmployee IS NOT NULL AND task.status NOT IN :terminalStatuses
               AND (task.dueAt < :now OR task.priority IN :priorities)
             """)
     List<Task> findTaskAlertSources(
-            // Binds this argument as the named now query parameter, not interpolated query text.
             @Param("now") LocalDateTime now,
-                                    // Binds this argument as the named terminalStatuses query parameter, not interpolated query text.
-                                    @Param("terminalStatuses") Collection<TaskStatus> terminalStatuses,
-                                    // Binds this argument as the named priorities query parameter, not interpolated query text.
-                                    @Param("priorities") Collection<TaskPriority> priorities);
+                                    @Param("terminalStatuses") Collection<Task.Status> terminalStatuses,
+                                    @Param("priorities") Collection<Task.Priority> priorities);
 
     /**
      * Pages criteria with bound values and one supplied time snapshot.
      * overdue=false includes null/future due dates and terminal Tasks; an omitted overdue filter imposes no due condition.
      */
-    // Executes this fixed JPQL query; supplied filter values are bound parameters rather than query text.
     @Query("""
             SELECT task
             FROM Task task
@@ -72,12 +71,9 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
             """)
     Page<Task> search(
             // Criteria values bind as parameters; overdue uses the same server time for the page.
-            // Binds this argument as the named criteria query parameter, not interpolated query text.
             @Param("criteria") TaskSearchCriteria criteria,
-            // Binds this argument as the named now query parameter, not interpolated query text.
             @Param("now") LocalDateTime now,
-            // Binds this argument as the named terminalStatuses query parameter, not interpolated query text.
-            @Param("terminalStatuses") Collection<TaskStatus> terminalStatuses,
+            @Param("terminalStatuses") Collection<Task.Status> terminalStatuses,
             Pageable pageable
     );
 
@@ -86,7 +82,7 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
      */
     boolean existsByAssignedEmployeeIdAndStatusIn(
             Long employeeId,
-            Collection<TaskStatus> statuses
+            Collection<Task.Status> statuses
     );
 
     /**
@@ -94,7 +90,7 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
      */
     boolean existsByDepartmentIdAndStatusIn(
             Long departmentId,
-            Collection<TaskStatus> statuses
+            Collection<Task.Status> statuses
     );
 
     /**
@@ -102,7 +98,7 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
      */
     boolean existsByRoomIdAndStatusIn(
             Long roomId,
-            Collection<TaskStatus> statuses
+            Collection<Task.Status> statuses
     );
 
     /**
@@ -113,5 +109,5 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     /**
      * Counts Event-linked Tasks of a selected status, including completion counts.
      */
-    long countByEventIdAndStatus(Long eventId, TaskStatus status);
+    long countByEventIdAndStatus(Long eventId, Task.Status status);
 }

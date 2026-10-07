@@ -3,20 +3,21 @@ package com.rockey.hospitality.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.event.CreateEventRequest;
-import com.rockey.hospitality.dto.event.EventRegistrationResponse;
-import com.rockey.hospitality.dto.event.EventResponse;
-import com.rockey.hospitality.dto.event.EventSummary;
-import com.rockey.hospitality.dto.event.UpdateEventRequest;
-import com.rockey.hospitality.entity.EventStatus;
-import com.rockey.hospitality.entity.Role;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.EventDtos.CreateEventRequest;
+import com.rockey.hospitality.dto.EventDtos.EventRegistrationResponse;
+import com.rockey.hospitality.dto.EventDtos.EventResponse;
+import com.rockey.hospitality.dto.EventDtos.EventSummary;
+import com.rockey.hospitality.dto.EventDtos.UpdateEventRequest;
+import com.rockey.hospitality.entity.Event;
 import com.rockey.hospitality.entity.User;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.exception.GlobalExceptionHandler;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
 import com.rockey.hospitality.security.RockeyUserPrincipal;
 import com.rockey.hospitality.service.EventService;
 import com.rockey.hospitality.service.RegistrationService;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,10 +32,6 @@ import org.springframework.security.web.method.annotation.AuthenticationPrincipa
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -84,7 +81,7 @@ class EventControllerTest {
         LocalDateTime from = LocalDateTime.of(2030, 10, 1, 0, 0);
         LocalDateTime to = LocalDateTime.of(2030, 10, 31, 23, 59);
         when(eventService.listEvents(
-                EventStatus.OPEN,
+                Event.Status.OPEN,
                 from,
                 to,
                 1,
@@ -146,7 +143,7 @@ class EventControllerTest {
 
     @Test
     void cancelReturns200WithCancelledEventResponse() throws Exception {
-        when(eventService.cancelEvent(7L)).thenReturn(response(EventStatus.CANCELLED));
+        when(eventService.cancelEvent(7L)).thenReturn(response(Event.Status.CANCELLED));
 
         mockMvc.perform(delete("/api/events/7"))
                 .andExpect(status().isOk())
@@ -163,14 +160,14 @@ class EventControllerTest {
                         "Leadership Conference",
                         futureDate(),
                         "Ballroom A",
-                        EventStatus.OPEN,
+                        Event.Status.OPEN,
                         99
                 )
         );
         when(registrationService.register(7L, 31L)).thenReturn(registration);
 
         mockMvc.perform(post("/api/events/7/registrations")
-                        .principal(authentication(31L, Role.USER)))
+                        .principal(authentication(31L, User.Role.USER)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.userId").value(31))
                 .andExpect(jsonPath("$.event.id").value(7));
@@ -181,7 +178,7 @@ class EventControllerTest {
     @Test
     void withdrawUsesAuthenticatedUserAndReturns204() throws Exception {
         mockMvc.perform(delete("/api/events/7/registrations/me")
-                        .principal(authentication(31L, Role.USER)))
+                        .principal(authentication(31L, User.Role.USER)))
                 .andExpect(status().isNoContent());
 
         verify(registrationService).withdraw(7L, 31L);
@@ -197,7 +194,7 @@ class EventControllerTest {
         )).thenReturn(new PagedResponse<>(List.of(response()), 0, 20, 1, 1, true));
 
         mockMvc.perform(get("/api/events/registrations/me")
-                        .principal(authentication(31L, Role.USER)))
+                        .principal(authentication(31L, User.Role.USER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(7));
     }
@@ -238,7 +235,7 @@ class EventControllerTest {
                 """;
     }
 
-    private UsernamePasswordAuthenticationToken authentication(Long id, Role role) {
+    private UsernamePasswordAuthenticationToken authentication(Long id, User.Role role) {
         User user = new User("Test User", role.name().toLowerCase() + "@example.test", "hash");
         ReflectionTestUtils.setField(user, "id", id);
         ReflectionTestUtils.setField(user, "role", role);
@@ -254,10 +251,10 @@ class EventControllerTest {
     }
 
     private EventResponse response() {
-        return response(EventStatus.OPEN);
+        return response(Event.Status.OPEN);
     }
 
-    private EventResponse response(EventStatus status) {
+    private EventResponse response(Event.Status status) {
         return new EventResponse(
                 7L,
                 "Leadership Conference",

@@ -1,7 +1,22 @@
 package com.rockey.hospitality.service;
 
 import com.rockey.hospitality.entity.*;
+import com.rockey.hospitality.entity.Alert;
+import com.rockey.hospitality.entity.Employee;
+import com.rockey.hospitality.entity.Room;
+import com.rockey.hospitality.entity.Task;
+import com.rockey.hospitality.entity.User;
 import com.rockey.hospitality.repository.*;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -13,18 +28,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
 import org.springframework.transaction.interceptor.TransactionInterceptor;
 import org.springframework.transaction.support.SimpleTransactionStatus;
-
-import java.time.Clock;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
@@ -68,16 +71,16 @@ class AlertAutomationServiceTest {
         when(roomRepository.findReadinessAlertSources(any(), any(), any())).thenAnswer(i -> rooms);
         when(taskRepository.findTaskAlertSources(any(), anyCollection(), anyCollection())).thenAnswer(i -> tasks);
         when(inventoryRepository.findInventoryAlertSources()).thenAnswer(i -> items);
-        when(employees.findActiveRecipientIdsByDepartment(eq("Housekeeping"), eq(EmployeeStatus.ACTIVE))).thenAnswer(i -> housekeeping);
-        when(employees.findActiveRecipientIdsByDepartment(eq("Purchasing"), eq(EmployeeStatus.ACTIVE))).thenAnswer(i -> purchasing);
-        when(employees.findActiveAdminRecipientIds(EmployeeStatus.ACTIVE, Role.ADMIN, UserStatus.ACTIVE)).thenAnswer(i -> admins);
+        when(employees.findActiveRecipientIdsByDepartment(eq("Housekeeping"), eq(Employee.Status.ACTIVE))).thenAnswer(i -> housekeeping);
+        when(employees.findActiveRecipientIdsByDepartment(eq("Purchasing"), eq(Employee.Status.ACTIVE))).thenAnswer(i -> purchasing);
+        when(employees.findActiveAdminRecipientIds(Employee.Status.ACTIVE, User.Role.ADMIN, User.Status.ACTIVE)).thenAnswer(i -> admins);
         when(employees.findByIdForUpdate(anyLong())).thenAnswer(i -> Optional.ofNullable(recipients.get(i.getArgument(0))));
         when(alerts.findUnresolvedRecipientIds(any(), anyCollection())).thenAnswer(i -> rows.stream()
-                .filter(a -> a.getType() == i.getArgument(0) && a.getStatus() != AlertStatus.RESOLVED && a.getSourceKey() != null)
+                .filter(a -> a.getType() == i.getArgument(0) && a.getStatus() != Alert.Status.RESOLVED && a.getSourceKey() != null)
                 .map(a -> a.getEmployee().getId()).distinct().toList());
         when(alerts.findUnresolvedForUpdate(anyLong(), any(), anyCollection())).thenAnswer(i -> rows.stream()
                 .filter(a -> a.getEmployee().getId().equals(i.getArgument(0)) && a.getType() == i.getArgument(1)
-                        && a.getStatus() != AlertStatus.RESOLVED && a.getSourceKey() != null).toList());
+                        && a.getStatus() != Alert.Status.RESOLVED && a.getSourceKey() != null).toList());
         when(alerts.save(any(Alert.class))).thenAnswer(i -> {
             Alert a = i.getArgument(0);
             if (a.getId() == null) { ReflectionTestUtils.setField(a, "id", (long) rows.size() + 1); rows.add(a); }
@@ -91,12 +94,12 @@ class AlertAutomationServiceTest {
         rooms.add(room(now.plusMinutes(minutes)));
         service.checkRoomReadiness();
         assertThat(rows).hasSize(expected ? 1 : 0);
-        verify(roomRepository).findReadinessAlertSources(now, now.plusHours(2), RoomStatus.READY);
+        verify(roomRepository).findReadinessAlertSources(now, now.plusHours(2), Room.Status.READY);
         if (expected) {
-            assertThat(rows.get(0).getType()).isEqualTo(AlertType.ROOM);
+            assertThat(rows.get(0).getType()).isEqualTo(Alert.Type.ROOM);
             assertThat(rows.get(0).getTask()).isNull();
             assertThat(rows.get(0).getCreatedAt()).isEqualTo(now);
-            assertThat(rows.get(0).getSeverity()).isEqualTo(AlertSeverity.INFO);
+            assertThat(rows.get(0).getSeverity()).isEqualTo(Alert.Severity.INFO);
         }
     }
 
@@ -109,8 +112,8 @@ class AlertAutomationServiceTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = RoomStatus.class, names = {"READY"})
-    void readyRoomCreatesNoAlert(RoomStatus status) {
+    @EnumSource(value = Room.Status.class, names = {"READY"})
+    void readyRoomCreatesNoAlert(Room.Status status) {
         Room room = room(now.plusHours(1)); room.updateStatus(status); rooms.add(room);
         service.checkRoomReadiness(); assertThat(rows).isEmpty();
     }
@@ -126,16 +129,16 @@ class AlertAutomationServiceTest {
         Room room = room(now.plusHours(1)); rooms.add(room);
         service.checkRoomReadiness();
         Alert original = rows.get(0);
-        room.updateStatus(RoomStatus.READY);
+        room.updateStatus(Room.Status.READY);
         time.set(time.get().plusSeconds(60));
         service.checkRoomReadiness();
-        assertThat(original.getStatus()).isEqualTo(AlertStatus.RESOLVED);
+        assertThat(original.getStatus()).isEqualTo(Alert.Status.RESOLVED);
         assertThat(original.getReadAt()).isEqualTo(now.plusMinutes(1));
         assertThat(original.getResolvedAt()).isEqualTo(now.plusMinutes(1));
-        room.updateStatus(RoomStatus.DIRTY);
+        room.updateStatus(Room.Status.DIRTY);
         service.checkRoomReadiness();
         assertThat(rows).hasSize(2);
-        assertThat(rows.get(1).getStatus()).isEqualTo(AlertStatus.UNREAD);
+        assertThat(rows.get(1).getStatus()).isEqualTo(Alert.Status.UNREAD);
         assertThat(rows.get(1).getSourceKey()).isEqualTo(original.getSourceKey());
     }
 
@@ -143,7 +146,7 @@ class AlertAutomationServiceTest {
     void roomPassingArrivalWindowAutoResolvesExistingAlert() {
         rooms.add(room(now)); service.checkRoomReadiness();
         time.set(time.get().plusSeconds(1)); service.checkRoomReadiness();
-        assertThat(rows.get(0).getStatus()).isEqualTo(AlertStatus.RESOLVED);
+        assertThat(rows.get(0).getStatus()).isEqualTo(Alert.Status.RESOLVED);
     }
 
     @Test
@@ -157,7 +160,7 @@ class AlertAutomationServiceTest {
     void clearingReadAlertPreservesFirstReadTimestampAndRecordsResolution() {
         Room room = room(now.plusHours(1)); rooms.add(room); service.checkRoomReadiness();
         rows.get(0).markRead(now);
-        time.set(time.get().plusSeconds(60)); room.updateStatus(RoomStatus.READY); service.checkRoomReadiness();
+        time.set(time.get().plusSeconds(60)); room.updateStatus(Room.Status.READY); service.checkRoomReadiness();
         assertThat(rows.get(0).getReadAt()).isEqualTo(now);
         assertThat(rows.get(0).getResolvedAt()).isEqualTo(now.plusMinutes(1));
     }
@@ -168,7 +171,7 @@ class AlertAutomationServiceTest {
         rows.get(0).markRead(now);
         time.set(time.get().plusSeconds(60)); service.checkRoomReadiness(); service.checkRoomReadiness();
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0).getStatus()).isEqualTo(AlertStatus.READ);
+        assertThat(rows.get(0).getStatus()).isEqualTo(Alert.Status.READ);
         assertThat(rows.get(0).getReadAt()).isEqualTo(now);
     }
 
@@ -177,8 +180,8 @@ class AlertAutomationServiceTest {
         rooms.add(room(now.plusHours(1))); service.checkRoomReadiness();
         rows.get(0).resolve(now); service.checkRoomReadiness();
         assertThat(rows).hasSize(2);
-        assertThat(rows.get(0).getStatus()).isEqualTo(AlertStatus.RESOLVED);
-        assertThat(rows.get(1).getStatus()).isEqualTo(AlertStatus.UNREAD);
+        assertThat(rows.get(0).getStatus()).isEqualTo(Alert.Status.RESOLVED);
+        assertThat(rows.get(1).getStatus()).isEqualTo(Alert.Status.UNREAD);
     }
 
     @Test
@@ -192,7 +195,7 @@ class AlertAutomationServiceTest {
         rooms.add(room(now.plusHours(1))); service.checkRoomReadiness();
         recipients.get(1L).deactivate(); service.checkRoomReadiness();
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0).getStatus()).isEqualTo(AlertStatus.RESOLVED);
+        assertThat(rows.get(0).getStatus()).isEqualTo(Alert.Status.RESOLVED);
     }
 
     @Test
@@ -204,59 +207,59 @@ class AlertAutomationServiceTest {
     @ParameterizedTest
     @CsvSource({"-1,true", "0,false", "1,false"})
     void overdueIsStrictlyBeforeServerTime(int seconds, boolean expected) {
-        tasks.add(task(TaskPriority.LOW, now.plusSeconds(seconds)));
+        tasks.add(task(Task.Priority.LOW, now.plusSeconds(seconds)));
         service.checkTasks(); assertThat(rows).hasSize(expected ? 1 : 0);
         if (expected) assertThat(rows.get(0).getTask()).isSameAs(tasks.get(0));
     }
 
     @ParameterizedTest
-    @EnumSource(TaskPriority.class)
-    void onlyHighAndUrgentCreatePriorityAlertsWithoutDueDate(TaskPriority priority) {
+    @EnumSource(Task.Priority.class)
+    void onlyHighAndUrgentCreatePriorityAlertsWithoutDueDate(Task.Priority priority) {
         tasks.add(task(priority, null)); service.checkTasks();
-        assertThat(rows).hasSize(priority == TaskPriority.HIGH || priority == TaskPriority.URGENT ? 1 : 0);
+        assertThat(rows).hasSize(priority == Task.Priority.HIGH || priority == Task.Priority.URGENT ? 1 : 0);
     }
 
     @Test
     void overdueAndHighPriorityHaveSeparateStableDedupKeys() {
-        Task task = task(TaskPriority.HIGH, now.minusMinutes(1)); tasks.add(task);
+        Task task = task(Task.Priority.HIGH, now.minusMinutes(1)); tasks.add(task);
         service.checkTasks(); service.checkTasks();
         assertThat(rows).hasSize(2);
         assertThat(rows).extracting(Alert::getSourceKey).containsExactlyInAnyOrder("TASK:10:OVERDUE", "TASK:10:HIGH_PRIORITY");
         ReflectionTestUtils.setField(task, "dueAt", now.plusHours(1)); service.checkTasks();
         assertThat(rows.stream().filter(a -> a.getSourceKey().endsWith("OVERDUE")).findFirst().orElseThrow().getStatus())
-                .isEqualTo(AlertStatus.RESOLVED);
+                .isEqualTo(Alert.Status.RESOLVED);
         assertThat(rows.stream().filter(a -> a.getSourceKey().endsWith("HIGH_PRIORITY")).findFirst().orElseThrow().getStatus())
-                .isEqualTo(AlertStatus.UNREAD);
+                .isEqualTo(Alert.Status.UNREAD);
     }
 
     @ParameterizedTest
-    @EnumSource(value = TaskStatus.class, names = {"COMPLETED", "CANCELLED"})
-    void terminalTaskAutoResolvesBothConditionsAndCreatesNothing(TaskStatus status) {
-        Task task = task(TaskPriority.URGENT, now.minusMinutes(1)); tasks.add(task);
+    @EnumSource(value = Task.Status.class, names = {"COMPLETED", "CANCELLED"})
+    void terminalTaskAutoResolvesBothConditionsAndCreatesNothing(Task.Status status) {
+        Task task = task(Task.Priority.URGENT, now.minusMinutes(1)); tasks.add(task);
         service.checkTasks(); ReflectionTestUtils.setField(task, "status", status); service.checkTasks();
         assertThat(rows).hasSize(2);
-        assertThat(rows).allMatch(a -> a.getStatus() == AlertStatus.RESOLVED);
+        assertThat(rows).allMatch(a -> a.getStatus() == Alert.Status.RESOLVED);
     }
 
     @Test
     void unassignmentResolvesTaskAlerts() {
-        Task task = task(TaskPriority.HIGH, null); tasks.add(task); service.checkTasks();
+        Task task = task(Task.Priority.HIGH, null); tasks.add(task); service.checkTasks();
         task.assign(null); service.checkTasks();
-        assertThat(rows.get(0).getStatus()).isEqualTo(AlertStatus.RESOLVED);
+        assertThat(rows.get(0).getStatus()).isEqualTo(Alert.Status.RESOLVED);
     }
 
     @Test
     void reassignmentResolvesFormerRecipientAndNotifiesNewAssignee() {
-        Task task = task(TaskPriority.HIGH, null); tasks.add(task); service.checkTasks();
+        Task task = task(Task.Priority.HIGH, null); tasks.add(task); service.checkTasks();
         task.assign(recipients.get(4L)); service.checkTasks();
         assertThat(rows).hasSize(2);
-        assertThat(rows.get(0).getStatus()).isEqualTo(AlertStatus.RESOLVED);
+        assertThat(rows.get(0).getStatus()).isEqualTo(Alert.Status.RESOLVED);
         assertThat(rows.get(1).getEmployee().getId()).isEqualTo(4L);
     }
 
     @Test
     void inactiveTaskAssigneeDoesNotReceiveAlerts() {
-        recipients.get(1L).deactivate(); tasks.add(task(TaskPriority.URGENT, now.minusMinutes(1)));
+        recipients.get(1L).deactivate(); tasks.add(task(Task.Priority.URGENT, now.minusMinutes(1)));
         service.checkTasks(); assertThat(rows).isEmpty();
     }
 
@@ -273,7 +276,7 @@ class AlertAutomationServiceTest {
     void purchasingAbsenceUsesActiveAdminFallback() {
         purchasing = List.of(); items.add(item(0, 10)); service.checkInventory();
         assertThat(rows.get(0).getEmployee().getId()).isEqualTo(3L);
-        verify(employees).findActiveAdminRecipientIds(EmployeeStatus.ACTIVE, Role.ADMIN, UserStatus.ACTIVE);
+        verify(employees).findActiveAdminRecipientIds(Employee.Status.ACTIVE, User.Role.ADMIN, User.Status.ACTIVE);
     }
 
     @Test
@@ -293,17 +296,17 @@ class AlertAutomationServiceTest {
         InventoryItem item = item(0, 10); items.add(item); service.checkInventory(); service.checkInventory();
         assertThat(rows).hasSize(1);
         item.updateDetails("Towels", 11, 10, item.getDepartment(), true); service.checkInventory();
-        assertThat(rows.get(0).getStatus()).isEqualTo(AlertStatus.RESOLVED);
+        assertThat(rows.get(0).getStatus()).isEqualTo(Alert.Status.RESOLVED);
         item.updateDetails("Towels", 10, 10, item.getDepartment(), true); service.checkInventory();
         assertThat(rows).hasSize(2);
-        assertThat(rows.get(1).getStatus()).isEqualTo(AlertStatus.UNREAD);
+        assertThat(rows.get(1).getStatus()).isEqualTo(Alert.Status.UNREAD);
     }
 
     @Test
     void inactiveInventoryResolvesWithoutDeletingHistory() {
         InventoryItem item = item(0, 10); items.add(item); service.checkInventory();
         item.deactivate(); service.checkInventory();
-        assertThat(rows.get(0).getStatus()).isEqualTo(AlertStatus.RESOLVED);
+        assertThat(rows.get(0).getStatus()).isEqualTo(Alert.Status.RESOLVED);
         verify(alerts, never()).delete(any());
     }
 
@@ -312,29 +315,29 @@ class AlertAutomationServiceTest {
         purchasing = List.of(); items.add(item(0, 10)); service.checkInventory();
         purchasing = List.of(2L); service.checkInventory();
         assertThat(rows).hasSize(2);
-        assertThat(rows.get(0).getStatus()).isEqualTo(AlertStatus.RESOLVED);
+        assertThat(rows.get(0).getStatus()).isEqualTo(Alert.Status.RESOLVED);
         assertThat(rows.get(1).getEmployee().getId()).isEqualTo(2L);
     }
 
     @Test
     void deletedOrMissingSourcesResolveExistingDerivedAlerts() {
         rooms.add(room(now.plusHours(1))); service.checkRoomReadiness(); rooms.clear(); service.checkRoomReadiness();
-        assertThat(rows.get(0).getStatus()).isEqualTo(AlertStatus.RESOLVED);
+        assertThat(rows.get(0).getStatus()).isEqualTo(Alert.Status.RESOLVED);
     }
 
     @Test
     void systemAndNonDerivedAlertsAreNotResolvedByScans() {
-        Alert system = new Alert(AlertType.SYSTEM, "Manual system notice", recipients.get(1L), null, null, now);
+        Alert system = new Alert(Alert.Type.SYSTEM, "Manual system notice", recipients.get(1L), null, null, now);
         ReflectionTestUtils.setField(system, "id", 100L); rows.add(system);
-        service.runChecks(); assertThat(system.getStatus()).isEqualTo(AlertStatus.UNREAD);
+        service.runChecks(); assertThat(system.getStatus()).isEqualTo(Alert.Status.UNREAD);
     }
 
     @Test
     void combinedScanIsIdempotentAcrossAllThreeTypes() {
-        rooms.add(room(now.plusHours(1))); tasks.add(task(TaskPriority.HIGH, null)); items.add(item(0, 10));
+        rooms.add(room(now.plusHours(1))); tasks.add(task(Task.Priority.HIGH, null)); items.add(item(0, 10));
         service.runChecks(); service.runChecks();
         assertThat(rows).hasSize(3);
-        assertThat(rows).extracting(Alert::getType).containsExactly(AlertType.ROOM, AlertType.TASK, AlertType.INVENTORY);
+        assertThat(rows).extracting(Alert::getType).containsExactly(Alert.Type.ROOM, Alert.Type.TASK, Alert.Type.INVENTORY);
         verify(employees, atLeastOnce()).findByIdForUpdate(1L);
     }
 
@@ -345,11 +348,11 @@ class AlertAutomationServiceTest {
         AlertAutomationService localService = new AlertAutomationService(alerts, employees,
                 roomRepository, taskRepository, inventoryRepository, Clock.fixed(instant, ZoneOffset.UTC));
         rooms.add(room(serverNow.plusHours(1)));
-        tasks.add(task(TaskPriority.LOW, serverNow.plusHours(1)));
+        tasks.add(task(Task.Priority.LOW, serverNow.plusHours(1)));
         localService.runChecks();
-        verify(roomRepository).findReadinessAlertSources(serverNow, serverNow.plusHours(2), RoomStatus.READY);
+        verify(roomRepository).findReadinessAlertSources(serverNow, serverNow.plusHours(2), Room.Status.READY);
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0).getType()).isEqualTo(AlertType.ROOM);
+        assertThat(rows.get(0).getType()).isEqualTo(Alert.Type.ROOM);
         assertThat(rows.get(0).getCreatedAt()).isEqualTo(serverNow);
     }
 
@@ -376,11 +379,11 @@ class AlertAutomationServiceTest {
     }
 
     private Room room(LocalDateTime arrival) {
-        Room room = new Room("218", "STANDARD", 2, RoomStatus.DIRTY, arrival);
+        Room room = new Room("218", "STANDARD", 2, Room.Status.DIRTY, arrival);
         ReflectionTestUtils.setField(room, "id", 1L); return room;
     }
 
-    private Task task(TaskPriority priority, LocalDateTime due) {
+    private Task task(Task.Priority priority, LocalDateTime due) {
         Task task = new Task("Inspect room", null, recipients.get(1L).getDepartment(), recipients.get(1L), null, priority, due);
         ReflectionTestUtils.setField(task, "id", 10L); return task;
     }

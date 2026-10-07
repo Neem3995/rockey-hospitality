@@ -1,18 +1,18 @@
 package com.rockey.hospitality.controller;
 
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
-import com.rockey.hospitality.exception.ApiError;
-
-import com.rockey.hospitality.dto.department.CreateDepartmentRequest;
-import com.rockey.hospitality.dto.department.DepartmentResponse;
-import com.rockey.hospitality.dto.department.UpdateDepartmentRequest;
+import com.rockey.hospitality.dto.CommonDtos.ApiError;
+import com.rockey.hospitality.dto.DepartmentDtos.CreateDepartmentRequest;
+import com.rockey.hospitality.dto.DepartmentDtos.DepartmentResponse;
+import com.rockey.hospitality.dto.DepartmentDtos.UpdateDepartmentRequest;
 import com.rockey.hospitality.entity.Department;
 import com.rockey.hospitality.service.DepartmentService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -25,17 +25,34 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 /**
- * Binds Department HTTP requests and delegates business operations to its service layer.
- * Response DTOs and HTTP statuses are kept separate from JPA entities.
+ * STUDY NOTE: A Controller is the API entry point for HTTP requests from React or another client.
+ * Here, @RestController returns response data, normally JSON; @RequestMapping sets the shared /api/departments
+ * URL.
+ * DepartmentController handles Department reads, changes and soft deactivation and delegates business rules
+ * to DepartmentService.
+ * DTOs describe input/output; Spring Security and service checks, not hidden frontend buttons, enforce
+ * permissions.
  */
-// Registers a web controller whose mapped return values are written as response bodies, normally JSON.
 @RestController
 // Groups this controller's routes under /api/departments.
 @RequestMapping("/api/departments")
 public class DepartmentController {
+
+    // HTTP/annotation study key:
+    // @GetMapping handles HTTP GET reads; its path is appended to the controller's base URL.
+    // @PostMapping handles HTTP POST creation/actions, here creating a Department.
+    // @PutMapping handles HTTP PUT updates, here replacing a Department's editable fields.
+    // @DeleteMapping handles DELETE requests; service rules may deactivate, cancel, resolve or withdraw rather
+    // than erase rows.
+    // @RequestBody reads request JSON into the declared DTO.
+    // @PathVariable reads an identifier directly from the URL path.
+    // @RequestParam reads a query-string value; required=false makes it optional and defaultValue supplies an
+    // omitted value.
+    // @Valid runs the DTO's Bean Validation checks before controller business delegation.
+    // @Operation and @ApiResponses document the operation and its outcomes; they do not authorize or validate
+    // requests.
+    // @Content/@Schema describe documented bodies/types, not runtime validation or security.
 
     /**
      * Injected DepartmentService collaborator; this layer delegates the operation rather than duplicating its rules.
@@ -53,18 +70,14 @@ public class DepartmentController {
      * List departments.
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "List departments", description = "Access: STAFF, ADMIN. Canonical operation: GET /api/departments.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "401", description = "Authentication required or invalid token", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP GET to the controller's base route.
     @GetMapping
     public List<DepartmentResponse> listDepartments(
-            // Binds an optional query parameter; omitted filters arrive as null.
             @RequestParam(required = false) Boolean active
     ) {
         return departmentService.listDepartments(active).stream()
@@ -77,21 +90,16 @@ public class DepartmentController {
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      * ResponseEntity sets 201 and returns the created DTO.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Create department", description = "Access: ADMIN. Canonical operation: POST /api/departments.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Created", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "403", description = "Role, ownership or eligibility denied", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "409", description = "Business or lifecycle conflict", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP POST to the controller's base route.
     @PostMapping
     public ResponseEntity<DepartmentResponse> createDepartment(
-            // Validates the bound request DTO before the controller delegates to its service.
             @Valid
-            // Deserializes the request JSON into this writable DTO.
             @RequestBody CreateDepartmentRequest request
     ) {
         Department created = departmentService.createDepartment(
@@ -105,18 +113,14 @@ public class DepartmentController {
      * Department detail.
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Department detail", description = "Access: STAFF, ADMIN. Canonical operation: GET /api/departments/{departmentId}.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "401", description = "Authentication required or invalid token", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "404", description = "Resource not found", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP GET to this /{departmentId} suffix.
     @GetMapping("/{departmentId}")
     public DepartmentResponse getDepartment(
-            // Binds this value from the matching identifier in the route path.
             @PathVariable Long departmentId) {
         return toResponse(departmentService.getDepartment(departmentId));
     }
@@ -125,9 +129,7 @@ public class DepartmentController {
      * Update department.
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Update department", description = "Access: ADMIN. Canonical operation: PUT /api/departments/{departmentId}.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ApiError.class))),
@@ -135,14 +137,10 @@ public class DepartmentController {
         @ApiResponse(responseCode = "404", description = "Resource not found", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "409", description = "Business or lifecycle conflict", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP PUT to this /{departmentId} suffix.
     @PutMapping("/{departmentId}")
     public DepartmentResponse updateDepartment(
-            // Binds this value from the matching identifier in the route path.
             @PathVariable Long departmentId,
-            // Validates the bound request DTO before the controller delegates to its service.
             @Valid
-            // Deserializes the request JSON into this writable DTO.
             @RequestBody UpdateDepartmentRequest request
     ) {
         Department updated = departmentService.updateDepartment(
@@ -158,19 +156,15 @@ public class DepartmentController {
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      * ResponseEntity returns 204 with no body after the service finishes.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Deactivate eligible department", description = "Access: ADMIN. Canonical operation: DELETE /api/departments/{departmentId}.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "No Content", content = @Content),
         @ApiResponse(responseCode = "403", description = "Role, ownership or eligibility denied", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "404", description = "Resource not found", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "409", description = "Business or lifecycle conflict", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP DELETE to this /{departmentId} suffix.
     @DeleteMapping("/{departmentId}")
     public ResponseEntity<Void> deactivateDepartment(
-            // Binds this value from the matching identifier in the route path.
             @PathVariable Long departmentId) {
         departmentService.deactivateDepartment(departmentId);
         return ResponseEntity.noContent().build();

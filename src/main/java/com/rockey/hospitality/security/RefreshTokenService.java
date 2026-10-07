@@ -1,9 +1,6 @@
 package com.rockey.hospitality.security;
 
 import com.rockey.hospitality.configuration.SecurityProperties;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -15,12 +12,18 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.HexFormat;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 /**
- * Creates cryptographically random opaque refresh tokens and their SHA-256 database hashes.
- * Refresh tokens are not access JWTs and their raw values travel only in the HttpOnly cookie.
+ * STUDY NOTE: A refresh token is a longer-lived random secret used to obtain another short-lived access
+ * JWT.
+ * Here, @Service lets AuthService inject this generator, hash function and Clock-based expiry calculations.
+ * The raw value travels in an HttpOnly cookie, which browser JavaScript cannot directly read; User stores
+ * only its SHA-256 hash and UTC expiry.
+ * AuthService owns rotation and logout revocation; this component does not create another authentication
+ * mechanism.
  */
-// Registers this business/security service for constructor injection.
 @Service
 public class RefreshTokenService {
 
@@ -64,12 +67,12 @@ public class RefreshTokenService {
      * Encodes 32 secure random bytes as an opaque URL-safe token, then computes its hash and expiry.
      * The database expiry is a UTC LocalDateTime representation.
      */
-    public IssuedRefreshToken issueRefreshToken() {
+    public RefreshTokenService.IssuedRefreshToken issueRefreshToken() {
         byte[] tokenBytes = new byte[TOKEN_BYTES];
         secureRandom.nextBytes(tokenBytes);
         String rawValue = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
         Instant expiresAt = clock.instant().plus(refreshTokenLifetime);
-        return new IssuedRefreshToken(
+        return new RefreshTokenService.IssuedRefreshToken(
                 rawValue,
                 hash(rawValue),
                 expiresAt,
@@ -95,5 +98,61 @@ public class RefreshTokenService {
      */
     public LocalDateTime currentDatabaseTime() {
         return LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+    }
+
+
+    /**
+     * Internal refresh-token result separating the raw cookie value from its database hash.
+     * The raw value is not included in a public response DTO.
+     */
+    public static class IssuedRefreshToken {
+
+        /**
+         * Secret raw refresh value destined for the HttpOnly cookie only.
+         */
+        private final String rawValue;
+        /**
+         * SHA-256 lookup hash persisted on User instead of the raw token.
+         */
+        private final String hash;
+        /**
+         * Expiration instant for this issued token.
+         */
+        private final Instant expiresAt;
+        /**
+         * Same expiry represented as UTC LocalDateTime for database comparisons.
+         */
+        private final LocalDateTime databaseExpiresAt;
+
+        /**
+         * Keeps raw value, hash, and both expiry representations together for session persistence and cookie delivery.
+         */
+        public IssuedRefreshToken(
+                String rawValue,
+                String hash,
+                Instant expiresAt,
+                LocalDateTime databaseExpiresAt
+        ) {
+            this.rawValue = rawValue;
+            this.hash = hash;
+            this.expiresAt = expiresAt;
+            this.databaseExpiresAt = databaseExpiresAt;
+        }
+
+        public String getRawValue() {
+            return rawValue;
+        }
+
+        public String getHash() {
+            return hash;
+        }
+
+        public Instant getExpiresAt() {
+            return expiresAt;
+        }
+
+        public LocalDateTime getDatabaseExpiresAt() {
+            return databaseExpiresAt;
+        }
     }
 }

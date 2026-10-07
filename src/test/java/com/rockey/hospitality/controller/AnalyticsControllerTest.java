@@ -4,12 +4,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.rockey.hospitality.entity.*;
+import com.rockey.hospitality.entity.User;
 import com.rockey.hospitality.exception.GlobalExceptionHandler;
 import com.rockey.hospitality.repository.AnalyticsRepository;
 import com.rockey.hospitality.repository.DepartmentRepository;
 import com.rockey.hospitality.repository.EmployeeRepository;
 import com.rockey.hospitality.security.RockeyUserPrincipal;
 import com.rockey.hospitality.service.AnalyticsService;
+import java.time.*;
+import java.util.*;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -17,16 +20,12 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.time.*;
-import java.util.*;
-
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -49,12 +48,12 @@ class AnalyticsControllerTest {
         mvc = standaloneSetup(new AnalyticsController(service)).setControllerAdvice(new GlobalExceptionHandler())
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper)).build();
-        authenticate(Role.ADMIN);
+        authenticate(User.Role.ADMIN);
     }
     @AfterEach void clearSecurityContext() { SecurityContextHolder.clearContext(); }
 
     @Test void userJsonContainsExactlyRoleAsOfAndOwnRegistrationSection() throws Exception {
-        authenticate(Role.USER); when(analytics.countRegistrations(31L)).thenReturn(3L);
+        authenticate(User.Role.USER); when(analytics.countRegistrations(31L)).thenReturn(3L);
         String json = mvc.perform(get("/api/analytics/dashboard")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("USER")).andExpect(jsonPath("$.user.registrationCount").value(3))
                 .andExpect(jsonPath("$.staff").doesNotExist()).andExpect(jsonPath("$.admin").doesNotExist())
@@ -65,7 +64,7 @@ class AnalyticsControllerTest {
     }
 
     @Test void staffJsonContainsOnlyApprovedScopedMetrics() throws Exception {
-        authenticate(Role.STAFF);
+        authenticate(User.Role.STAFF);
         Department department = new Department("Housekeeping", "Operations"); ReflectionTestUtils.setField(department, "id", 3L);
         Employee employee = new Employee("Worker", "worker@example.test", department, "Staff", null);
         ReflectionTestUtils.setField(employee, "id", 12L); when(employees.findByUserId(31L)).thenReturn(Optional.of(employee));
@@ -136,7 +135,7 @@ class AnalyticsControllerTest {
     }
 
     @Test void ineligibleStaffReceivesSafe403() throws Exception {
-        authenticate(Role.STAFF);
+        authenticate(User.Role.STAFF);
         mvc.perform(get("/api/analytics/dashboard")).andExpect(status().isForbidden()).andExpect(jsonPath("$.status").value(403));
         verifyNoInteractions(analytics);
     }
@@ -166,7 +165,7 @@ class AnalyticsControllerTest {
         verifyNoInteractions(analytics);
     }
 
-    private void authenticate(Role role) {
+    private void authenticate(User.Role role) {
         User user = new User("Viewer", "viewer@example.test", "hash");
         ReflectionTestUtils.setField(user, "id", 31L); ReflectionTestUtils.setField(user, "role", role);
         RockeyUserPrincipal principal = new RockeyUserPrincipal(user);

@@ -16,14 +16,15 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
-
 import java.time.LocalDateTime;
 
 /**
- * Persists an Event's schedule, capacity, and lifecycle.
- * User owns registration membership; cancellation keeps registrations and linked preparation Tasks.
+ * STUDY NOTE: An Entity is a Java class JPA/Hibernate maps to stored database rows.
+ * Here, @Entity marks this persistent class, while @Table selects the events MySQL table.
+ * Event stores schedule, capacity and lifecycle for EventService and RegistrationService; User owns
+ * registration membership.
+ * schema.sql creates the tables; Hibernate validates their shape instead of creating them.
  */
-// Marks a JPA-mapped database entity; the configured application validates the supplied schema instead of creating it.
 @Entity
 // Maps to the existing events table; @Index describes existing lookup indexes. These mappings do not create the application schema.
 @Table(
@@ -35,23 +36,35 @@ import java.time.LocalDateTime;
 )
 public class Event {
 
+    // Persistence study key:
+    // @Index describes an existing lookup index; schema.sql, not these comments or mappings, creates it.
+    // @Id marks the primary key; @GeneratedValue(IDENTITY) lets MySQL generate it on insertion.
+    // @Column maps a Java field to a SQL column; nullable/length settings describe the supplied schema.
+    // @Enumerated(STRING) stores enum names such as DRAFT, not positions such as 0 or 1.
+    // @PrePersist runs before the first insert; the callback supplies lifecycle defaults and timestamps.
+    // @PreUpdate runs before an entity update; the callback refreshes its update timestamp.
+    // Time study key: callbacks use server-local LocalDateTime; Hibernate's JDBC time-zone setting is UTC.
+    // MySQL DATETIME has no zone label; do not silently treat every operational API LocalDateTime as UTC.
+    // Validation study key (the numbers/patterns are specified on each annotated field):
+    // @NotBlank requires non-null text containing at least one non-whitespace character.
+    // @Size checks length/count against the declared min/max (text length for the fields here).
+    // @Positive checks that a supplied number is greater than zero.
+    // @Min sets an inclusive minimum for a supplied number.
+    // @Max sets an inclusive maximum for a supplied number.
+    // Most shape/range validators accept null; @NotNull or @NotBlank supplies required-value checks.
+
     /**
      * Database identifier used to refer to this resource in requests and relationships.
      */
-    // Identifies the entity's primary-key field.
     @Id
-    // Uses the database IDENTITY mechanism to generate the primary key.
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    // Requires a supplied number to be greater than zero; null is handled separately.
     @Positive
     private Long id;
 
     /**
      * Human-readable work or Event title.
      */
-    // Requires non-null text containing at least one non-whitespace character.
     @NotBlank
-    // Checks supplied text length from 3 to 120 characters; required text is checked separately.
     @Size(min = 3, max = 120)
     // Maps this field to its matching SQL column (non-null, length 120) in the supplied schema.
     @Column(nullable = false, length = 120)
@@ -60,7 +73,6 @@ public class Event {
     /**
      * Optional descriptive text; services normalize blank values where required.
      */
-    // Checks supplied text length up to 1000 characters; required text is checked separately.
     @Size(max = 1000)
     // Maps this field to its matching SQL column (length 1000) in the supplied schema.
     @Column(length = 1000)
@@ -76,9 +88,7 @@ public class Event {
     /**
      * Event location shown in details and registration summaries.
      */
-    // Requires non-null text containing at least one non-whitespace character.
     @NotBlank
-    // Checks supplied text length from 2 to 120 characters; required text is checked separately.
     @Size(min = 2, max = 120)
     // Maps this field to its matching SQL column (non-null, length 120) in the supplied schema.
     @Column(nullable = false, length = 120)
@@ -87,9 +97,7 @@ public class Event {
     /**
      * Maximum registration count allowed for the Event.
      */
-    // Checks that a supplied number is at least 1.
     @Min(1)
-    // Checks that a supplied number is at most 10000.
     @Max(10000)
     // Maps this field to its matching SQL column (non-null) in the supplied schema.
     @Column(nullable = false)
@@ -98,11 +106,10 @@ public class Event {
     /**
      * Lifecycle enum value interpreted by this resource's service and transition rules.
      */
-    // Stores the enum's name as text, not its numeric ordinal.
     @Enumerated(EnumType.STRING)
     // Maps this field to its matching SQL column (non-null, length 20) in the supplied schema.
     @Column(nullable = false, length = 20)
-    private EventStatus status = EventStatus.DRAFT;
+    private Event.Status status = Event.Status.DRAFT;
 
     /**
      * Server-local creation timestamp retained for history.
@@ -133,25 +140,24 @@ public class Event {
             LocalDateTime eventDateTime,
             String location,
             Integer capacity,
-            EventStatus status
+            Event.Status status
     ) {
         this.title = title;
         this.description = description;
         this.eventDateTime = eventDateTime;
         this.location = location;
         this.capacity = capacity;
-        this.status = status == null ? EventStatus.DRAFT : status;
+        this.status = status == null ? Event.Status.DRAFT : status;
     }
 
     /**
      * Defaults a missing status to DRAFT and initializes creation/update timestamps from server-local time.
      */
-    // Runs this lifecycle callback before the entity's first insert.
     @PrePersist
     void prepareForInsert() {
         LocalDateTime now = LocalDateTime.now();
         if (status == null) {
-            status = EventStatus.DRAFT;
+            status = Event.Status.DRAFT;
         }
         createdAt = now;
         updatedAt = now;
@@ -160,7 +166,6 @@ public class Event {
     /**
      * Refreshes updatedAt using server-local time before Hibernate writes an entity update.
      */
-    // Runs this lifecycle callback before a changed entity is written.
     @PreUpdate
     void prepareForUpdate() {
         updatedAt = LocalDateTime.now();
@@ -175,7 +180,7 @@ public class Event {
             LocalDateTime eventDateTime,
             String location,
             Integer capacity,
-            EventStatus status
+            Event.Status status
     ) {
         this.title = title;
         this.description = description;
@@ -189,7 +194,7 @@ public class Event {
      * Marks the Event CANCELLED without removing registrations or linked preparation Tasks.
      */
     public void cancel() {
-        status = EventStatus.CANCELLED;
+        status = Event.Status.CANCELLED;
     }
 
     public Long getId() {
@@ -216,7 +221,7 @@ public class Event {
         return capacity;
     }
 
-    public EventStatus getStatus() {
+    public Event.Status getStatus() {
         return status;
     }
 
@@ -226,5 +231,38 @@ public class Event {
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+
+    /**
+     * Event.Status is an enum: a Java type limited to a fixed set of valid choices.
+     * Defines Event lifecycle from DRAFT through OPEN, CLOSED, and IN_PROGRESS to terminal COMPLETED or CANCELLED.
+     * EventService enforces permitted transitions; CLOSED stops registration.
+     */
+    public enum Status {
+        /**
+         * Event being prepared; self-registration is not open.
+         */
+        DRAFT,
+        /**
+         * Upcoming Event accepting eligible registrations within capacity.
+         */
+        OPEN,
+        /**
+         * Registration closed before the Event starts.
+         */
+        CLOSED,
+        /**
+         * Event underway; allowed completion follows the transition map.
+         */
+        IN_PROGRESS,
+        /**
+         * Terminal finished Event retaining registrations and Tasks.
+         */
+        COMPLETED,
+        /**
+         * Terminal cancelled Event retaining registrations and Tasks.
+         */
+        CANCELLED
     }
 }

@@ -1,20 +1,22 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.dto.inventory.CreateInventoryItemRequest;
-import com.rockey.hospitality.dto.inventory.InventoryItemResponse;
-import com.rockey.hospitality.dto.inventory.UpdateInventoryItemRequest;
+import com.rockey.hospitality.dto.InventoryDtos.CreateInventoryItemRequest;
+import com.rockey.hospitality.dto.InventoryDtos.InventoryItemResponse;
+import com.rockey.hospitality.dto.InventoryDtos.UpdateInventoryItemRequest;
 import com.rockey.hospitality.entity.Department;
 import com.rockey.hospitality.entity.Employee;
-import com.rockey.hospitality.entity.EmployeeStatus;
 import com.rockey.hospitality.entity.InventoryItem;
-import com.rockey.hospitality.entity.Role;
-import com.rockey.hospitality.exception.BadRequestException;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ForbiddenException;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
+import com.rockey.hospitality.entity.User;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.repository.DepartmentRepository;
 import com.rockey.hospitality.repository.EmployeeRepository;
 import com.rockey.hospitality.repository.InventoryItemRepository;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,11 +32,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -172,7 +169,7 @@ class InventoryServiceTest {
         when(inventoryRepository.search(eq(3L), eq(false), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(item()), PageRequest.of(1, 5), 6));
 
-        var result = service.listInventory(3L, false, 1, 5, "quantity,desc", 1L, Role.ADMIN);
+        var result = service.listInventory(3L, false, 1, 5, "quantity,desc", 1L, User.Role.ADMIN);
 
         assertThat(result.getTotalElements()).isEqualTo(6);
         assertThat(result.getContent()).hasSize(1);
@@ -187,55 +184,55 @@ class InventoryServiceTest {
     void adminDefaultListIncludesAllDepartmentsAndLifecycleStates() {
         when(inventoryRepository.search(isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
-        var result = service.listInventory(null, null, 0, 20, null, 1L, Role.ADMIN);
+        var result = service.listInventory(null, null, 0, 20, null, 1L, User.Role.ADMIN);
         assertThat(result.getContent()).isEmpty();
         verify(inventoryRepository).search(null, null, PageRequest.of(0, 20, Sort.by("name")));
     }
 
     @Test
     void staffListAlwaysScopesToOwnActiveDepartment() {
-        staff(EmployeeStatus.ACTIVE);
+        staff(Employee.Status.ACTIVE);
         when(inventoryRepository.search(eq(3L), eq(true), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(item())));
-        var result = service.listInventory(null, null, 0, 20, "name,asc", 21L, Role.STAFF);
+        var result = service.listInventory(null, null, 0, 20, "name,asc", 21L, User.Role.STAFF);
         assertThat(result.getContent()).hasSize(1);
         verify(inventoryRepository).search(eq(3L), eq(true), any(Pageable.class));
     }
 
     @Test
     void staffExplicitOwnDepartmentFilterIsAllowed() {
-        staff(EmployeeStatus.ACTIVE);
+        staff(Employee.Status.ACTIVE);
         when(inventoryRepository.search(eq(3L), eq(true), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
-        service.listInventory(3L, true, 0, 20, "sku", 21L, Role.STAFF);
+        service.listInventory(3L, true, 0, 20, "sku", 21L, User.Role.STAFF);
         verify(inventoryRepository).search(eq(3L), eq(true), any(Pageable.class));
     }
 
     @Test
     void staffCannotFilterAnotherDepartment() {
-        staff(EmployeeStatus.ACTIVE);
-        assertThatThrownBy(() -> service.listInventory(4L, null, 0, 20, null, 21L, Role.STAFF))
+        staff(Employee.Status.ACTIVE);
+        assertThatThrownBy(() -> service.listInventory(4L, null, 0, 20, null, 21L, User.Role.STAFF))
                 .isInstanceOf(ForbiddenException.class);
         verifyNoInteractions(inventoryRepository);
     }
 
     @Test
     void staffCannotRequestInactiveInventory() {
-        staff(EmployeeStatus.ACTIVE);
-        assertThatThrownBy(() -> service.listInventory(null, false, 0, 20, null, 21L, Role.STAFF))
+        staff(Employee.Status.ACTIVE);
+        assertThatThrownBy(() -> service.listInventory(null, false, 0, 20, null, 21L, User.Role.STAFF))
                 .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
     void staffWithoutEmployeeCannotList() {
-        assertThatThrownBy(() -> service.listInventory(null, null, 0, 20, null, 21L, Role.STAFF))
+        assertThatThrownBy(() -> service.listInventory(null, null, 0, 20, null, 21L, User.Role.STAFF))
                 .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
     void inactiveEmployeeCannotReadInventory() {
-        staff(EmployeeStatus.INACTIVE);
-        assertThatThrownBy(() -> service.getInventoryItem(88L, 21L, Role.STAFF))
+        staff(Employee.Status.INACTIVE);
+        assertThatThrownBy(() -> service.getInventoryItem(88L, 21L, User.Role.STAFF))
                 .isInstanceOf(ForbiddenException.class);
         verifyNoInteractions(inventoryRepository);
     }
@@ -243,16 +240,16 @@ class InventoryServiceTest {
     @Test
     void inactiveStaffDepartmentCannotListInventory() {
         housekeeping.deactivate();
-        staff(EmployeeStatus.ACTIVE);
-        assertThatThrownBy(() -> service.listInventory(null, null, 0, 20, null, 21L, Role.STAFF))
+        staff(Employee.Status.ACTIVE);
+        assertThatThrownBy(() -> service.listInventory(null, null, 0, 20, null, 21L, User.Role.STAFF))
                 .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
     void userCannotReadOrListInventory() {
-        assertThatThrownBy(() -> service.getInventoryItem(88L, 31L, Role.USER))
+        assertThatThrownBy(() -> service.getInventoryItem(88L, 31L, User.Role.USER))
                 .isInstanceOf(ForbiddenException.class);
-        assertThatThrownBy(() -> service.listInventory(null, null, 0, 20, null, 31L, Role.USER))
+        assertThatThrownBy(() -> service.listInventory(null, null, 0, 20, null, 31L, User.Role.USER))
                 .isInstanceOf(ForbiddenException.class);
         verifyNoInteractions(inventoryRepository, employeeRepository);
     }
@@ -260,7 +257,7 @@ class InventoryServiceTest {
     @ParameterizedTest
     @CsvSource({"-1,20", "0,0", "0,101"})
     void invalidPaginationIsRejected(int page, int size) {
-        assertThatThrownBy(() -> service.listInventory(null, null, page, size, null, 1L, Role.ADMIN))
+        assertThatThrownBy(() -> service.listInventory(null, null, page, size, null, 1L, User.Role.ADMIN))
                 .isInstanceOf(BadRequestException.class);
         verifyNoInteractions(inventoryRepository);
     }
@@ -268,13 +265,13 @@ class InventoryServiceTest {
     @ParameterizedTest
     @ValueSource(strings = {"passwordHash", "name,sideways", "name,asc,extra", "department.name", "name,"})
     void invalidSortIsRejected(String sort) {
-        assertThatThrownBy(() -> service.listInventory(null, null, 0, 20, sort, 1L, Role.ADMIN))
+        assertThatThrownBy(() -> service.listInventory(null, null, 0, 20, sort, 1L, User.Role.ADMIN))
                 .isInstanceOf(BadRequestException.class);
     }
 
     @Test
     void invalidDepartmentFilterIsRejected() {
-        assertThatThrownBy(() -> service.listInventory(-1L, null, 0, 20, null, 1L, Role.ADMIN))
+        assertThatThrownBy(() -> service.listInventory(-1L, null, 0, 20, null, 1L, User.Role.ADMIN))
                 .isInstanceOf(BadRequestException.class);
     }
 
@@ -284,41 +281,41 @@ class InventoryServiceTest {
         item.deactivate();
         housekeeping.deactivate();
         when(inventoryRepository.findById(88L)).thenReturn(Optional.of(item));
-        var result = service.getInventoryItem(88L, 1L, Role.ADMIN);
+        var result = service.getInventoryItem(88L, 1L, User.Role.ADMIN);
         assertThat(result.getActive()).isFalse();
         assertThat(result.getDepartment().getId()).isEqualTo(3L);
     }
 
     @Test
     void staffCanReadOwnActiveItem() {
-        staff(EmployeeStatus.ACTIVE);
+        staff(Employee.Status.ACTIVE);
         when(inventoryRepository.findById(88L)).thenReturn(Optional.of(item()));
-        assertThat(service.getInventoryItem(88L, 21L, Role.STAFF).getSku()).isEqualTo("HK-TOWEL-BATH");
+        assertThat(service.getInventoryItem(88L, 21L, User.Role.STAFF).getSku()).isEqualTo("HK-TOWEL-BATH");
     }
 
     @Test
     void staffCannotReadOtherDepartmentItem() {
-        staff(EmployeeStatus.ACTIVE);
+        staff(Employee.Status.ACTIVE);
         InventoryItem other = new InventoryItem("Chairs", "EV-CHAIRS", 3, 2, department(4L, true));
         when(inventoryRepository.findById(88L)).thenReturn(Optional.of(other));
-        assertThatThrownBy(() -> service.getInventoryItem(88L, 21L, Role.STAFF))
+        assertThatThrownBy(() -> service.getInventoryItem(88L, 21L, User.Role.STAFF))
                 .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
     void staffCannotReadInactiveOwnItem() {
-        staff(EmployeeStatus.ACTIVE);
+        staff(Employee.Status.ACTIVE);
         InventoryItem item = item();
         item.deactivate();
         when(inventoryRepository.findById(88L)).thenReturn(Optional.of(item));
-        assertThatThrownBy(() -> service.getInventoryItem(88L, 21L, Role.STAFF))
+        assertThatThrownBy(() -> service.getInventoryItem(88L, 21L, User.Role.STAFF))
                 .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
     void missingItemReturnsNotFoundForReadUpdateAndDeactivate() {
         UpdateInventoryItemRequest request = updateRequest();
-        assertThatThrownBy(() -> service.getInventoryItem(99L, 1L, Role.ADMIN))
+        assertThatThrownBy(() -> service.getInventoryItem(99L, 1L, User.Role.ADMIN))
                 .isInstanceOf(ResourceNotFoundException.class);
         assertThatThrownBy(() -> service.updateInventoryItem(99L, request))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -451,7 +448,7 @@ class InventoryServiceTest {
         verify(inventoryRepository, never()).deleteById(any());
     }
 
-    private void staff(EmployeeStatus status) {
+    private void staff(Employee.Status status) {
         Employee employee = new Employee("Worker", "worker@example.test", housekeeping, "Attendant", null);
         ReflectionTestUtils.setField(employee, "status", status);
         when(employeeRepository.findByUserId(21L)).thenReturn(Optional.of(employee));

@@ -1,20 +1,18 @@
 package com.rockey.hospitality.controller;
 
-import com.rockey.hospitality.dto.common.PageCriteria;
-import com.rockey.hospitality.dto.alert.AlertSearchCriteria;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
-import com.rockey.hospitality.exception.ApiError;
-
-import com.rockey.hospitality.dto.alert.AlertResponse;
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.entity.AlertStatus;
-import com.rockey.hospitality.entity.AlertType;
+import com.rockey.hospitality.dto.AlertDtos.AlertResponse;
+import com.rockey.hospitality.dto.AlertDtos.AlertSearchCriteria;
+import com.rockey.hospitality.dto.CommonDtos.ApiError;
+import com.rockey.hospitality.dto.CommonDtos.PageCriteria;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.entity.Alert;
 import com.rockey.hospitality.security.RockeyUserPrincipal;
 import com.rockey.hospitality.service.AlertService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -26,14 +24,31 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Binds Alert HTTP requests and delegates business operations to its service layer.
- * Response DTOs and HTTP statuses are kept separate from JPA entities.
+ * STUDY NOTE: A Controller is the API entry point for HTTP requests from React or another client.
+ * Here, @RestController returns response data, normally JSON; @RequestMapping sets the shared /api/alerts URL.
+ * AlertController handles own/authorized alert reads and history-preserving resolution and delegates
+ * business rules to AlertService.
+ * DTOs describe input/output; Spring Security and service checks, not hidden frontend buttons, enforce
+ * permissions.
  */
-// Registers a web controller whose mapped return values are written as response bodies, normally JSON.
 @RestController
 // Groups this controller's routes under /api/alerts.
 @RequestMapping("/api/alerts")
 public class AlertController {
+
+    // HTTP/annotation study key:
+    // @GetMapping handles HTTP GET reads; its path is appended to the controller's base URL.
+    // @PutMapping handles HTTP PUT updates, including marking an Alert as READ.
+    // @DeleteMapping handles DELETE requests; service rules may deactivate, cancel, resolve or withdraw rather
+    // than erase rows.
+    // @PathVariable reads an identifier directly from the URL path.
+    // @RequestParam reads a query-string value; required=false makes it optional and defaultValue supplies an
+    // omitted value.
+    // @AuthenticationPrincipal supplies the identity established by Spring Security, not a client-chosen User
+    // ID.
+    // @Operation and @ApiResponses document the operation and its outcomes; they do not authorize or validate
+    // requests.
+    // @Content/@Schema describe documented bodies/types, not runtime validation or security.
 
     /**
      * Injected AlertService collaborator; this layer delegates the operation rather than duplicating its rules.
@@ -49,31 +64,21 @@ public class AlertController {
      * Own alerts or ADMIN oversight.
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Own alerts or ADMIN oversight", description = "Access: STAFF own, ADMIN. Canonical operation: GET /api/alerts.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "401", description = "Authentication required or invalid token", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "403", description = "Role, ownership or eligibility denied", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP GET to the controller's base route.
     @GetMapping
     public PagedResponse<AlertResponse> listAlerts(
-            // Binds an optional query parameter; omitted filters arrive as null.
             @RequestParam(required = false) Long employeeId,
-            // Binds an optional query parameter; omitted filters arrive as null.
-            @RequestParam(required = false) AlertType type,
-            // Binds an optional query parameter; omitted filters arrive as null.
-            @RequestParam(required = false) AlertStatus status,
-            // Binds this query parameter, defaulting to 0 when omitted.
+            @RequestParam(required = false) Alert.Type type,
+            @RequestParam(required = false) Alert.Status status,
             @RequestParam(defaultValue = "0") int page,
-            // Binds this query parameter, defaulting to 20 when omitted.
             @RequestParam(defaultValue = "20") int size,
-            // Binds this query parameter, defaulting to createdAt,desc when omitted.
             @RequestParam(defaultValue = "createdAt,desc") String sort,
-            // Uses the identity established by backend authentication, not an ID supplied in JSON.
             @AuthenticationPrincipal RockeyUserPrincipal principal) {
         return alertService.listAlerts(new AlertSearchCriteria(employeeId, type, status), new PageCriteria(page, size, sort), principal.getId(), principal.getRole());
     }
@@ -82,21 +87,16 @@ public class AlertController {
      * Alert detail.
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Alert detail", description = "Access: Recipient STAFF, ADMIN. Canonical operation: GET /api/alerts/{alertId}.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "401", description = "Authentication required or invalid token", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "403", description = "Role, ownership or eligibility denied", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "404", description = "Resource not found", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP GET to this /{alertId} suffix.
     @GetMapping("/{alertId}")
     public AlertResponse getAlert(
-            // Binds this value from the matching identifier in the route path.
             @PathVariable Long alertId,
-            // Uses the identity established by backend authentication, not an ID supplied in JSON.
             @AuthenticationPrincipal RockeyUserPrincipal principal) {
         return alertService.getAlert(alertId, principal.getId(), principal.getRole());
     }
@@ -105,9 +105,7 @@ public class AlertController {
      * Mark own alert READ.
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Mark own alert READ", description = "Access: Recipient STAFF; ADMIN for own alert. Canonical operation: PUT /api/alerts/{alertId}/read.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "401", description = "Authentication required or invalid token", content = @Content(schema = @Schema(implementation = ApiError.class))),
@@ -115,12 +113,9 @@ public class AlertController {
         @ApiResponse(responseCode = "404", description = "Resource not found", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "409", description = "Business or lifecycle conflict", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP PUT to this /{alertId}/read suffix.
     @PutMapping("/{alertId}/read")
     public AlertResponse markRead(
-            // Binds this value from the matching identifier in the route path.
             @PathVariable Long alertId,
-            // Uses the identity established by backend authentication, not an ID supplied in JSON.
             @AuthenticationPrincipal RockeyUserPrincipal principal) {
         return alertService.markRead(alertId, principal.getId(), principal.getRole());
     }
@@ -130,9 +125,7 @@ public class AlertController {
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      * ResponseEntity returns 204 with no body after the service finishes.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Resolve/dismiss alert without physical deletion", description = "Access: Recipient STAFF, ADMIN. Canonical operation: DELETE /api/alerts/{alertId}.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "No Content", content = @Content),
         @ApiResponse(responseCode = "401", description = "Authentication required or invalid token", content = @Content(schema = @Schema(implementation = ApiError.class))),
@@ -140,12 +133,9 @@ public class AlertController {
         @ApiResponse(responseCode = "404", description = "Resource not found", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "409", description = "Business or lifecycle conflict", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP DELETE to this /{alertId} suffix.
     @DeleteMapping("/{alertId}")
     public ResponseEntity<Void> resolveAlert(
-            // Binds this value from the matching identifier in the route path.
             @PathVariable Long alertId,
-            // Uses the identity established by backend authentication, not an ID supplied in JSON.
             @AuthenticationPrincipal RockeyUserPrincipal principal) {
         alertService.resolveAlert(alertId, principal.getId(), principal.getRole());
         return ResponseEntity.noContent().build();

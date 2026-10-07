@@ -1,13 +1,15 @@
 package com.rockey.hospitality.service;
 
 import com.rockey.hospitality.entity.Department;
-import com.rockey.hospitality.entity.EmployeeStatus;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
+import com.rockey.hospitality.entity.Employee;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.repository.DepartmentRepository;
 import com.rockey.hospitality.repository.EmployeeRepository;
 import com.rockey.hospitality.repository.InventoryItemRepository;
 import com.rockey.hospitality.repository.TaskRepository;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,10 +17,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
-
-import java.util.List;
-import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
@@ -206,7 +204,7 @@ class DepartmentServiceTest {
         when(departmentRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(department));
         when(employeeRepository.existsByDepartmentIdAndStatus(
                 1L,
-                EmployeeStatus.ACTIVE
+                Employee.Status.ACTIVE
         )).thenReturn(true);
 
         assertThatThrownBy(() -> departmentService.deactivateDepartment(1L))

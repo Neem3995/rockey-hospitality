@@ -1,8 +1,5 @@
 package com.rockey.hospitality.entity;
 
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -20,14 +17,17 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
-
 import java.time.LocalDateTime;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
- * Persists Room identity, turnover status, and optional next-arrival readiness time.
- * This entity represents operations, not reservations or bookings.
+ * STUDY NOTE: An Entity is a Java class JPA/Hibernate maps to stored database rows.
+ * Here, @Entity marks this persistent class, while @Table selects the rooms MySQL table.
+ * Room stores operational readiness and turnover state for RoomService and Tasks; it is not a reservation
+ * or booking.
+ * schema.sql creates the tables; Hibernate validates their shape instead of creating them.
  */
-// Marks a JPA-mapped database entity; the configured application validates the supplied schema instead of creating it.
 @Entity
 // Maps to the existing rooms table; @Index describes existing lookup indexes and @UniqueConstraint describes unique keys. These mappings do not create the application schema.
 @Table(
@@ -42,25 +42,38 @@ import java.time.LocalDateTime;
         )
 )
 public class Room {
+
+    // Persistence study key:
+    // @Index describes an existing lookup index; schema.sql, not these comments or mappings, creates it.
+    // @UniqueConstraint describes a unique key so duplicate field values or join pairs cannot be stored.
+    // @Id marks the primary key; @GeneratedValue(IDENTITY) lets MySQL generate it on insertion.
+    // @Column maps a Java field to a SQL column; nullable/length settings describe the supplied schema.
+    // @Enumerated(STRING) stores enum names such as READY, not positions such as 0 or 1.
+    // @PrePersist runs before the first insert; the callback supplies lifecycle defaults and timestamps.
+    // @PreUpdate runs before an entity update; the callback refreshes its update timestamp.
+    // Time study key: callbacks use server-local LocalDateTime; Hibernate's JDBC time-zone setting is UTC.
+    // MySQL DATETIME has no zone label; do not silently treat every operational API LocalDateTime as UTC.
+    // Validation study key (the numbers/patterns are specified on each annotated field):
+    // @NotBlank requires non-null text containing at least one non-whitespace character.
+    // @Size checks length/count against the declared min/max (text length for the fields here).
+    // @Positive checks that a supplied number is greater than zero.
+    // @Min sets an inclusive minimum for a supplied number.
+    // @Max sets an inclusive maximum for a supplied number.
+    // Most shape/range validators accept null; @NotNull or @NotBlank supplies required-value checks.
     // Tasks reference this Room; soft deactivation preserves their hotel context.
 
     /**
      * Database identifier used to refer to this resource in requests and relationships.
      */
-    // Identifies the entity's primary-key field.
     @Id
-    // Uses the database IDENTITY mechanism to generate the primary key.
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    // Requires a supplied number to be greater than zero; null is handled separately.
     @Positive
     private Long id;
 
     /**
      * Unique operational Room identifier; it is not a database ID or a booking.
      */
-    // Requires non-null text containing at least one non-whitespace character.
     @NotBlank
-    // Checks supplied text length up to 10 characters; required text is checked separately.
     @Size(max = 10)
     // Maps this field to room_number SQL column (non-null, length 10) in the supplied schema.
     @Column(name = "room_number", nullable = false, length = 10)
@@ -69,9 +82,7 @@ public class Room {
     /**
      * Operational Room classification used in display and type filtering.
      */
-    // Requires non-null text containing at least one non-whitespace character.
     @NotBlank
-    // Checks supplied text length from 2 to 50 characters; required text is checked separately.
     @Size(min = 2, max = 50)
     // Maps this field to room_type SQL column (non-null, length 50) in the supplied schema.
     @Column(name = "room_type", nullable = false, length = 50)
@@ -80,18 +91,15 @@ public class Room {
     /**
      * Lifecycle enum value interpreted by this resource's service and transition rules.
      */
-    // Stores the enum's name as text, not its numeric ordinal.
     @Enumerated(EnumType.STRING)
     // Maps this field to its matching SQL column (non-null, length 30) in the supplied schema.
     @Column(nullable = false, length = 30)
-    private RoomStatus status = RoomStatus.READY;
+    private Room.Status status = Room.Status.READY;
 
     /**
      * Room floor number (1-99), stored as SMALLINT and used for display and floor filtering.
      */
-    // Checks that a supplied number is at least 1.
     @Min(1)
-    // Checks that a supplied number is at most 99.
     @Max(99)
     // Maps this field to its matching SQL column (non-null) in the supplied schema.
     @Column(nullable = false)
@@ -140,25 +148,24 @@ public class Room {
             String roomNumber,
             String roomType,
             Integer floor,
-            RoomStatus status,
+            Room.Status status,
             LocalDateTime nextArrivalAt
     ) {
         this.roomNumber = roomNumber;
         this.roomType = roomType;
         this.floor = floor;
-        this.status = status == null ? RoomStatus.READY : status;
+        this.status = status == null ? Room.Status.READY : status;
         this.nextArrivalAt = nextArrivalAt;
     }
 
     /**
      * Defaults missing status/active values and initializes creation/update timestamps from server-local time.
      */
-    // Runs this lifecycle callback before the entity's first insert.
     @PrePersist
     void prepareForInsert() {
         LocalDateTime now = LocalDateTime.now();
         if (status == null) {
-            status = RoomStatus.READY;
+            status = Room.Status.READY;
         }
         if (active == null) {
             active = true;
@@ -170,7 +177,6 @@ public class Room {
     /**
      * Refreshes updatedAt using server-local time before Hibernate writes an entity update.
      */
-    // Runs this lifecycle callback before a changed entity is written.
     @PreUpdate
     void prepareForUpdate() {
         updatedAt = LocalDateTime.now();
@@ -194,7 +200,7 @@ public class Room {
     /**
      * Stores a status already checked against RoomService's transition rules.
      */
-    public void updateStatus(RoomStatus status) {
+    public void updateStatus(Room.Status status) {
         this.status = status;
     }
 
@@ -217,7 +223,7 @@ public class Room {
         return roomType;
     }
 
-    public RoomStatus getStatus() {
+    public Room.Status getStatus() {
         return status;
     }
 
@@ -239,5 +245,42 @@ public class Room {
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+
+    /**
+     * Room.Status is an enum: a Java type limited to a fixed set of valid choices.
+     * Describes readiness and turnover states, plus MAINTENANCE and OUT_OF_SERVICE.
+     * RoomService's transition map enforces the permitted route back through inspection to READY.
+     */
+    public enum Status {
+        /**
+         * Operationally ready Room.
+         */
+        READY,
+        /**
+         * Room currently occupied, not a separate booking model.
+         */
+        OCCUPIED,
+        /**
+         * Room awaiting cleaning.
+         */
+        DIRTY,
+        /**
+         * Room undergoing cleaning.
+         */
+        CLEANING,
+        /**
+         * Room awaiting readiness inspection.
+         */
+        INSPECTION,
+        /**
+         * Room requiring maintenance before readiness.
+         */
+        MAINTENANCE,
+        /**
+         * Room unavailable for operational use; distinct from row deactivation.
+         */
+        OUT_OF_SERVICE
     }
 }

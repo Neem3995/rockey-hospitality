@@ -1,26 +1,16 @@
 package com.rockey.hospitality.service;
 
 import com.rockey.hospitality.entity.Alert;
-import com.rockey.hospitality.entity.AlertStatus;
-import com.rockey.hospitality.entity.AlertType;
 import com.rockey.hospitality.entity.Employee;
-import com.rockey.hospitality.entity.EmployeeStatus;
 import com.rockey.hospitality.entity.InventoryItem;
-import com.rockey.hospitality.entity.Role;
 import com.rockey.hospitality.entity.Room;
-import com.rockey.hospitality.entity.RoomStatus;
 import com.rockey.hospitality.entity.Task;
-import com.rockey.hospitality.entity.TaskPriority;
-import com.rockey.hospitality.entity.TaskStatus;
-import com.rockey.hospitality.entity.UserStatus;
+import com.rockey.hospitality.entity.User;
 import com.rockey.hospitality.repository.AlertRepository;
 import com.rockey.hospitality.repository.EmployeeRepository;
 import com.rockey.hospitality.repository.InventoryItemRepository;
 import com.rockey.hospitality.repository.RoomRepository;
 import com.rockey.hospitality.repository.TaskRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -31,27 +21,37 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Reconciles Room, Task, and Inventory conditions with recipients' unresolved alerts.
- * Cleared conditions resolve old rows; recurring conditions can create new rows without erasing history.
+ * STUDY NOTE: A Service holds business rules and coordinates an application workflow.
+ * Here, @Service lets Spring manage and inject this component; @Transactional groups database work so unchecked
+ * failures roll back writes.
+ * AlertAutomationService reconciles source conditions, recipient eligibility, duplicate suppression and
+ * history-preserving auto-resolution.
+ * AlertScheduler delegates here; Room, Task, Inventory, Employee and Alert repositories provide the
+ * persisted data through JPA/Hibernate.
  */
-// Registers this business/security service for constructor injection.
 @Service
 public class AlertAutomationService {
+
+    // Transaction study key: Spring applies @Transactional when another component calls this managed service.
+    // Each scan is one read-write transaction, so a failure rolls back instead of leaving half-reconciled alerts.
+    // Scans are started by AlertScheduler, not a user request, so there is no caller role or ownership check here.
 
     /**
      * UNREAD and READ states both remain unresolved for alert reconciliation.
      */
-    public static final List<AlertStatus> UNRESOLVED = List.of(AlertStatus.UNREAD, AlertStatus.READ);
+    public static final List<Alert.Status> UNRESOLVED = List.of(Alert.Status.UNREAD, Alert.Status.READ);
     /**
      * COMPLETED and CANCELLED Task states are terminal and excluded from active-work conditions.
      */
-    private static final List<TaskStatus> TERMINAL = List.of(TaskStatus.COMPLETED, TaskStatus.CANCELLED);
+    private static final List<Task.Status> TERMINAL = List.of(Task.Status.COMPLETED, Task.Status.CANCELLED);
     /**
      * HIGH and URGENT Task priorities produce priority-alert conditions.
      */
-    private static final List<TaskPriority> HIGH_PRIORITIES = List.of(TaskPriority.HIGH, TaskPriority.URGENT);
+    private static final List<Task.Priority> HIGH_PRIORITIES = List.of(Task.Priority.HIGH, Task.Priority.URGENT);
     /**
      * Injected AlertRepository for database lookup and persistence, keeping SQL access out of controller code.
      */
@@ -96,7 +96,6 @@ public class AlertAutomationService {
      * Uses one server-local time snapshot to scan Room, Task, and Inventory sources.
      * A runtime failure rolls back this transaction rather than retaining a partial scan.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public void runChecks() {
         // One transaction reconciles source conditions; a failed scan must not leave half its alerts.
@@ -109,21 +108,18 @@ public class AlertAutomationService {
     /**
      * Reconciles only Room readiness alerts using the current server-local time.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public void checkRoomReadiness() { scanRooms(LocalDateTime.now(clock)); }
 
     /**
      * Reconciles only assigned Task overdue and high-priority alerts.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public void checkTasks() { scanTasks(LocalDateTime.now(clock)); }
 
     /**
      * Reconciles only active Inventory threshold alerts.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public void checkInventory() { scanInventory(LocalDateTime.now(clock)); }
 
@@ -133,16 +129,16 @@ public class AlertAutomationService {
      */
     private void scanRooms(LocalDateTime now) {
         Map<Long, List<Condition>> expected = new TreeMap<>();
-        List<Long> recipients = employeeRepository.findActiveRecipientIdsByDepartment("Housekeeping", EmployeeStatus.ACTIVE);
-        for (Room room : roomRepository.findReadinessAlertSources(now, now.plusHours(2), RoomStatus.READY)) {
-            if (!Boolean.TRUE.equals(room.getActive()) || room.getStatus() == RoomStatus.READY
+        List<Long> recipients = employeeRepository.findActiveRecipientIdsByDepartment("Housekeeping", Employee.Status.ACTIVE);
+        for (Room room : roomRepository.findReadinessAlertSources(now, now.plusHours(2), Room.Status.READY)) {
+            if (!Boolean.TRUE.equals(room.getActive()) || room.getStatus() == Room.Status.READY
                     || room.getNextArrivalAt() == null || room.getNextArrivalAt().isBefore(now)
                     || room.getNextArrivalAt().isAfter(now.plusHours(2))) continue;
             Condition condition = new Condition("ROOM:" + room.getId() + ":ARRIVAL_NOT_READY",
                     "Room " + room.getRoomNumber() + " is not READY for arrival within two hours.", null);
             recipients.forEach(id -> add(expected, id, condition));
         }
-        reconcile(AlertType.ROOM, expected, now);
+        reconcile(Alert.Type.ROOM, expected, now);
     }
 
     /**
@@ -163,7 +159,7 @@ public class AlertAutomationService {
                         "Task " + task.getId() + " has HIGH/URGENT priority.", task));
             }
         }
-        reconcile(AlertType.TASK, expected, now);
+        reconcile(Alert.Type.TASK, expected, now);
     }
 
     /**
@@ -172,9 +168,9 @@ public class AlertAutomationService {
      */
     private void scanInventory(LocalDateTime now) {
         Map<Long, List<Condition>> expected = new TreeMap<>();
-        List<Long> recipients = employeeRepository.findActiveRecipientIdsByDepartment("Purchasing", EmployeeStatus.ACTIVE);
+        List<Long> recipients = employeeRepository.findActiveRecipientIdsByDepartment("Purchasing", Employee.Status.ACTIVE);
         if (recipients.isEmpty()) {
-            recipients = employeeRepository.findActiveAdminRecipientIds(EmployeeStatus.ACTIVE, Role.ADMIN, UserStatus.ACTIVE);
+            recipients = employeeRepository.findActiveAdminRecipientIds(Employee.Status.ACTIVE, User.Role.ADMIN, User.Status.ACTIVE);
         }
         for (InventoryItem item : inventoryRepository.findInventoryAlertSources()) {
             if (!Boolean.TRUE.equals(item.getActive()) || item.getQuantity() > item.getReorderThreshold()) continue;
@@ -182,7 +178,7 @@ public class AlertAutomationService {
                     "Inventory " + item.getSku() + " is at or below its reorder threshold.", null);
             for (Long id : recipients) add(expected, id, condition);
         }
-        reconcile(AlertType.INVENTORY, expected, now);
+        reconcile(Alert.Type.INVENTORY, expected, now);
     }
 
     /**
@@ -196,7 +192,7 @@ public class AlertAutomationService {
      * Visits both currently expected recipients and recipients with older unresolved source alerts.
      * This allows disappeared conditions to resolve as well as new ones to generate.
      */
-    private void reconcile(AlertType type, Map<Long, List<Condition>> expected, LocalDateTime now) {
+    private void reconcile(Alert.Type type, Map<Long, List<Condition>> expected, LocalDateTime now) {
         Set<Long> recipientIds = new TreeSet<>(expected.keySet());
         recipientIds.addAll(alertRepository.findUnresolvedRecipientIds(type, UNRESOLVED));
         for (Long id : recipientIds) {
@@ -208,11 +204,11 @@ public class AlertAutomationService {
      * Locks the Employee and unresolved alerts before retaining one row per desired source key.
      * Ineligible recipients, cleared conditions, and old duplicates resolve; missing desired conditions create new rows.
      */
-    private void reconcileRecipient(Long id, AlertType type, List<Condition> expected, LocalDateTime now) {
+    private void reconcileRecipient(Long id, Alert.Type type, List<Condition> expected, LocalDateTime now) {
         // Serialize generation for each recipient before reading its unresolved alerts, within the caller's transaction.
         Employee employee = employeeRepository.findByIdForUpdate(id).orElse(null);
         if (employee == null) return;
-        boolean eligible = employee.getStatus() == EmployeeStatus.ACTIVE
+        boolean eligible = employee.getStatus() == Employee.Status.ACTIVE
                 && Boolean.TRUE.equals(employee.getDepartment().getActive());
         List<Condition> conditions = eligible ? expected : List.of();
         Map<String, Condition> desired = new TreeMap<>();

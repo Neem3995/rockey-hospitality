@@ -1,10 +1,13 @@
 package com.rockey.hospitality.security;
 
+import com.rockey.hospitality.security.JwtService;
+import com.rockey.hospitality.security.SecurityHandlers.RestAuthenticationEntryPoint;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -13,15 +16,20 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import java.io.IOException;
-
 /**
- * Authenticates Bearer requests before protected controllers run.
- * A valid JWT alone is insufficient when the database account is disabled or its identity or role no longer matches.
+ * STUDY NOTE: A Filter runs before protected controllers; authentication verifies identity and
+ * authorization decides access.
+ * Here, @Component lets SecurityConfiguration inject this filter into Spring Security's request chain.
+ * It verifies the signed Bearer access JWT with JwtService, then reloads the User through
+ * RockeyUserDetailsService.
+ * Current database ID, role and active state remain authoritative before a principal is placed in the
+ * security context.
  */
-// Registers this class as a Spring-managed component discovered during startup.
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    // @Override shows that this method implements a superclass/interface contract rather than inventing a
+    // separate hook.
 
     /**
      * Required Authorization header prefix checked before JWT parsing.
@@ -58,7 +66,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      * Verifies a supplied Bearer JWT, reloads its User, and installs the current principal in the security context.
      * Missing headers continue to route authorization; invalid headers or mismatched accounts return 401.
      */
-    // Implements the inherited Java/Spring contract rather than defining a separate callback.
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
@@ -77,7 +84,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             // Verify the signature/expiry before treating claims as an identity.
-            AccessTokenClaims claims = jwtService.parseAccessToken(
+            JwtService.AccessTokenClaims claims = jwtService.parseAccessToken(
                     authorization.substring(BEARER_PREFIX.length())
             );
             RockeyUserPrincipal principal = (RockeyUserPrincipal) userDetailsService

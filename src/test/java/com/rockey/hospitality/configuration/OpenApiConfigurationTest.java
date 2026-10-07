@@ -9,11 +9,10 @@ import io.swagger.v3.oas.models.media.MediaType;
 import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.responses.ApiResponses;
 import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 class OpenApiConfigurationTest {
-    private final OpenApiConfiguration configuration = new OpenApiConfiguration();
+    private final ApplicationConfiguration configuration = new ApplicationConfiguration();
 
     @Test
     void absentPathsAndAbsentPostOperationsRemainSafe() {

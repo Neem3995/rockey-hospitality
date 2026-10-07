@@ -1,11 +1,22 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.dto.analytics.*;
+import com.rockey.hospitality.dto.AnalyticsDtos.*;
 import com.rockey.hospitality.entity.*;
+import com.rockey.hospitality.entity.Alert;
+import com.rockey.hospitality.entity.Employee;
+import com.rockey.hospitality.entity.Event;
+import com.rockey.hospitality.entity.Room;
+import com.rockey.hospitality.entity.Task;
+import com.rockey.hospitality.entity.User;
 import com.rockey.hospitality.exception.*;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.repository.AnalyticsRepository;
 import com.rockey.hospitality.repository.DepartmentRepository;
 import com.rockey.hospitality.repository.EmployeeRepository;
+import java.time.*;
+import java.util.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,10 +30,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.*;
-import java.util.*;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -41,17 +48,17 @@ class AnalyticsServiceTest {
 
     @Test void userDashboardQueriesOnlyOwnRetainedRegistrations() {
         when(analytics.countRegistrations(31L)).thenReturn(4L);
-        DashboardResponse result = service.dashboard(31L, Role.USER);
+        DashboardResponse result = service.dashboard(31L, User.Role.USER);
         assertEquals(4, result.getUser().getRegistrationCount());
-        assertEquals(Role.USER, result.getRole());
+        assertEquals(User.Role.USER, result.getRole());
         assertNull(result.getStaff()); assertNull(result.getAdmin());
         verify(analytics).countRegistrations(31L);
         verifyNoMoreInteractions(analytics); verifyNoInteractions(employees, departments);
     }
 
     @Test void missingUserIdentityCannotBecomeGlobalRegistrationScope() {
-        assertThrows(ForbiddenException.class, () -> service.dashboard(null, Role.USER));
-        assertThrows(ForbiddenException.class, () -> service.dashboard(0L, Role.USER));
+        assertThrows(ForbiddenException.class, () -> service.dashboard(null, User.Role.USER));
+        assertThrows(ForbiddenException.class, () -> service.dashboard(0L, User.Role.USER));
         assertThrows(ForbiddenException.class, () -> service.dashboard(31L, null));
         verifyNoInteractions(analytics, employees, departments);
     }
@@ -59,14 +66,14 @@ class AnalyticsServiceTest {
     @Test void staffCountsAreIdentityAndDepartmentScopedWithTerminalWorkExcluded() {
         when(employees.findByUserId(21L)).thenReturn(Optional.of(employee()));
         when(analytics.taskCounts(null, 12L)).thenReturn(List.of(
-                row(TaskStatus.OPEN, 1), row(TaskStatus.ASSIGNED, 2), row(TaskStatus.IN_PROGRESS, 3),
-                row(TaskStatus.COMPLETED, 40), row(TaskStatus.CANCELLED, 50)));
+                row(Task.Status.OPEN, 1), row(Task.Status.ASSIGNED, 2), row(Task.Status.IN_PROGRESS, 3),
+                row(Task.Status.COMPLETED, 40), row(Task.Status.CANCELLED, 50)));
         when(analytics.overdueTaskCount(null, 12L, LOCAL_NOW)).thenReturn(2L);
         when(analytics.alertCounts(12L)).thenReturn(List.of(
-                row(AlertStatus.UNREAD, 4), row(AlertStatus.READ, 5), row(AlertStatus.RESOLVED, 60)));
+                row(Alert.Status.UNREAD, 4), row(Alert.Status.READ, 5), row(Alert.Status.RESOLVED, 60)));
         when(analytics.activeInventoryItemCount(3L)).thenReturn(7L);
         when(analytics.lowStockItemCount(3L)).thenReturn(2L);
-        DashboardResponse result = service.dashboard(21L, Role.STAFF);
+        DashboardResponse result = service.dashboard(21L, User.Role.STAFF);
         var staff = result.getStaff();
         assertEquals(12L, staff.getEmployeeId()); assertEquals(3L, staff.getDepartmentId());
         assertEquals(6, staff.getNonTerminalAssignedTaskCount()); assertEquals(2, staff.getOverdueAssignedTaskCount());
@@ -81,27 +88,27 @@ class AnalyticsServiceTest {
     @ParameterizedTest @ValueSource(strings = {"missingEmployee", "inactiveEmployee", "inactiveDepartment", "missingDepartment"})
     void staffEligibilityFailsBeforeAnyAggregateQuery(String condition) {
         Employee employee = employee();
-        if (condition.equals("inactiveEmployee")) ReflectionTestUtils.setField(employee, "status", EmployeeStatus.INACTIVE);
+        if (condition.equals("inactiveEmployee")) ReflectionTestUtils.setField(employee, "status", Employee.Status.INACTIVE);
         if (condition.equals("inactiveDepartment")) employee.getDepartment().deactivate();
         if (condition.equals("missingDepartment")) ReflectionTestUtils.setField(employee, "department", null);
         when(employees.findByUserId(21L)).thenReturn(condition.equals("missingEmployee") ? Optional.empty() : Optional.of(employee));
-        assertThrows(ForbiddenException.class, () -> service.dashboard(21L, Role.STAFF));
+        assertThrows(ForbiddenException.class, () -> service.dashboard(21L, User.Role.STAFF));
         verifyNoInteractions(analytics);
     }
 
     @Test void adminDashboardUsesApprovedGlobalDefinitions() {
-        when(analytics.roomCounts(null)).thenReturn(List.of(row(RoomStatus.READY, 3), row(RoomStatus.DIRTY, 2)));
-        when(analytics.taskCounts(null, null)).thenReturn(List.of(row(TaskStatus.OPEN, 2), row(TaskStatus.ASSIGNED, 3),
-                row(TaskStatus.IN_PROGRESS, 4), row(TaskStatus.COMPLETED, 5), row(TaskStatus.CANCELLED, 6)));
+        when(analytics.roomCounts(null)).thenReturn(List.of(row(Room.Status.READY, 3), row(Room.Status.DIRTY, 2)));
+        when(analytics.taskCounts(null, null)).thenReturn(List.of(row(Task.Status.OPEN, 2), row(Task.Status.ASSIGNED, 3),
+                row(Task.Status.IN_PROGRESS, 4), row(Task.Status.COMPLETED, 5), row(Task.Status.CANCELLED, 6)));
         when(analytics.overdueTaskCount(null, null, LOCAL_NOW)).thenReturn(1L);
-        when(analytics.alertCounts(null)).thenReturn(List.of(row(AlertStatus.UNREAD, 7), row(AlertStatus.READ, 8), row(AlertStatus.RESOLVED, 90)));
-        when(analytics.eventCounts()).thenReturn(List.of(row(EventStatus.DRAFT, 1), row(EventStatus.OPEN, 2),
-                row(EventStatus.CLOSED, 3), row(EventStatus.IN_PROGRESS, 4), row(EventStatus.COMPLETED, 5), row(EventStatus.CANCELLED, 6)));
+        when(analytics.alertCounts(null)).thenReturn(List.of(row(Alert.Status.UNREAD, 7), row(Alert.Status.READ, 8), row(Alert.Status.RESOLVED, 90)));
+        when(analytics.eventCounts()).thenReturn(List.of(row(Event.Status.DRAFT, 1), row(Event.Status.OPEN, 2),
+                row(Event.Status.CLOSED, 3), row(Event.Status.IN_PROGRESS, 4), row(Event.Status.COMPLETED, 5), row(Event.Status.CANCELLED, 6)));
         when(analytics.activeDepartmentCount()).thenReturn(4L);
         when(analytics.activeInventoryItemCount(null)).thenReturn(12L);
         when(analytics.lowStockItemCount(null)).thenReturn(3L);
         when(analytics.countRegistrations(null)).thenReturn(22L);
-        var result = service.dashboard(1L, Role.ADMIN).getAdmin();
+        var result = service.dashboard(1L, User.Role.ADMIN).getAdmin();
         assertEquals(5, result.getActiveRoomCount()); assertEquals(3, result.getReadyRoomCount());
         assertEquals(9, result.getNonTerminalTaskCount()); assertEquals(1, result.getOverdueTaskCount());
         assertEquals(5, result.getCompletedTaskCount()); assertEquals(4, result.getActiveDepartmentCount());
@@ -113,32 +120,32 @@ class AnalyticsServiceTest {
     @Test void roomCountsIncludeEveryCanonicalStatusAndReconcile() {
         List<Object[]> fixture = new ArrayList<>();
         long expected = 0;
-        for (RoomStatus status : RoomStatus.values()) { long count = status.ordinal() + 1L; fixture.add(row(status, count)); expected += count; }
+        for (Room.Status status : Room.Status.values()) { long count = status.ordinal() + 1L; fixture.add(row(status, count)); expected += count; }
         when(analytics.roomCounts(2)).thenReturn(fixture);
-        var result = service.rooms(2, Role.ADMIN);
+        var result = service.rooms(2, User.Role.ADMIN);
         assertEquals(2, result.getFloor()); assertEquals(expected, result.getActiveRoomCount());
-        for (RoomStatus status : RoomStatus.values()) assertEquals(status.ordinal() + 1L, result.getRoomCountsByStatus().get(status));
+        for (Room.Status status : Room.Status.values()) assertEquals(status.ordinal() + 1L, result.getRoomCountsByStatus().get(status));
         var statusCounts = result.getRoomCountsByStatus();
-        assertThrows(UnsupportedOperationException.class, () -> statusCounts.put(RoomStatus.READY, 0L));
+        assertThrows(UnsupportedOperationException.class, () -> statusCounts.put(Room.Status.READY, 0L));
     }
 
     @Test void tasksIncludeCompletedCancelledAndReturnIndependentOverdueSubset() {
-        when(analytics.taskCounts(3L, null)).thenReturn(List.of(row(TaskStatus.OPEN, 1), row(TaskStatus.ASSIGNED, 2),
-                row(TaskStatus.IN_PROGRESS, 3), row(TaskStatus.COMPLETED, 4), row(TaskStatus.CANCELLED, 5)));
+        when(analytics.taskCounts(3L, null)).thenReturn(List.of(row(Task.Status.OPEN, 1), row(Task.Status.ASSIGNED, 2),
+                row(Task.Status.IN_PROGRESS, 3), row(Task.Status.COMPLETED, 4), row(Task.Status.CANCELLED, 5)));
         when(analytics.overdueTaskCount(3L, null, LOCAL_NOW)).thenReturn(2L);
-        var result = service.tasks(3L, Role.ADMIN);
+        var result = service.tasks(3L, User.Role.ADMIN);
         assertEquals(3L, result.getDepartmentId()); assertEquals(15, result.getTotalTaskCount());
-        assertEquals(4, result.getTaskCountsByStatus().get(TaskStatus.COMPLETED));
-        assertEquals(5, result.getTaskCountsByStatus().get(TaskStatus.CANCELLED)); assertEquals(2, result.getOverdueTaskCount());
+        assertEquals(4, result.getTaskCountsByStatus().get(Task.Status.COMPLETED));
+        assertEquals(5, result.getTaskCountsByStatus().get(Task.Status.CANCELLED)); assertEquals(2, result.getOverdueTaskCount());
     }
 
     @Test void inventoryFilterDoesNotFilterEventHistoryRegistrationsOrPreparation() {
-        when(analytics.eventCounts()).thenReturn(List.of(row(EventStatus.CANCELLED, 2), row(EventStatus.COMPLETED, 3)));
+        when(analytics.eventCounts()).thenReturn(List.of(row(Event.Status.CANCELLED, 2), row(Event.Status.COMPLETED, 3)));
         when(analytics.countRegistrations(null)).thenReturn(11L);
         when(analytics.eventTaskCount()).thenReturn(8L);
         when(analytics.completedEventTaskCount()).thenReturn(5L);
         when(analytics.activeInventoryItemCount(999L)).thenReturn(0L);
-        var result = service.operations(999L, Role.ADMIN);
+        var result = service.operations(999L, User.Role.ADMIN);
         assertEquals(999L, result.getInventory().getDepartmentId());
         assertEquals(0, result.getInventory().getActiveInventoryItemCount());
         assertEquals(5, result.getEvents().getEventCount()); assertEquals(11, result.getEvents().getRegistrationCount());
@@ -147,17 +154,17 @@ class AnalyticsServiceTest {
     }
 
     @Test void eventWithoutTasksReportsZeroPreparationNotPercentage() {
-        when(analytics.eventCounts()).thenReturn(Collections.singletonList(row(EventStatus.OPEN, 1)));
-        var result = service.operations(null, Role.ADMIN);
+        when(analytics.eventCounts()).thenReturn(Collections.singletonList(row(Event.Status.OPEN, 1)));
+        var result = service.operations(null, User.Role.ADMIN);
         assertEquals(1, result.getEvents().getEventCount());
         assertEquals(0, result.getEvents().getEventTaskCount()); assertEquals(0, result.getEvents().getCompletedEventTaskCount());
     }
 
     @Test void emptyDataHasZeroCountsCompleteMapsAndEmptyPage() {
-        var rooms = service.rooms(null, Role.ADMIN);
-        var tasks = service.tasks(null, Role.ADMIN);
-        var operations = service.operations(null, Role.ADMIN);
-        var departmentPage = service.departments(null, 0, 20, Role.ADMIN).getDepartments();
+        var rooms = service.rooms(null, User.Role.ADMIN);
+        var tasks = service.tasks(null, User.Role.ADMIN);
+        var operations = service.operations(null, User.Role.ADMIN);
+        var departmentPage = service.departments(null, 0, 20, User.Role.ADMIN).getDepartments();
         assertEquals(0, rooms.getActiveRoomCount()); assertEquals(7, rooms.getRoomCountsByStatus().size());
         assertTrue(rooms.getRoomCountsByStatus().values().stream().allMatch(n -> n == 0));
         assertEquals(0, tasks.getTotalTaskCount()); assertEquals(5, tasks.getTaskCountsByStatus().size());
@@ -167,13 +174,13 @@ class AnalyticsServiceTest {
         assertTrue(operations.getEvents().getEventCountsByStatus().values().stream().allMatch(n -> n == 0));
         assertEquals(0, operations.getEvents().getRegistrationCount()); assertTrue(departmentPage.getContent().isEmpty());
         assertEquals(0, departmentPage.getTotalPages()); assertTrue(departmentPage.isLast());
-        assertEquals(0, service.dashboard(31L, Role.USER).getUser().getRegistrationCount());
-        assertEquals(0, service.dashboard(1L, Role.ADMIN).getAdmin().getNonTerminalTaskCount());
+        assertEquals(0, service.dashboard(31L, User.Role.USER).getUser().getRegistrationCount());
+        assertEquals(0, service.dashboard(1L, User.Role.ADMIN).getAdmin().getNonTerminalTaskCount());
     }
 
     @Test void validStaffWithNoWorkHasZeroCounts() {
         when(employees.findByUserId(21L)).thenReturn(Optional.of(employee()));
-        var result = service.dashboard(21L, Role.STAFF).getStaff();
+        var result = service.dashboard(21L, User.Role.STAFF).getStaff();
         assertEquals(0, result.getNonTerminalAssignedTaskCount()); assertEquals(0, result.getOverdueAssignedTaskCount());
         assertEquals(0, result.getUnreadAlertCount()); assertEquals(0, result.getUnresolvedAlertCount());
         assertEquals(0, result.getActiveInventoryItemCount()); assertEquals(0, result.getLowStockItemCount());
@@ -187,7 +194,7 @@ class AnalyticsServiceTest {
         when(analytics.activeEmployeesByDepartment(List.of(3L, 7L))).thenReturn(Collections.singletonList(row(3L, 2)));
         when(analytics.nonTerminalTasksByDepartment(List.of(3L, 7L))).thenReturn(Collections.singletonList(row(3L, 5)));
         when(analytics.overdueTasksByDepartment(List.of(3L, 7L), LOCAL_NOW)).thenReturn(Collections.singletonList(row(3L, 1)));
-        var page = service.departments(null, 0, 20, Role.ADMIN).getDepartments();
+        var page = service.departments(null, 0, 20, User.Role.ADMIN).getDepartments();
         assertEquals(2, page.getTotalElements()); assertEquals(1, page.getTotalPages()); assertEquals(20, page.getSize());
         var active = page.getContent().get(0); assertEquals(2, active.getActiveEmployeeCount());
         assertEquals(5, active.getNonTerminalTaskCount()); assertEquals(1, active.getOverdueTaskCount());
@@ -197,57 +204,57 @@ class AnalyticsServiceTest {
 
     @Test void requestedExistingEmptyDepartmentHasZeroSummary() {
         when(departments.findById(7L)).thenReturn(Optional.of(department(7L)));
-        var page = service.departments(7L, 0, 20, Role.ADMIN).getDepartments();
+        var page = service.departments(7L, 0, 20, User.Role.ADMIN).getDepartments();
         assertEquals(1, page.getTotalElements()); assertEquals(1, page.getContent().size());
         assertEquals(0, page.getContent().get(0).getActiveEmployeeCount());
     }
 
     @Test void nonexistentDepartmentSummaryUses404() {
-        assertThrows(ResourceNotFoundException.class, () -> service.departments(999L, 0, 20, Role.ADMIN));
+        assertThrows(ResourceNotFoundException.class, () -> service.departments(999L, 0, 20, User.Role.ADMIN));
         verifyNoInteractions(analytics);
     }
 
     @Test void unknownDepartmentTaskFilterReturnsZeroWithoutExistenceLookup() {
-        assertEquals(0, service.tasks(999L, Role.ADMIN).getTotalTaskCount()); verifyNoInteractions(departments);
+        assertEquals(0, service.tasks(999L, User.Role.ADMIN).getTotalTaskCount()); verifyNoInteractions(departments);
     }
 
     @Test void paginationPreservesTotalsAndSkipsQueriesForFarOutEmptyPage() {
         when(departments.count()).thenReturn(21L);
-        var page = service.departments(null, Integer.MAX_VALUE, 100, Role.ADMIN).getDepartments();
+        var page = service.departments(null, Integer.MAX_VALUE, 100, User.Role.ADMIN).getDepartments();
         assertEquals(21, page.getTotalElements()); assertEquals(1, page.getTotalPages());
         assertTrue(page.getContent().isEmpty()); assertTrue(page.isLast()); verifyNoInteractions(analytics);
     }
 
     @Test void filteredDepartmentOutsideFirstPageIsEmptyButNotMissing() {
         when(departments.findById(3L)).thenReturn(Optional.of(department(3L)));
-        var page = service.departments(3L, 1, 20, Role.ADMIN).getDepartments();
+        var page = service.departments(3L, 1, 20, User.Role.ADMIN).getDepartments();
         assertTrue(page.getContent().isEmpty()); assertEquals(1, page.getTotalElements()); verifyNoInteractions(analytics);
     }
 
     @ParameterizedTest @ValueSource(ints = {-1, 0, 100})
     void invalidFloorRejected(int floor) {
-        assertThrows(BadRequestException.class, () -> service.rooms(floor, Role.ADMIN)); verifyNoInteractions(analytics);
+        assertThrows(BadRequestException.class, () -> service.rooms(floor, User.Role.ADMIN)); verifyNoInteractions(analytics);
     }
 
     @ParameterizedTest @ValueSource(ints = {1, 99})
-    void inclusiveFloorBoundariesAccepted(int floor) { assertEquals(floor, service.rooms(floor, Role.ADMIN).getFloor()); }
+    void inclusiveFloorBoundariesAccepted(int floor) { assertEquals(floor, service.rooms(floor, User.Role.ADMIN).getFloor()); }
 
     @ParameterizedTest @ValueSource(longs = {-1, 0})
     void invalidDepartmentFiltersRejected(long id) {
-        assertThrows(BadRequestException.class, () -> service.tasks(id, Role.ADMIN));
-        assertThrows(BadRequestException.class, () -> service.operations(id, Role.ADMIN));
-        assertThrows(BadRequestException.class, () -> service.departments(id, 0, 20, Role.ADMIN)); verifyNoInteractions(analytics);
+        assertThrows(BadRequestException.class, () -> service.tasks(id, User.Role.ADMIN));
+        assertThrows(BadRequestException.class, () -> service.operations(id, User.Role.ADMIN));
+        assertThrows(BadRequestException.class, () -> service.departments(id, 0, 20, User.Role.ADMIN)); verifyNoInteractions(analytics);
     }
 
     @ParameterizedTest @CsvSource({"-1,20", "0,0", "0,-1", "0,101"})
     void invalidPaginationRejected(int page, int size) {
-        assertThrows(BadRequestException.class, () -> service.departments(null, page, size, Role.ADMIN));
+        assertThrows(BadRequestException.class, () -> service.departments(null, page, size, User.Role.ADMIN));
         verifyNoInteractions(analytics, departments);
     }
 
     @ParameterizedTest @ValueSource(strings = {"USER", "STAFF"})
     void nonAdminCannotCallAnyOperationalAnalyticsService(String name) {
-        Role role = Role.valueOf(name);
+        User.Role role = User.Role.valueOf(name);
         assertThrows(ForbiddenException.class, () -> service.rooms(null, role));
         assertThrows(ForbiddenException.class, () -> service.tasks(null, role));
         assertThrows(ForbiddenException.class, () -> service.departments(null, 0, 20, role));
@@ -258,7 +265,7 @@ class AnalyticsServiceTest {
         Clock changingClock = mock(Clock.class);
         when(changingClock.instant()).thenReturn(NOW, NOW.plusSeconds(3600));
         service = new AnalyticsService(analytics, employees, departments, changingClock);
-        var response = service.tasks(null, Role.ADMIN);
+        var response = service.tasks(null, User.Role.ADMIN);
         assertEquals(OffsetDateTime.ofInstant(NOW, ZoneId.systemDefault()), response.getAsOf());
         verify(changingClock, times(1)).instant(); verify(analytics).overdueTaskCount(null, null, LOCAL_NOW);
         assertTrue(AnalyticsService.class.getAnnotation(Transactional.class).readOnly());

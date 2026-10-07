@@ -1,10 +1,10 @@
 package com.rockey.hospitality.repository;
 
 import com.rockey.hospitality.entity.Employee;
-import com.rockey.hospitality.entity.EmployeeStatus;
-import com.rockey.hospitality.entity.Role;
-import com.rockey.hospitality.entity.UserStatus;
+import com.rockey.hospitality.entity.User;
 import jakarta.persistence.LockModeType;
+import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -12,66 +12,61 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.Optional;
-import java.util.List;
-
 /**
- * Spring Data JPA supplies standard persistence operations for Employee entities through JpaRepository.
- * Domain services use the methods below for filtered reads, eligibility checks, and locked writes where declared.
+ * STUDY NOTE: A Repository is the data-access layer a Service uses to reach database data.
+ * JpaRepository lets Spring Data supply standard create/read/update/delete methods without writing basic
+ * SQL.
+ * Employee and operational services use profile/Department lookups, eligibility checks and recipient
+ * queries.
+ * Spring creates this interface's implementation and sends its queries through JPA/Hibernate to MySQL.
  */
 public interface EmployeeRepository extends JpaRepository<Employee, Long> {
+
+    // Repository study key: findBy/existsBy/countBy names are interpreted by Spring Data as queries.
+    // @Query supplies fixed JPQL (entity/field-based query text), not string-interpolated user input.
+    // @Param binds a Java argument to a named query value instead of inserting it into query text.
+    // @Lock(PESSIMISTIC_WRITE) keeps a database row locked until the caller's transaction ends to serialize
+    // conflicting changes.
 
     /**
      * Reads only the Employee's Department ID so deactivation can acquire Department before Employee locks.
      */
-    // Executes this fixed JPQL query; supplied filter values are bound parameters rather than query text.
     @Query("SELECT employee.department.id FROM Employee employee WHERE employee.id = :id")
     Optional<Long> findDepartmentIdById(
-            // Binds this argument as the named id query parameter, not interpolated query text.
             @Param("id") Long id);
 
     /**
      * Locks one Employee for profile changes, assignment eligibility, or alert reconciliation.
      */
-    // Acquires a PESSIMISTIC_WRITE database row lock until the caller's transaction ends.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    // Executes this fixed JPQL query; supplied filter values are bound parameters rather than query text.
     @Query("SELECT employee FROM Employee employee WHERE employee.id = :id")
     Optional<Employee> findByIdForUpdate(
-            // Binds this argument as the named id query parameter, not interpolated query text.
             @Param("id") Long id);
 
     /**
      * Finds active employees in an active named Department, matching its name without regard to case.
      */
-    // Executes this fixed JPQL query; supplied filter values are bound parameters rather than query text.
     @Query("""
             SELECT employee.id FROM Employee employee
             WHERE employee.status = :status AND employee.department.active = TRUE
               AND LOWER(employee.department.name) = LOWER(:name)
             """)
     List<Long> findActiveRecipientIdsByDepartment(
-            // Binds this argument as the named name query parameter, not interpolated query text.
             @Param("name") String name,
-                                                 // Binds this argument as the named status query parameter, not interpolated query text.
-                                                 @Param("status") EmployeeStatus status);
+                                                 @Param("status") Employee.Status status);
 
     /**
      * Finds active employees linked to active ADMIN Users in active Departments for inventory-alert fallback.
      */
-    // Executes this fixed JPQL query; supplied filter values are bound parameters rather than query text.
     @Query("""
             SELECT employee.id FROM Employee employee
             WHERE employee.status = :status AND employee.department.active = TRUE
               AND employee.user.role = :role AND employee.user.status = :userStatus
             """)
     List<Long> findActiveAdminRecipientIds(
-            // Binds this argument as the named status query parameter, not interpolated query text.
-            @Param("status") EmployeeStatus status,
-                                          // Binds this argument as the named role query parameter, not interpolated query text.
-                                          @Param("role") Role role,
-                                          // Binds this argument as the named userStatus query parameter, not interpolated query text.
-                                          @Param("userStatus") UserStatus userStatus);
+            @Param("status") Employee.Status status,
+                                          @Param("role") User.Role role,
+                                          @Param("userStatus") User.Status userStatus);
 
     /**
      * Pages Employee profiles belonging to one Department.
@@ -81,14 +76,14 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     /**
      * Pages Employee profiles with the requested lifecycle status.
      */
-    Page<Employee> findByStatus(EmployeeStatus status, Pageable pageable);
+    Page<Employee> findByStatus(Employee.Status status, Pageable pageable);
 
     /**
      * Pages Employee profiles satisfying both Department and lifecycle filters.
      */
     Page<Employee> findByDepartmentIdAndStatus(
             Long departmentId,
-            EmployeeStatus status,
+            Employee.Status status,
             Pageable pageable
     );
 
@@ -105,7 +100,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     /**
      * Checks for Employees of the requested status before Department deactivation.
      */
-    boolean existsByDepartmentIdAndStatus(Long departmentId, EmployeeStatus status);
+    boolean existsByDepartmentIdAndStatus(Long departmentId, Employee.Status status);
 
     /**
      * Finds the optional unique profile linked to an authenticated User.

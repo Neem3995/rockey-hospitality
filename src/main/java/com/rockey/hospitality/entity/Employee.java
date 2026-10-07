@@ -19,14 +19,15 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
-
 import java.time.LocalDateTime;
 
 /**
- * Persists an employee's work profile in a required Department with an optional unique User login link.
- * Services keep a linked User's Department and status consistent.
+ * STUDY NOTE: An Entity is a Java class JPA/Hibernate maps to stored database rows.
+ * Here, @Entity marks this persistent class, while @Table selects the employees MySQL table.
+ * Employee links a worker to a required Department and an optional unique User login; EmployeeService keeps
+ * linked records consistent.
+ * schema.sql creates the tables; Hibernate validates their shape instead of creating them.
  */
-// Marks a JPA-mapped database entity; the configured application validates the supplied schema instead of creating it.
 @Entity
 // Maps to the existing employees table; @UniqueConstraint describes unique keys. These mappings do not create the application schema.
 @Table(
@@ -38,21 +39,35 @@ import java.time.LocalDateTime;
 )
 public class Employee {
 
+    // Persistence study key:
+    // @JoinColumn names a foreign-key column linking this row to another table's primary key.
+    // @Id marks the primary key; @GeneratedValue(IDENTITY) lets MySQL generate it on insertion.
+    // @Column maps a Java field to a SQL column; nullable/length settings describe the supplied schema.
+    // @Enumerated(STRING) stores enum names such as ACTIVE, not positions such as 0 or 1.
+    // @PrePersist runs before the first insert; the callback supplies lifecycle defaults and timestamps.
+    // @PreUpdate runs before an entity update; the callback refreshes its update timestamp.
+    // @UniqueConstraint describes a unique key so duplicate field values or join pairs cannot be stored.
+    // Time study key: callbacks use server-local LocalDateTime; Hibernate's JDBC time-zone setting is UTC.
+    // MySQL DATETIME has no zone label; do not silently treat every operational API LocalDateTime as UTC.
+    // Validation study key (the numbers/patterns are specified on each annotated field):
+    // @NotBlank requires non-null text containing at least one non-whitespace character.
+    // @Size checks length/count against the declared min/max (text length for the fields here).
+    // @Email checks email format; required text needs @NotBlank separately.
+    // @Positive checks that a supplied number is greater than zero.
+    // Most shape/range validators accept null; @NotNull or @NotBlank supplies required-value checks.
+
     /**
      * Database identifier used to refer to this resource in requests and relationships.
      */
-    // Identifies the entity's primary-key field.
     @Id
-    // Uses the database IDENTITY mechanism to generate the primary key.
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    // Requires a supplied number to be greater than zero; null is handled separately.
     @Positive
     private Long id;
 
     /**
      * Optional unique login link; a profile without a User has no application login access.
      */
-    // Optional one-to-one login relationship; LAZY avoids loading account details until needed, and the join column is unique when present.
+    // @OneToOne permits at most one User per Employee; the unique join permits at most one Employee per User.
     @OneToOne(fetch = FetchType.LAZY, optional = true)
     // Employment may exist without login; a non-null User link is unique across profiles.
     // Stores this relationship's foreign key in user_id, which may be null; non-null links must be unique.
@@ -62,9 +77,7 @@ public class Employee {
     /**
      * Stored display name for this record; it grants no permissions.
      */
-    // Requires non-null text containing at least one non-whitespace character.
     @NotBlank
-    // Checks supplied text length from 2 to 100 characters; required text is checked separately.
     @Size(min = 2, max = 100)
     // Maps this field to its matching SQL column (non-null, length 100) in the supplied schema.
     @Column(nullable = false, length = 100)
@@ -73,11 +86,8 @@ public class Employee {
     /**
      * Profile or account email; service-level normalization and uniqueness checks depend on the owning resource.
      */
-    // Requires non-null text containing at least one non-whitespace character.
     @NotBlank
-    // Checks email format when a value is present; required text is enforced separately.
     @Email
-    // Checks supplied text length up to 120 characters; required text is checked separately.
     @Size(max = 120)
     // Maps this field to its matching SQL column (non-null, length 120) in the supplied schema.
     @Column(nullable = false, length = 120)
@@ -86,7 +96,7 @@ public class Employee {
     /**
      * Required work Department shared by many employees; it is not itself a security role.
      */
-    // Many rows can reference the same related entity; LAZY loads the relationship when it is needed within the service transaction.
+    // @ManyToOne lets many Employee rows reference the same Department; LAZY defers loading it until needed.
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     // Stores this relationship's foreign key in department_id, which must be present.
     @JoinColumn(name = "department_id", nullable = false)
@@ -95,9 +105,7 @@ public class Employee {
     /**
      * Descriptive Employee job title, not a USER/STAFF/ADMIN permission.
      */
-    // Requires non-null text containing at least one non-whitespace character.
     @NotBlank
-    // Checks supplied text length from 2 to 80 characters; required text is checked separately.
     @Size(min = 2, max = 80)
     // Maps this field to job_role SQL column (non-null, length 80) in the supplied schema.
     @Column(name = "job_role", nullable = false, length = 80)
@@ -106,11 +114,10 @@ public class Employee {
     /**
      * Lifecycle enum value interpreted by this resource's service and transition rules.
      */
-    // Stores the enum's name as text, not its numeric ordinal.
     @Enumerated(EnumType.STRING)
     // Maps this field to its matching SQL column (non-null, length 20) in the supplied schema.
     @Column(nullable = false, length = 20)
-    private EmployeeStatus status = EmployeeStatus.ACTIVE;
+    private Employee.Status status = Employee.Status.ACTIVE;
 
     /**
      * Server-local creation timestamp retained for history.
@@ -152,12 +159,11 @@ public class Employee {
     /**
      * Defaults a missing status to ACTIVE and initializes creation/update timestamps from server-local time.
      */
-    // Runs this lifecycle callback before the entity's first insert.
     @PrePersist
     void prepareForInsert() {
         LocalDateTime now = LocalDateTime.now();
         if (status == null) {
-            status = EmployeeStatus.ACTIVE;
+            status = Employee.Status.ACTIVE;
         }
         createdAt = now;
         updatedAt = now;
@@ -166,7 +172,6 @@ public class Employee {
     /**
      * Refreshes updatedAt using server-local time before Hibernate writes an entity update.
      */
-    // Runs this lifecycle callback before a changed entity is written.
     @PreUpdate
     void prepareForUpdate() {
         updatedAt = LocalDateTime.now();
@@ -181,7 +186,7 @@ public class Employee {
             String email,
             Department department,
             String jobRole,
-            EmployeeStatus status
+            Employee.Status status
     ) {
         this.name = name;
         this.email = email;
@@ -194,7 +199,7 @@ public class Employee {
      * Sets the profile INACTIVE without removing its User link or work history.
      */
     public void deactivate() {
-        status = EmployeeStatus.INACTIVE;
+        status = Employee.Status.INACTIVE;
     }
 
     public Long getId() {
@@ -221,7 +226,7 @@ public class Employee {
         return jobRole;
     }
 
-    public EmployeeStatus getStatus() {
+    public Employee.Status getStatus() {
         return status;
     }
 
@@ -231,5 +236,22 @@ public class Employee {
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+
+    /**
+     * Employee.Status is an enum: a Java type limited to a fixed set of valid choices.
+     * Controls whether an employee profile is ACTIVE or INACTIVE.
+     * Linked User eligibility is synchronized by EmployeeService.
+     */
+    public enum Status {
+        /**
+         * Eligible active work profile.
+         */
+        ACTIVE,
+        /**
+         * Retained profile disabled for new operational assignments.
+         */
+        INACTIVE
     }
 }

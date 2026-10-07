@@ -1,6 +1,17 @@
 package com.rockey.hospitality.exception;
 
+import com.rockey.hospitality.dto.CommonDtos.ApiError;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.InvalidCredentialsException;
+import com.rockey.hospitality.exception.ApiException.InvalidRefreshTokenException;
+import com.rockey.hospitality.exception.ApiException.RateLimitExceededException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -13,17 +24,24 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
-import java.util.Map;
-
 /**
- * Translates controller/service exceptions into canonical HTTP statuses and ApiError responses.
- * Unexpected and persistence failures use safe generic messages.
+ * STUDY NOTE: A global exception handler converts controller/service failures into consistent HTTP error
+ * responses.
+ * Here, @RestControllerAdvice applies these mappings across REST controllers; @ExceptionHandler selects a method
+ * for listed failure types.
+ * CommonDtos.ApiError carries safe status, message, path and optional field errors rather than a stack
+ * trace.
+ * Unexpected and persistence failures receive generic messages so private implementation details stay out
+ * of the response.
  */
 // Applies these exception mappings across REST controllers.
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    // HTTP study key: 400 bad request; 401 missing/invalid authentication; 403 forbidden for this
+    // authenticated caller.
+    // 404 resource not found; 409 business/data conflict; 429 too many attempts.
+    // Unexpected errors use a safe 500 response; raw internal messages are not sent to clients.
 
     /**
      * Class logger used for safe diagnostics without credential or token values.
@@ -33,7 +51,6 @@ public class GlobalExceptionHandler {
     /**
      * Maps a missing resource or registration to a safe 404 response.
      */
-    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(
             ResourceNotFoundException exception,
@@ -45,7 +62,6 @@ public class GlobalExceptionHandler {
     /**
      * Maps uniqueness or lifecycle conflicts to a safe 409 response.
      */
-    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ApiError> handleConflict(
             ConflictException exception,
@@ -57,7 +73,6 @@ public class GlobalExceptionHandler {
     /**
      * Maps service input validation failures to a 400 response.
      */
-    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ApiError> handleBadRequest(
             BadRequestException exception,
@@ -69,7 +84,6 @@ public class GlobalExceptionHandler {
     /**
      * Maps role, ownership, or eligibility failures to a 403 response.
      */
-    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<ApiError> handleForbidden(
             ForbiddenException exception,
@@ -81,7 +95,6 @@ public class GlobalExceptionHandler {
     /**
      * Maps invalid credentials and refresh sessions to generic 401 responses.
      */
-    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler({
             InvalidCredentialsException.class,
             InvalidRefreshTokenException.class
@@ -96,7 +109,6 @@ public class GlobalExceptionHandler {
     /**
      * Maps exhausted authentication-attempt windows to a 429 response.
      */
-    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<ApiError> handleRateLimit(
             RateLimitExceededException exception,
@@ -108,7 +120,6 @@ public class GlobalExceptionHandler {
     /**
      * Collects the first validation message per field and returns a 400 error with fieldErrors.
      */
-    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiError> handleValidation(
             MethodArgumentNotValidException exception,
@@ -130,7 +141,6 @@ public class GlobalExceptionHandler {
     /**
      * Returns 400 for unreadable JSON or mismatched request types without exposing parsing internals.
      */
-    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler({
             HttpMessageNotReadableException.class,
             MethodArgumentTypeMismatchException.class
@@ -145,7 +155,6 @@ public class GlobalExceptionHandler {
     /**
      * Returns a generic 409 for persistence integrity conflicts and logs only the request path, not SQL or private values.
      */
-    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiError> handleDataConflict(
             DataIntegrityViolationException exception,
@@ -163,7 +172,6 @@ public class GlobalExceptionHandler {
     /**
      * Returns a generic 500 and logs only exception type and request path, keeping internal details out of the response.
      */
-    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnexpected(
             Exception exception,

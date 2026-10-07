@@ -6,10 +6,12 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Triggers alert reconciliation on Spring's fixed-delay schedule.
- * It logs only the failure type and permits a later scan after a failed transaction.
+ * STUDY NOTE: A scheduler triggers work automatically rather than waiting for an HTTP request.
+ * Here, @Component lets Spring manage this class, and @Scheduled requests a fixed delay after each scan finishes.
+ * ApplicationConfiguration enables scheduling; this class delegates database work to
+ * AlertAutomationService.
+ * Failed scans log only the failure type and leave the next scheduled attempt available.
  */
-// Registers this class as a Spring-managed component discovered during startup.
 @Component
 public class AlertScheduler {
 

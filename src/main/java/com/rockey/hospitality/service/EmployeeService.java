@@ -1,42 +1,49 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.dto.auth.DepartmentSummary;
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.employee.CreateEmployeeRequest;
-import com.rockey.hospitality.dto.employee.EmployeeResponse;
-import com.rockey.hospitality.dto.employee.UpdateEmployeeRequest;
+import com.rockey.hospitality.dto.AuthDtos.DepartmentSummary;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.EmployeeDtos.CreateEmployeeRequest;
+import com.rockey.hospitality.dto.EmployeeDtos.EmployeeResponse;
+import com.rockey.hospitality.dto.EmployeeDtos.UpdateEmployeeRequest;
 import com.rockey.hospitality.entity.Department;
 import com.rockey.hospitality.entity.Employee;
-import com.rockey.hospitality.entity.EmployeeStatus;
-import com.rockey.hospitality.entity.Role;
 import com.rockey.hospitality.entity.User;
-import com.rockey.hospitality.entity.UserStatus;
-import com.rockey.hospitality.exception.BadRequestException;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ForbiddenException;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.repository.DepartmentRepository;
 import com.rockey.hospitality.repository.EmployeeRepository;
-import com.rockey.hospitality.repository.UserRepository;
 import com.rockey.hospitality.repository.TaskRepository;
+import com.rockey.hospitality.repository.UserRepository;
+import java.util.Locale;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Isolation;
-
-import java.util.Locale;
-import java.util.Set;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Manages employee profiles and optional internal login provisioning.
- * Profile and linked User changes share a transaction so department and account status stay consistent.
+ * STUDY NOTE: A Service holds business rules and coordinates an application workflow.
+ * Here, @Service lets Spring manage and inject this component; @Transactional groups database work so unchecked
+ * failures roll back writes.
+ * EmployeeService validates profiles, provisions optional STAFF/ADMIN logins, synchronizes linked records
+ * and guards deactivation.
+ * EmployeeController delegates here; Employee, User, Department and Task repositories provide the persisted
+ * data through JPA/Hibernate.
  */
-// Registers this business/security service for constructor injection.
 @Service
 public class EmployeeService {
+
+    // Transaction study key: Spring applies @Transactional when another component calls this managed service.
+    // readOnly=true requests a read-oriented transaction; it keeps lazy reads and DTO mapping inside the
+    // persistence boundary.
+    // readOnly is not an authorization rule; repositories still run only after the service's scope checks.
+    // Employee and optional User changes must commit together so a failure cannot leave half-provisioned or
+    // inconsistent records.
     /**
      * Shared prefix keeping profile lookup errors consistent.
      */
@@ -98,11 +105,10 @@ public class EmployeeService {
     /**
      * Chooses the repository query matching optional Department and status filters, then returns a validated page of safe profile DTOs.
      */
-    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public PagedResponse<EmployeeResponse> listEmployees(
             Long departmentId,
-            EmployeeStatus status,
+            Employee.Status status,
             int page,
             int size,
             String sort
@@ -140,7 +146,6 @@ public class EmployeeService {
      * Creates an active profile in a locked active Department and optionally provisions one new STAFF/ADMIN User with a BCrypt hash.
      * Without login provisioning the User link remains null.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public EmployeeResponse createEmployee(CreateEmployeeRequest request) {
         // One transaction creates the optional login and profile together, never half an account.
@@ -176,17 +181,16 @@ public class EmployeeService {
      * Returns the requested profile to ADMIN or to the linked STAFF account itself.
      * An unrelated account cannot read the record.
      */
-    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public EmployeeResponse getEmployee(
             Long employeeId,
             Long requesterUserId,
-            Role requesterRole
+            User.Role requesterRole
     ) {
         Employee employee = findEmployee(employeeId);
-        if (requesterRole != Role.ADMIN) {
+        if (requesterRole != User.Role.ADMIN) {
             User linkedUser = employee.getUser();
-            if (requesterRole != Role.STAFF
+            if (requesterRole != User.Role.STAFF
                     || linkedUser == null
                     || !linkedUser.getId().equals(requesterUserId)) {
                 throw new ForbiddenException("Employee record access is forbidden.");
@@ -199,7 +203,6 @@ public class EmployeeService {
      * Locks Department then Employee, validates reassignment and deactivation, and updates the profile.
      * Linked User Department and status are synchronized in the same transaction.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public EmployeeResponse updateEmployee(
             Long employeeId,
@@ -209,11 +212,11 @@ public class EmployeeService {
         // Match Task creation's Department -> Employee lock order before changing linked records.
         Employee employee = findEmployeeForUpdate(employeeId);
         boolean departmentChanged = !employee.getDepartment().getId().equals(department.getId());
-        if ((departmentChanged || request.getStatus() == EmployeeStatus.ACTIVE)
+        if ((departmentChanged || request.getStatus() == Employee.Status.ACTIVE)
                 && !Boolean.TRUE.equals(department.getActive())) {
             throw new ConflictException("Employees cannot be assigned to an inactive department.");
         }
-        if (request.getStatus() == EmployeeStatus.INACTIVE) {
+        if (request.getStatus() == Employee.Status.INACTIVE) {
             ensureNoActiveTasks(employeeId);
         }
 
@@ -240,7 +243,7 @@ public class EmployeeService {
      * Locks Department then Employee and rejects concurrent Department changes or active Task assignments.
      * Soft deactivation also disables a linked User and clears its refresh session.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes. READ_COMMITTED lets checks after a lock observe preceding committed changes.
+    // READ_COMMITTED lets post-lock checks observe preceding committed changes.
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deactivateEmployee(Long employeeId) {
         // Match Task's Department -> Employee lock order; avoid a foreign-key
@@ -256,7 +259,7 @@ public class EmployeeService {
         }
         ensureNoActiveTasks(employeeId);
         employee.deactivate();
-        synchronizeLinkedUser(employee, employee.getDepartment(), EmployeeStatus.INACTIVE);
+        synchronizeLinkedUser(employee, employee.getDepartment(), Employee.Status.INACTIVE);
         employeeRepository.save(employee);
     }
 
@@ -281,7 +284,7 @@ public class EmployeeService {
     private void synchronizeLinkedUser(
             Employee employee,
             Department department,
-            EmployeeStatus employeeStatus
+            Employee.Status employeeStatus
     ) {
         User user = employee.getUser();
         if (user == null) {
@@ -289,9 +292,9 @@ public class EmployeeService {
         }
         user.synchronizeEmployeeDepartment(department);
         user.synchronizeEmployeeStatus(
-                employeeStatus == EmployeeStatus.ACTIVE
-                        ? UserStatus.ACTIVE
-                        : UserStatus.INACTIVE
+                employeeStatus == Employee.Status.ACTIVE
+                        ? User.Status.ACTIVE
+                        : User.Status.INACTIVE
         );
         userRepository.save(user);
     }
@@ -379,8 +382,8 @@ public class EmployeeService {
         }
         if (!hasLoginEmail
                 || !hasTemporaryPassword
-                || (request.getSecurityRole() != Role.STAFF
-                && request.getSecurityRole() != Role.ADMIN)) {
+                || (request.getSecurityRole() != User.Role.STAFF
+                && request.getSecurityRole() != User.Role.ADMIN)) {
             throw new BadRequestException(
                     "A STAFF or ADMIN login email and temporary password are required."
             );

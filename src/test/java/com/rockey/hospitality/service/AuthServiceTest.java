@@ -1,20 +1,20 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.entity.Role;
 import com.rockey.hospitality.entity.Department;
 import com.rockey.hospitality.entity.Employee;
 import com.rockey.hospitality.entity.User;
-import com.rockey.hospitality.entity.UserStatus;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.InvalidCredentialsException;
-import com.rockey.hospitality.exception.InvalidRefreshTokenException;
-import com.rockey.hospitality.repository.UserRepository;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.InvalidCredentialsException;
+import com.rockey.hospitality.exception.ApiException.InvalidRefreshTokenException;
 import com.rockey.hospitality.repository.EmployeeRepository;
+import com.rockey.hospitality.repository.UserRepository;
 import com.rockey.hospitality.security.AuthenticationRateLimiter;
-import com.rockey.hospitality.security.IssuedAccessToken;
-import com.rockey.hospitality.security.IssuedRefreshToken;
 import com.rockey.hospitality.security.JwtService;
 import com.rockey.hospitality.security.RefreshTokenService;
+import com.rockey.hospitality.service.AuthService;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,11 +23,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
-
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -88,7 +83,7 @@ class AuthServiceTest {
         });
         prepareSuccessfulSession();
 
-        AuthSession session = authService.register(
+        AuthService.AuthSession session = authService.register(
                 "  Guest User  ",
                 " GUEST@Example.Test ",
                 "valid-password",
@@ -101,10 +96,10 @@ class AuthServiceTest {
         assertThat(saved.getName()).isEqualTo("Guest User");
         assertThat(saved.getEmail()).isEqualTo("guest@example.test");
         assertThat(saved.getPasswordHash()).isEqualTo("bcrypt-hash");
-        assertThat(saved.getRole()).isEqualTo(Role.USER);
+        assertThat(saved.getRole()).isEqualTo(User.Role.USER);
         assertThat(saved.getDepartment()).isNull();
         assertThat(session.getRawRefreshToken()).isEqualTo("raw-refresh-token");
-        assertThat(session.getResponse().getUser().getRole()).isEqualTo(Role.USER);
+        assertThat(session.getResponse().getUser().getRole()).isEqualTo(User.Role.USER);
     }
 
     @Test
@@ -125,7 +120,7 @@ class AuthServiceTest {
 
     @Test
     void loginCreatesSessionAndResetsFailedAttempts() {
-        User user = user(4L, UserStatus.ACTIVE);
+        User user = user(4L, User.Status.ACTIVE);
         ReflectionTestUtils.setField(user, "refreshTokenHash", "previous-session-hash");
         when(userRepository.findByEmailIgnoreCase("staff@example.test"))
                 .thenReturn(Optional.of(user));
@@ -133,7 +128,7 @@ class AuthServiceTest {
         when(userRepository.save(user)).thenReturn(user);
         prepareSuccessfulSession();
 
-        AuthSession session = authService.login(
+        AuthService.AuthSession session = authService.login(
                 " STAFF@example.test ",
                 "correct-password",
                 "127.0.0.1"
@@ -147,7 +142,7 @@ class AuthServiceTest {
 
     @Test
     void loginRejectsWrongPasswordWithoutRevealingReason() {
-        User user = user(4L, UserStatus.ACTIVE);
+        User user = user(4L, User.Status.ACTIVE);
         when(userRepository.findByEmailIgnoreCase("staff@example.test"))
                 .thenReturn(Optional.of(user));
         when(passwordEncoder.matches("wrong-password", "bcrypt-hash")).thenReturn(false);
@@ -179,7 +174,7 @@ class AuthServiceTest {
 
     @Test
     void loginRejectsInactiveAccountWithSameSafeMessage() {
-        User user = user(4L, UserStatus.INACTIVE);
+        User user = user(4L, User.Status.INACTIVE);
         when(userRepository.findByEmailIgnoreCase("staff@example.test"))
                 .thenReturn(Optional.of(user));
 
@@ -195,7 +190,7 @@ class AuthServiceTest {
 
     @Test
     void refreshRotatesStoredTokenAndIssuesNewAccessToken() {
-        User user = user(4L, UserStatus.ACTIVE);
+        User user = user(4L, User.Status.ACTIVE);
         ReflectionTestUtils.setField(user, "refreshTokenHash", "old-hash");
         ReflectionTestUtils.setField(
                 user,
@@ -214,7 +209,7 @@ class AuthServiceTest {
         when(userRepository.save(user)).thenReturn(user);
         prepareSuccessfulSession();
 
-        AuthSession session = authService.refresh("old-raw-token", "127.0.0.1");
+        AuthService.AuthSession session = authService.refresh("old-raw-token", "127.0.0.1");
 
         assertThat(user.getRefreshTokenHash()).isEqualTo("refresh-hash");
         assertThat(session.getRawRefreshToken()).isEqualTo("raw-refresh-token");
@@ -226,7 +221,7 @@ class AuthServiceTest {
 
     @Test
     void refreshRejectsExpiredSession() {
-        User user = user(4L, UserStatus.ACTIVE);
+        User user = user(4L, User.Status.ACTIVE);
         ReflectionTestUtils.setField(
                 user,
                 "refreshTokenExpiresAt",
@@ -257,20 +252,20 @@ class AuthServiceTest {
 
     @Test
     void currentUserResponseContainsNoCredentialOrTokenFields() {
-        User user = user(4L, UserStatus.ACTIVE);
+        User user = user(4L, User.Status.ACTIVE);
         when(userRepository.findById(4L)).thenReturn(Optional.of(user));
 
         var response = authService.getCurrentUser(4L);
 
         assertThat(response.getEmail()).isEqualTo("staff@example.test");
-        assertThat(response.getRole()).isEqualTo(Role.STAFF);
+        assertThat(response.getRole()).isEqualTo(User.Role.STAFF);
         assertThat(response.getDepartmentSummary()).isNull();
         assertThat(response.getEmployeeId()).isNull();
     }
 
     @Test
     void currentUserResponseIncludesLinkedEmployeeIdentity() {
-        User user = user(4L, UserStatus.ACTIVE);
+        User user = user(4L, User.Status.ACTIVE);
         Department department = new Department("Housekeeping", null);
         ReflectionTestUtils.setField(department, "id", 3L);
         user.synchronizeEmployeeDepartment(department);
@@ -293,7 +288,7 @@ class AuthServiceTest {
 
     @Test
     void logoutClearsRefreshStateAndRevokesPreviouslyIssuedToken() {
-        User user = user(4L, UserStatus.ACTIVE);
+        User user = user(4L, User.Status.ACTIVE);
         ReflectionTestUtils.setField(user, "refreshTokenHash", "old-hash");
         ReflectionTestUtils.setField(
                 user,
@@ -320,7 +315,7 @@ class AuthServiceTest {
 
     @Test
     void logoutIsSafeWhenRefreshStateIsAlreadyEmpty() {
-        User user = user(4L, UserStatus.ACTIVE);
+        User user = user(4L, User.Status.ACTIVE);
         when(userRepository.findById(4L)).thenReturn(Optional.of(user));
         when(userRepository.save(user)).thenReturn(user);
 
@@ -332,20 +327,20 @@ class AuthServiceTest {
     }
 
     private void prepareSuccessfulSession() {
-        when(refreshTokenService.issueRefreshToken()).thenReturn(new IssuedRefreshToken(
+        when(refreshTokenService.issueRefreshToken()).thenReturn(new RefreshTokenService.IssuedRefreshToken(
                 "raw-refresh-token",
                 "refresh-hash",
                 REFRESH_EXPIRY,
                 DATABASE_REFRESH_EXPIRY
         ));
         when(jwtService.issueAccessToken(any(User.class)))
-                .thenReturn(new IssuedAccessToken("access-token", ACCESS_EXPIRY));
+                .thenReturn(new JwtService.IssuedAccessToken("access-token", ACCESS_EXPIRY));
     }
 
-    private User user(Long id, UserStatus status) {
+    private User user(Long id, User.Status status) {
         User user = new User("Staff User", "staff@example.test", "bcrypt-hash");
         ReflectionTestUtils.setField(user, "id", id);
-        ReflectionTestUtils.setField(user, "role", Role.STAFF);
+        ReflectionTestUtils.setField(user, "role", User.Role.STAFF);
         ReflectionTestUtils.setField(user, "status", status);
         return user;
     }

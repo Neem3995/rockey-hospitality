@@ -1,41 +1,47 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.common.PageCriteria;
-import com.rockey.hospitality.dto.room.RoomSearchCriteria;
-import com.rockey.hospitality.dto.room.CreateRoomRequest;
-import com.rockey.hospitality.dto.room.RoomResponse;
-import com.rockey.hospitality.dto.room.UpdateRoomRequest;
+import com.rockey.hospitality.dto.CommonDtos.PageCriteria;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.RoomDtos.CreateRoomRequest;
+import com.rockey.hospitality.dto.RoomDtos.RoomResponse;
+import com.rockey.hospitality.dto.RoomDtos.RoomSearchCriteria;
+import com.rockey.hospitality.dto.RoomDtos.UpdateRoomRequest;
 import com.rockey.hospitality.entity.Employee;
-import com.rockey.hospitality.entity.EmployeeStatus;
-import com.rockey.hospitality.entity.Role;
 import com.rockey.hospitality.entity.Room;
-import com.rockey.hospitality.entity.RoomStatus;
-import com.rockey.hospitality.exception.BadRequestException;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ForbiddenException;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
+import com.rockey.hospitality.entity.User;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.repository.EmployeeRepository;
 import com.rockey.hospitality.repository.RoomRepository;
 import com.rockey.hospitality.repository.TaskRepository;
+import java.time.LocalDateTime;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-
 /**
- * Manages Room details, soft lifecycle, and permitted turnover transitions.
- * Service checks enforce STAFF eligibility and prevent deactivation while active Tasks reference the Room.
+ * STUDY NOTE: A Service holds business rules and coordinates an application workflow.
+ * Here, @Service lets Spring manage and inject this component; @Transactional groups database work so unchecked
+ * failures roll back writes.
+ * RoomService enforces turnover transitions, operational eligibility and active-work guards while
+ * preserving Room history.
+ * RoomController delegates here; Room, Employee and Task repositories provide the persisted data through
+ * JPA/Hibernate.
  */
-// Registers this business/security service for constructor injection.
 @Service
 public class RoomService {
+
+    // Transaction study key: Spring applies @Transactional when another component calls this managed service.
+    // readOnly=true requests a read-oriented transaction; it keeps lazy reads and DTO mapping inside the
+    // persistence boundary.
+    // readOnly is not an authorization rule; repositories still run only after the service's scope checks.
 
     /**
      * Maximum of 100 rows per requested page, shared by this service's pagination checks.
@@ -56,43 +62,43 @@ public class RoomService {
     /**
      * Explicit allowed next-status map used to reject skipped or terminal lifecycle changes.
      */
-    private static final Map<RoomStatus, Set<RoomStatus>> ALLOWED_TRANSITIONS = Map.of(
-            RoomStatus.READY,
+    private static final Map<Room.Status, Set<Room.Status>> ALLOWED_TRANSITIONS = Map.of(
+            Room.Status.READY,
             Set.of(
-                    RoomStatus.OCCUPIED,
-                    RoomStatus.DIRTY,
-                    RoomStatus.MAINTENANCE,
-                    RoomStatus.OUT_OF_SERVICE
+                    Room.Status.OCCUPIED,
+                    Room.Status.DIRTY,
+                    Room.Status.MAINTENANCE,
+                    Room.Status.OUT_OF_SERVICE
             ),
-            RoomStatus.OCCUPIED,
+            Room.Status.OCCUPIED,
             Set.of(
-                    RoomStatus.DIRTY,
-                    RoomStatus.MAINTENANCE,
-                    RoomStatus.OUT_OF_SERVICE
+                    Room.Status.DIRTY,
+                    Room.Status.MAINTENANCE,
+                    Room.Status.OUT_OF_SERVICE
             ),
-            RoomStatus.DIRTY,
+            Room.Status.DIRTY,
             Set.of(
-                    RoomStatus.CLEANING,
-                    RoomStatus.MAINTENANCE,
-                    RoomStatus.OUT_OF_SERVICE
+                    Room.Status.CLEANING,
+                    Room.Status.MAINTENANCE,
+                    Room.Status.OUT_OF_SERVICE
             ),
-            RoomStatus.CLEANING,
+            Room.Status.CLEANING,
             Set.of(
-                    RoomStatus.INSPECTION,
-                    RoomStatus.MAINTENANCE,
-                    RoomStatus.OUT_OF_SERVICE
+                    Room.Status.INSPECTION,
+                    Room.Status.MAINTENANCE,
+                    Room.Status.OUT_OF_SERVICE
             ),
-            RoomStatus.INSPECTION,
+            Room.Status.INSPECTION,
             Set.of(
-                    RoomStatus.READY,
-                    RoomStatus.CLEANING,
-                    RoomStatus.MAINTENANCE,
-                    RoomStatus.OUT_OF_SERVICE
+                    Room.Status.READY,
+                    Room.Status.CLEANING,
+                    Room.Status.MAINTENANCE,
+                    Room.Status.OUT_OF_SERVICE
             ),
-            RoomStatus.MAINTENANCE,
-            Set.of(RoomStatus.INSPECTION, RoomStatus.OUT_OF_SERVICE),
-            RoomStatus.OUT_OF_SERVICE,
-            Set.of(RoomStatus.MAINTENANCE, RoomStatus.INSPECTION)
+            Room.Status.MAINTENANCE,
+            Set.of(Room.Status.INSPECTION, Room.Status.OUT_OF_SERVICE),
+            Room.Status.OUT_OF_SERVICE,
+            Set.of(Room.Status.MAINTENANCE, Room.Status.INSPECTION)
     );
 
     /**
@@ -125,10 +131,9 @@ public class RoomService {
      * Validates filters and pages Room DTOs.
      * STAFF is forced to active Rooms and cannot request inactive history.
      */
-    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
-    public PagedResponse<RoomResponse> listRooms(RoomSearchCriteria criteria, PageCriteria pagination, Role requesterRole) {
-        RoomStatus status = criteria.status();
+    public PagedResponse<RoomResponse> listRooms(RoomSearchCriteria criteria, PageCriteria pagination, User.Role requesterRole) {
+        Room.Status status = criteria.status();
         Integer floor = criteria.floor();
         String roomType = criteria.roomType();
         Boolean active = criteria.active();
@@ -138,7 +143,7 @@ public class RoomService {
         }
         String normalizedType = normalizeOptionalRoomType(roomType);
         Boolean effectiveActive = active;
-        if (requesterRole == Role.STAFF) {
+        if (requesterRole == User.Role.STAFF) {
             if (Boolean.FALSE.equals(active)) {
                 throw new ForbiddenException("STAFF may view only active rooms.");
             }
@@ -165,7 +170,6 @@ public class RoomService {
     /**
      * Checks readiness time and normalized Room-number uniqueness before saving Room details with its initial lifecycle status.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public RoomResponse createRoom(CreateRoomRequest request) {
         validateNextArrival(request.getNextArrivalAt());
@@ -187,12 +191,11 @@ public class RoomService {
     /**
      * Returns one Room DTO to STAFF or ADMIN, blocking STAFF access to inactive Rooms.
      */
-    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
-    public RoomResponse getRoom(Long roomId, Role requesterRole) {
+    public RoomResponse getRoom(Long roomId, User.Role requesterRole) {
         ensureRoomViewer(requesterRole);
         Room room = findRoom(roomId);
-        if (requesterRole == Role.STAFF && !Boolean.TRUE.equals(room.getActive())) {
+        if (requesterRole == User.Role.STAFF && !Boolean.TRUE.equals(room.getActive())) {
             throw new ForbiddenException("STAFF may view only active rooms.");
         }
         return toResponse(room);
@@ -202,7 +205,6 @@ public class RoomService {
      * Locks the Room, checks its arrival time, and blocks deactivation if non-terminal Tasks reference it.
      * Status transitions use their separate operation.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public RoomResponse updateRoom(Long roomId, UpdateRoomRequest request) {
         validateNextArrival(request.getNextArrivalAt());
@@ -222,7 +224,6 @@ public class RoomService {
     /**
      * Locks the Room and checks active work before setting active=false, preserving the row and references.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public void deactivateRoom(Long roomId) {
         Room room = findRoomForUpdate(roomId);
@@ -249,22 +250,21 @@ public class RoomService {
      * Requires an active Room and an allowed turnover transition.
      * STAFF also needs an active Employee in an active Department.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public RoomResponse updateStatus(
             Long roomId,
-            RoomStatus requestedStatus,
+            Room.Status requestedStatus,
             Long requesterUserId,
-            Role requesterRole
+            User.Role requesterRole
     ) {
-        if (requesterRole != Role.STAFF && requesterRole != Role.ADMIN) {
+        if (requesterRole != User.Role.STAFF && requesterRole != User.Role.ADMIN) {
             throw new ForbiddenException("Room status access is forbidden.");
         }
         Room room = findRoom(roomId);
         if (!Boolean.TRUE.equals(room.getActive())) {
             throw new ConflictException("Inactive rooms cannot change status.");
         }
-        if (requesterRole == Role.STAFF) {
+        if (requesterRole == User.Role.STAFF) {
             ensureEligibleStaff(requesterUserId);
         }
         if (!ALLOWED_TRANSITIONS
@@ -289,7 +289,7 @@ public class RoomService {
                 .orElseThrow(() -> new ForbiddenException(
                         "STAFF must have an active operational employee profile."
                 ));
-        if (employee.getStatus() != EmployeeStatus.ACTIVE
+        if (employee.getStatus() != Employee.Status.ACTIVE
                 || !Boolean.TRUE.equals(employee.getDepartment().getActive())) {
             throw new ForbiddenException(
                     "STAFF must have an active operational employee profile."
@@ -300,8 +300,8 @@ public class RoomService {
     /**
      * Rejects Room reads by roles other than STAFF and ADMIN.
      */
-    private void ensureRoomViewer(Role requesterRole) {
-        if (requesterRole != Role.STAFF && requesterRole != Role.ADMIN) {
+    private void ensureRoomViewer(User.Role requesterRole) {
+        if (requesterRole != User.Role.STAFF && requesterRole != User.Role.ADMIN) {
             throw new ForbiddenException("Room access is forbidden.");
         }
     }

@@ -9,12 +9,18 @@ import org.springframework.stereotype.Service;
 import java.util.Locale;
 
 /**
- * Loads the database account used by Spring Security.
- * It supplies current account state instead of trusting a token as the permanent source of role and status.
+ * STUDY NOTE: UserDetailsService is Spring Security's adapter for loading an account used in
+ * authentication.
+ * Here, @Service lets JwtAuthenticationFilter inject this database-backed loader.
+ * UserRepository supplies the current account, and RockeyUserPrincipal exposes its current role and active
+ * state to Spring Security.
+ * Token claims alone are not the permanent source of account permissions.
  */
-// Registers this business/security service for constructor injection.
 @Service
 public class RockeyUserDetailsService implements UserDetailsService {
+
+    // @Override shows that this method implements a superclass/interface contract rather than inventing a
+    // separate hook.
 
     /**
      * Injected UserRepository for database lookup and persistence, keeping SQL access out of controller code.
@@ -32,7 +38,6 @@ public class RockeyUserDetailsService implements UserDetailsService {
      * Normalizes an email and looks up the current User, wrapping it as a security principal.
      * A missing account raises Spring Security's standard lookup failure.
      */
-    // Implements the inherited Java/Spring contract rather than defining a separate callback.
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);

@@ -1,25 +1,24 @@
 package com.rockey.hospitality.controller;
 
-import com.rockey.hospitality.dto.common.PageCriteria;
-import com.rockey.hospitality.dto.alert.AlertSearchCriteria;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.rockey.hospitality.dto.alert.AlertEmployeeSummary;
-import com.rockey.hospitality.dto.alert.AlertResponse;
-import com.rockey.hospitality.dto.alert.AlertTaskSummary;
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.entity.AlertSeverity;
-import com.rockey.hospitality.entity.AlertStatus;
-import com.rockey.hospitality.entity.AlertType;
-import com.rockey.hospitality.entity.Role;
+import com.rockey.hospitality.dto.AlertDtos.AlertEmployeeSummary;
+import com.rockey.hospitality.dto.AlertDtos.AlertResponse;
+import com.rockey.hospitality.dto.AlertDtos.AlertSearchCriteria;
+import com.rockey.hospitality.dto.AlertDtos.AlertTaskSummary;
+import com.rockey.hospitality.dto.CommonDtos.PageCriteria;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.entity.Alert;
 import com.rockey.hospitality.entity.User;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.exception.GlobalExceptionHandler;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
 import com.rockey.hospitality.security.RockeyUserPrincipal;
 import com.rockey.hospitality.service.AlertService;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,10 +33,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -61,7 +56,7 @@ class AlertControllerTest {
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper)).build();
         User user = new User("Worker", "worker@example.test", "hash");
-        ReflectionTestUtils.setField(user, "id", 21L); ReflectionTestUtils.setField(user, "role", Role.STAFF);
+        ReflectionTestUtils.setField(user, "id", 21L); ReflectionTestUtils.setField(user, "role", User.Role.STAFF);
         RockeyUserPrincipal principal = new RockeyUserPrincipal(user);
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
     }
@@ -71,7 +66,7 @@ class AlertControllerTest {
 
     @Test
     void defaultListPassesPrincipalAndCanonicalPagination() throws Exception {
-        when(service.listAlerts(new AlertSearchCriteria(null, null, null), new PageCriteria(0, 20, "createdAt,desc"), 21L, Role.STAFF))
+        when(service.listAlerts(new AlertSearchCriteria(null, null, null), new PageCriteria(0, 20, "createdAt,desc"), 21L, User.Role.STAFF))
                 .thenReturn(new PagedResponse<>(List.of(response()), 0, 20, 1, 1, true));
         mvc.perform(get("/api/alerts")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].type").value("TASK"))
@@ -80,17 +75,17 @@ class AlertControllerTest {
 
     @Test
     void listPassesAllFiltersAndSort() throws Exception {
-        when(service.listAlerts(new AlertSearchCriteria(12L, AlertType.TASK, AlertStatus.READ), new PageCriteria(1, 5, "createdAt,asc"), 21L, Role.STAFF))
+        when(service.listAlerts(new AlertSearchCriteria(12L, Alert.Type.TASK, Alert.Status.READ), new PageCriteria(1, 5, "createdAt,asc"), 21L, User.Role.STAFF))
                 .thenReturn(new PagedResponse<>(List.of(), 1, 5, 0, 0, true));
         mvc.perform(get("/api/alerts").param("employeeId", "12").param("type", "TASK").param("status", "READ")
                         .param("page", "1").param("size", "5").param("sort", "createdAt,asc"))
                 .andExpect(status().isOk());
-        verify(service).listAlerts(new AlertSearchCriteria(12L, AlertType.TASK, AlertStatus.READ), new PageCriteria(1, 5, "createdAt,asc"), 21L, Role.STAFF);
+        verify(service).listAlerts(new AlertSearchCriteria(12L, Alert.Type.TASK, Alert.Status.READ), new PageCriteria(1, 5, "createdAt,asc"), 21L, User.Role.STAFF);
     }
 
     @Test
     void detailReturnsSafeDtoAndShallowEmployeeTaskSummaries() throws Exception {
-        when(service.getAlert(501L, 21L, Role.STAFF)).thenReturn(response());
+        when(service.getAlert(501L, 21L, User.Role.STAFF)).thenReturn(response());
         mvc.perform(get("/api/alerts/501")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.employee.id").value(12)).andExpect(jsonPath("$.task.id").value(10))
                 .andExpect(jsonPath("$.sourceKey").value("TASK:10:OVERDUE"))
@@ -101,15 +96,15 @@ class AlertControllerTest {
 
     @Test
     void markReadNeedsNoBodyAndReturns200() throws Exception {
-        when(service.markRead(501L, 21L, Role.STAFF)).thenReturn(response());
+        when(service.markRead(501L, 21L, User.Role.STAFF)).thenReturn(response());
         mvc.perform(put("/api/alerts/501/read")).andExpect(status().isOk());
-        verify(service).markRead(501L, 21L, Role.STAFF);
+        verify(service).markRead(501L, 21L, User.Role.STAFF);
     }
 
     @Test
     void deleteResolvesAndReturns204WithoutBody() throws Exception {
         mvc.perform(delete("/api/alerts/501")).andExpect(status().isNoContent()).andExpect(content().string(""));
-        verify(service).resolveAlert(501L, 21L, Role.STAFF);
+        verify(service).resolveAlert(501L, 21L, User.Role.STAFF);
     }
 
     @ParameterizedTest
@@ -121,24 +116,24 @@ class AlertControllerTest {
 
     @Test
     void missingAlertUses404Contract() throws Exception {
-        when(service.getAlert(99L, 21L, Role.STAFF)).thenThrow(new ResourceNotFoundException("Alert not found."));
+        when(service.getAlert(99L, 21L, User.Role.STAFF)).thenThrow(new ResourceNotFoundException("Alert not found."));
         mvc.perform(get("/api/alerts/99")).andExpect(status().isNotFound()).andExpect(jsonPath("$.status").value(404));
     }
 
     @Test
     void otherRecipientUses403Contract() throws Exception {
-        when(service.markRead(501L, 21L, Role.STAFF)).thenThrow(new ForbiddenException("Another employee's alert."));
+        when(service.markRead(501L, 21L, User.Role.STAFF)).thenThrow(new ForbiddenException("Another employee's alert."));
         mvc.perform(put("/api/alerts/501/read")).andExpect(status().isForbidden()).andExpect(jsonPath("$.status").value(403));
     }
 
     @Test
     void resolvedReadUses409Contract() throws Exception {
-        when(service.markRead(501L, 21L, Role.STAFF)).thenThrow(new ConflictException("Alert already resolved."));
+        when(service.markRead(501L, 21L, User.Role.STAFF)).thenThrow(new ConflictException("Alert already resolved."));
         mvc.perform(put("/api/alerts/501/read")).andExpect(status().isConflict()).andExpect(jsonPath("$.status").value(409));
     }
 
     private AlertResponse response() {
-        return new AlertResponse(501L, AlertType.TASK, "Task is overdue.", AlertSeverity.INFO, AlertStatus.UNREAD,
+        return new AlertResponse(501L, Alert.Type.TASK, "Task is overdue.", Alert.Severity.INFO, Alert.Status.UNREAD,
                 new AlertEmployeeSummary(12L, "Worker"), new AlertTaskSummary(10L, "Inspect room"),
                 "TASK:10:OVERDUE", LocalDateTime.of(2030, 1, 1, 12, 0), null, null);
     }

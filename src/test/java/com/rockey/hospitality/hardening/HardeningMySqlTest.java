@@ -3,15 +3,24 @@ package com.rockey.hospitality.hardening;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rockey.hospitality.RockeyHospitalityApplication;
-import com.rockey.hospitality.dto.employee.UpdateEmployeeRequest;
-import com.rockey.hospitality.dto.inventory.CreateInventoryItemRequest;
-import com.rockey.hospitality.dto.task.CreateTaskRequest;
-import com.rockey.hospitality.entity.EmployeeStatus;
-import com.rockey.hospitality.entity.Role;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.InvalidRefreshTokenException;
-import com.rockey.hospitality.exception.InvalidCredentialsException;
+import com.rockey.hospitality.dto.EmployeeDtos.UpdateEmployeeRequest;
+import com.rockey.hospitality.dto.InventoryDtos.CreateInventoryItemRequest;
+import com.rockey.hospitality.dto.TaskDtos.CreateTaskRequest;
+import com.rockey.hospitality.entity.Employee;
+import com.rockey.hospitality.entity.User;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.InvalidCredentialsException;
+import com.rockey.hospitality.exception.ApiException.InvalidRefreshTokenException;
 import com.rockey.hospitality.service.*;
+import com.rockey.hospitality.service.AuthService;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,16 +32,6 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.SecureRandom;
-import java.time.LocalDateTime;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Consumer;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Opt-in destructive fixtures ONLY in the explicitly authorized disposable schema. */
@@ -139,7 +138,7 @@ class HardeningMySqlTest {
 
     @Test
     void allPersistedAnalyticsReconcileWithIndependentSql() {
-        JsonNode admin = mapper.valueToTree(analytics.dashboard(10001L, Role.ADMIN)).path("admin");
+        JsonNode admin = mapper.valueToTree(analytics.dashboard(10001L, User.Role.ADMIN)).path("admin");
         Map<String, String> metrics = Map.ofEntries(
                 Map.entry("activeRoomCount", "SELECT COUNT(*) FROM rooms WHERE active=TRUE"),
                 Map.entry("readyRoomCount", "SELECT COUNT(*) FROM rooms WHERE active=TRUE AND status='READY'"),
@@ -153,24 +152,24 @@ class HardeningMySqlTest {
                 Map.entry("registrationCount", "SELECT COUNT(*) FROM event_registrations"));
         metrics.forEach((field, query) -> assertEquals(count(query), admin.path(field).asLong(), field));
         assertEquals(count("SELECT COUNT(*) FROM tasks WHERE due_at < NOW() AND status IN ('OPEN','ASSIGNED','IN_PROGRESS')"), admin.path("overdueTaskCount").asLong());
-        JsonNode room = mapper.valueToTree(analytics.rooms(null, Role.ADMIN));
+        JsonNode room = mapper.valueToTree(analytics.rooms(null, User.Role.ADMIN));
         assertEquals(count("SELECT COUNT(*) FROM rooms WHERE active=TRUE"), room.path("activeRoomCount").asLong());
-        JsonNode task = mapper.valueToTree(analytics.tasks(null, Role.ADMIN));
+        JsonNode task = mapper.valueToTree(analytics.tasks(null, User.Role.ADMIN));
         assertEquals(count("SELECT COUNT(*) FROM tasks"), task.path("totalTaskCount").asLong());
-        JsonNode ops = mapper.valueToTree(analytics.operations(10001L, Role.ADMIN));
+        JsonNode ops = mapper.valueToTree(analytics.operations(10001L, User.Role.ADMIN));
         assertEquals(count("SELECT COUNT(*) FROM inventory_items WHERE active=TRUE AND department_id=10001"), ops.path("inventory").path("activeInventoryItemCount").asLong());
         assertEquals(count("SELECT COUNT(*) FROM events"), ops.path("events").path("eventCount").asLong());
         assertEquals(count("SELECT COUNT(*) FROM event_registrations"), ops.path("events").path("registrationCount").asLong());
         assertEquals(count("SELECT COUNT(*) FROM tasks WHERE event_id IS NOT NULL"), ops.path("events").path("eventTaskCount").asLong());
         assertEquals(count("SELECT COUNT(*) FROM tasks WHERE event_id IS NOT NULL AND status='COMPLETED'"), ops.path("events").path("completedEventTaskCount").asLong());
-        var summaries = analytics.departments(null, 0, 100, Role.ADMIN).getDepartments().getContent();
+        var summaries = analytics.departments(null, 0, 100, User.Role.ADMIN).getDepartments().getContent();
         summaries.forEach(row -> {
             assertEquals(count("SELECT COUNT(*) FROM employees WHERE status='ACTIVE' AND department_id=" + row.getDepartmentId()), row.getActiveEmployeeCount());
             assertEquals(count("SELECT COUNT(*) FROM tasks WHERE status IN ('OPEN','ASSIGNED','IN_PROGRESS') AND department_id=" + row.getDepartmentId()), row.getNonTerminalTaskCount());
         });
-        JsonNode staff = mapper.valueToTree(analytics.dashboard(10002L, Role.STAFF)).path("staff");
+        JsonNode staff = mapper.valueToTree(analytics.dashboard(10002L, User.Role.STAFF)).path("staff");
         assertEquals(count("SELECT COUNT(*) FROM tasks WHERE assigned_employee_id=10002 AND status IN ('OPEN','ASSIGNED','IN_PROGRESS')"), staff.path("nonTerminalAssignedTaskCount").asLong());
-        JsonNode user = mapper.valueToTree(analytics.dashboard(10003L, Role.USER));
+        JsonNode user = mapper.valueToTree(analytics.dashboard(10003L, User.Role.USER));
         assertFalse(user.has("staff")); assertFalse(user.has("admin"));
         assertEquals(count("SELECT COUNT(*) FROM event_registrations WHERE user_id=10003"), user.path("user").path("registrationCount").asLong());
     }
@@ -183,7 +182,7 @@ class HardeningMySqlTest {
         sql.update("INSERT INTO employees(id,user_id,name,email,department_id,job_role) VALUES(?,?,?,?,?,?)", employee, user, "Rollback test", "employee" + employee + "@example.test", 10001, "Test role");
         UpdateEmployeeRequest request = new UpdateEmployeeRequest();
         request.setName("Rollback test"); request.setEmail("employee" + employee + "@example.test");
-        request.setDepartmentId(department); request.setJobRole("Test role"); request.setStatus(EmployeeStatus.ACTIVE);
+        request.setDepartmentId(department); request.setJobRole("Test role"); request.setStatus(Employee.Status.ACTIVE);
         TransactionTemplate rollbackTransaction = new TransactionTemplate(transactions);
         Consumer<TransactionStatus> rollbackAction = status -> {
             employees.updateEmployee(employee, request);
@@ -207,9 +206,9 @@ class HardeningMySqlTest {
 
     @Test
     void persistedRefreshRotationLogoutAndEmployeeDeactivationRevokeSessions() {
-        AuthSession first = auth.login("hardening10003@example.test", fixturePassword, "test-only-hardening");
+        AuthService.AuthSession first = auth.login("hardening10003@example.test", fixturePassword, "test-only-hardening");
         assertEquals(1, count("SELECT COUNT(*) FROM users WHERE id=10003 AND refresh_token_hash IS NOT NULL AND refresh_token_expires_at IS NOT NULL"));
-        AuthSession rotated = auth.refresh(first.getRawRefreshToken(), "test-only-hardening");
+        AuthService.AuthSession rotated = auth.refresh(first.getRawRefreshToken(), "test-only-hardening");
         String firstRefreshToken = first.getRawRefreshToken();
         String rotatedRefreshToken = rotated.getRawRefreshToken();
         RedactedToken firstEvidence = new RedactedToken(firstRefreshToken);
@@ -226,7 +225,7 @@ class HardeningMySqlTest {
         String email = "deactivation" + user + "@example.test";
         sql.update("INSERT INTO users(id,name,email,password_hash,role,department_id) VALUES(?,?,?,?,?,?)", user, "Deactivation test", email, passwords.encode(fixturePassword), "STAFF", 10002);
         sql.update("INSERT INTO employees(id,user_id,name,email,department_id,job_role) VALUES(?,?,?,?,?,?)", employee, user, "Deactivation test", email, 10002, "Test role");
-        AuthSession session = auth.login(email, fixturePassword, "test-only-hardening");
+        AuthService.AuthSession session = auth.login(email, fixturePassword, "test-only-hardening");
         employees.deactivateEmployee(employee);
         assertEquals(1, count("SELECT COUNT(*) FROM users WHERE id=" + user + " AND status='INACTIVE' AND refresh_token_hash IS NULL AND refresh_token_expires_at IS NULL"));
         String revokedRefreshToken = session.getRawRefreshToken();

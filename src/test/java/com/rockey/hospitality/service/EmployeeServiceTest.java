@@ -1,23 +1,23 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.employee.CreateEmployeeRequest;
-import com.rockey.hospitality.dto.employee.EmployeeResponse;
-import com.rockey.hospitality.dto.employee.UpdateEmployeeRequest;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.EmployeeDtos.CreateEmployeeRequest;
+import com.rockey.hospitality.dto.EmployeeDtos.EmployeeResponse;
+import com.rockey.hospitality.dto.EmployeeDtos.UpdateEmployeeRequest;
 import com.rockey.hospitality.entity.Department;
 import com.rockey.hospitality.entity.Employee;
-import com.rockey.hospitality.entity.EmployeeStatus;
-import com.rockey.hospitality.entity.Role;
 import com.rockey.hospitality.entity.User;
-import com.rockey.hospitality.entity.UserStatus;
-import com.rockey.hospitality.exception.BadRequestException;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ForbiddenException;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.repository.DepartmentRepository;
 import com.rockey.hospitality.repository.EmployeeRepository;
-import com.rockey.hospitality.repository.UserRepository;
 import com.rockey.hospitality.repository.TaskRepository;
+import com.rockey.hospitality.repository.UserRepository;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,11 +28,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -122,7 +117,7 @@ class EmployeeServiceTest {
         User savedUser = userCaptor.getValue();
         assertThat(savedUser.getEmail()).isEqualTo("login@example.test");
         assertThat(savedUser.getPasswordHash()).isEqualTo("bcrypt-hash");
-        assertThat(savedUser.getRole()).isEqualTo(Role.STAFF);
+        assertThat(savedUser.getRole()).isEqualTo(User.Role.STAFF);
         assertThat(savedUser.getDepartment()).isSameAs(department);
         assertThat(response.getUserId()).isEqualTo(21L);
         assertThat(response.getDepartment().getId()).isEqualTo(3L);
@@ -183,7 +178,7 @@ class EmployeeServiceTest {
     @Test
     void listUsesCombinedFiltersAndReturnsCanonicalPageMetadata() {
         Department department = department(3L, "Housekeeping", true);
-        Employee employee = employee(12L, department, null, EmployeeStatus.ACTIVE);
+        Employee employee = employee(12L, department, null, Employee.Status.ACTIVE);
         PageRequest expectedPage = PageRequest.of(
                 1,
                 5,
@@ -194,13 +189,13 @@ class EmployeeServiceTest {
         );
         when(employeeRepository.findByDepartmentIdAndStatus(
                 3L,
-                EmployeeStatus.ACTIVE,
+                Employee.Status.ACTIVE,
                 expectedPage
         )).thenReturn(new PageImpl<>(List.of(employee), expectedPage, 7));
 
         PagedResponse<EmployeeResponse> response = employeeService.listEmployees(
                 3L,
-                EmployeeStatus.ACTIVE,
+                Employee.Status.ACTIVE,
                 1,
                 5,
                 "createdAt,desc"
@@ -244,11 +239,11 @@ class EmployeeServiceTest {
     @Test
     void getAllowsLinkedStaffToReadOwnEmployeeRecord() {
         Department department = department(3L, "Housekeeping", true);
-        User user = user(21L, Role.STAFF, department);
-        Employee employee = employee(12L, department, user, EmployeeStatus.ACTIVE);
+        User user = user(21L, User.Role.STAFF, department);
+        Employee employee = employee(12L, department, user, Employee.Status.ACTIVE);
         when(employeeRepository.findById(12L)).thenReturn(Optional.of(employee));
 
-        EmployeeResponse response = employeeService.getEmployee(12L, 21L, Role.STAFF);
+        EmployeeResponse response = employeeService.getEmployee(12L, 21L, User.Role.STAFF);
 
         assertThat(response.getId()).isEqualTo(12L);
         assertThat(response.getUserId()).isEqualTo(21L);
@@ -260,12 +255,12 @@ class EmployeeServiceTest {
         Employee employee = employee(
                 12L,
                 department,
-                user(21L, Role.STAFF, department),
-                EmployeeStatus.ACTIVE
+                user(21L, User.Role.STAFF, department),
+                Employee.Status.ACTIVE
         );
         when(employeeRepository.findById(12L)).thenReturn(Optional.of(employee));
 
-        assertThatThrownBy(() -> employeeService.getEmployee(12L, 22L, Role.STAFF))
+        assertThatThrownBy(() -> employeeService.getEmployee(12L, 22L, User.Role.STAFF))
                 .isInstanceOf(ForbiddenException.class);
     }
 
@@ -273,7 +268,7 @@ class EmployeeServiceTest {
     void getRejectsMissingEmployee() {
         when(employeeRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> employeeService.getEmployee(99L, 1L, Role.ADMIN))
+        assertThatThrownBy(() -> employeeService.getEmployee(99L, 1L, User.Role.ADMIN))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -281,9 +276,9 @@ class EmployeeServiceTest {
     void updateTransfersLinkedEmployeeAndUserInOneOperation() {
         Department current = department(3L, "Housekeeping", true);
         Department target = department(4L, "Maintenance", true);
-        User user = user(21L, Role.STAFF, current);
-        Employee employee = employee(12L, current, user, EmployeeStatus.ACTIVE);
-        UpdateEmployeeRequest request = updateRequest(4L, EmployeeStatus.ACTIVE);
+        User user = user(21L, User.Role.STAFF, current);
+        Employee employee = employee(12L, current, user, Employee.Status.ACTIVE);
+        UpdateEmployeeRequest request = updateRequest(4L, Employee.Status.ACTIVE);
         when(employeeRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(employee));
         when(departmentRepository.findByIdForUpdate(4L)).thenReturn(Optional.of(target));
         when(employeeRepository.save(employee)).thenReturn(employee);
@@ -302,11 +297,11 @@ class EmployeeServiceTest {
     void updateRejectsTransferToInactiveDepartment() {
         Department current = department(3L, "Housekeeping", true);
         Department target = department(4L, "Maintenance", false);
-        Employee employee = employee(12L, current, null, EmployeeStatus.ACTIVE);
+        Employee employee = employee(12L, current, null, Employee.Status.ACTIVE);
         when(employeeRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(employee));
         when(departmentRepository.findByIdForUpdate(4L)).thenReturn(Optional.of(target));
 
-        UpdateEmployeeRequest request = updateRequest(4L, EmployeeStatus.ACTIVE);
+        UpdateEmployeeRequest request = updateRequest(4L, Employee.Status.ACTIVE);
         assertThatThrownBy(() -> employeeService.updateEmployee(12L, request))
                 .isInstanceOf(ConflictException.class);
     }
@@ -314,9 +309,9 @@ class EmployeeServiceTest {
     @Test
     void updateDeactivationAlsoDisablesLinkedUserAndRevokesRefresh() {
         Department department = department(3L, "Housekeeping", true);
-        User user = user(21L, Role.STAFF, department);
+        User user = user(21L, User.Role.STAFF, department);
         user.replaceRefreshSession("refresh-hash", LocalDateTime.of(2026, 10, 10, 20, 0));
-        Employee employee = employee(12L, department, user, EmployeeStatus.ACTIVE);
+        Employee employee = employee(12L, department, user, Employee.Status.ACTIVE);
         when(employeeRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(employee));
         when(departmentRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(department));
         when(employeeRepository.save(employee)).thenReturn(employee);
@@ -324,11 +319,11 @@ class EmployeeServiceTest {
 
         employeeService.updateEmployee(
                 12L,
-                updateRequest(3L, EmployeeStatus.INACTIVE)
+                updateRequest(3L, Employee.Status.INACTIVE)
         );
 
-        assertThat(employee.getStatus()).isEqualTo(EmployeeStatus.INACTIVE);
-        assertThat(user.getStatus()).isEqualTo(UserStatus.INACTIVE);
+        assertThat(employee.getStatus()).isEqualTo(Employee.Status.INACTIVE);
+        assertThat(user.getStatus()).isEqualTo(User.Status.INACTIVE);
         assertThat(user.getRefreshTokenHash()).isNull();
         assertThat(user.getRefreshTokenExpiresAt()).isNull();
     }
@@ -336,8 +331,8 @@ class EmployeeServiceTest {
     @Test
     void deactivatePreservesEmployeeAndDisablesLinkedAccount() {
         Department department = department(3L, "Housekeeping", true);
-        User user = user(21L, Role.STAFF, department);
-        Employee employee = employee(12L, department, user, EmployeeStatus.ACTIVE);
+        User user = user(21L, User.Role.STAFF, department);
+        Employee employee = employee(12L, department, user, Employee.Status.ACTIVE);
         when(employeeRepository.findDepartmentIdById(12L)).thenReturn(Optional.of(3L));
         when(departmentRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(department));
         when(employeeRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(employee));
@@ -346,15 +341,15 @@ class EmployeeServiceTest {
 
         employeeService.deactivateEmployee(12L);
 
-        assertThat(employee.getStatus()).isEqualTo(EmployeeStatus.INACTIVE);
-        assertThat(user.getStatus()).isEqualTo(UserStatus.INACTIVE);
+        assertThat(employee.getStatus()).isEqualTo(Employee.Status.INACTIVE);
+        assertThat(user.getStatus()).isEqualTo(User.Status.INACTIVE);
         verify(employeeRepository, never()).delete(any());
     }
 
     @Test
     void deactivateUnlinkedEmployeeIsSafe() {
         Department department = department(3L, "Housekeeping", true);
-        Employee employee = employee(12L, department, null, EmployeeStatus.ACTIVE);
+        Employee employee = employee(12L, department, null, Employee.Status.ACTIVE);
         when(employeeRepository.findDepartmentIdById(12L)).thenReturn(Optional.of(3L));
         when(departmentRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(department));
         when(employeeRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(employee));
@@ -362,14 +357,14 @@ class EmployeeServiceTest {
 
         employeeService.deactivateEmployee(12L);
 
-        assertThat(employee.getStatus()).isEqualTo(EmployeeStatus.INACTIVE);
+        assertThat(employee.getStatus()).isEqualTo(Employee.Status.INACTIVE);
         verify(userRepository, never()).save(any());
     }
 
     @Test
     void deactivateRejectsEmployeeWithNonTerminalAssignedTasks() {
         Department department = department(3L, "Housekeeping", true);
-        Employee employee = employee(12L, department, null, EmployeeStatus.ACTIVE);
+        Employee employee = employee(12L, department, null, Employee.Status.ACTIVE);
         when(employeeRepository.findDepartmentIdById(12L)).thenReturn(Optional.of(3L));
         when(departmentRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(department));
         when(employeeRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(employee));
@@ -382,14 +377,14 @@ class EmployeeServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .hasMessage("Employee cannot be deactivated while active tasks are assigned.");
 
-        assertThat(employee.getStatus()).isEqualTo(EmployeeStatus.ACTIVE);
+        assertThat(employee.getStatus()).isEqualTo(Employee.Status.ACTIVE);
         verify(employeeRepository, never()).save(employee);
     }
 
     @Test
     void updateRejectsInactiveStatusWhenEmployeeHasNonTerminalTasks() {
         Department department = department(3L, "Housekeeping", true);
-        Employee employee = employee(12L, department, null, EmployeeStatus.ACTIVE);
+        Employee employee = employee(12L, department, null, Employee.Status.ACTIVE);
         when(employeeRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(employee));
         when(departmentRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(department));
         when(taskRepository.existsByAssignedEmployeeIdAndStatusIn(
@@ -397,7 +392,7 @@ class EmployeeServiceTest {
                 TaskService.NON_TERMINAL_STATUSES
         )).thenReturn(true);
 
-        UpdateEmployeeRequest request = updateRequest(3L, EmployeeStatus.INACTIVE);
+        UpdateEmployeeRequest request = updateRequest(3L, Employee.Status.INACTIVE);
         assertThatThrownBy(() -> employeeService.updateEmployee(12L, request))
                 .isInstanceOf(ConflictException.class);
     }
@@ -412,12 +407,12 @@ class EmployeeServiceTest {
         if (createLogin) {
             request.setLoginEmail(" LOGIN@example.test ");
             request.setTemporaryPassword("temporary-password");
-            request.setSecurityRole(Role.STAFF);
+            request.setSecurityRole(User.Role.STAFF);
         }
         return request;
     }
 
-    private UpdateEmployeeRequest updateRequest(Long departmentId, EmployeeStatus status) {
+    private UpdateEmployeeRequest updateRequest(Long departmentId, Employee.Status status) {
         UpdateEmployeeRequest request = new UpdateEmployeeRequest();
         request.setName("Updated Worker");
         request.setEmail("updated@example.test");
@@ -436,7 +431,7 @@ class EmployeeServiceTest {
         return department;
     }
 
-    private User user(Long id, Role role, Department department) {
+    private User user(Long id, User.Role role, Department department) {
         User user = new User("Worker Name", "login@example.test", "bcrypt-hash");
         ReflectionTestUtils.setField(user, "id", id);
         user.provisionEmployeeAccess(role, department);
@@ -447,7 +442,7 @@ class EmployeeServiceTest {
             Long id,
             Department department,
             User user,
-            EmployeeStatus status
+            Employee.Status status
     ) {
         Employee employee = new Employee(
                 "Worker Name",

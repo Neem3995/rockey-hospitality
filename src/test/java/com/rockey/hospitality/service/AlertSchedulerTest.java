@@ -1,18 +1,16 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.configuration.AlertSchedulingConfiguration;
-import org.junit.jupiter.api.Test;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.rockey.hospitality.configuration.ApplicationConfiguration;
+import java.util.Arrays;
+import java.util.Properties;
+import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
-
-import java.util.Arrays;
-import java.util.Properties;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.doThrow;
@@ -31,7 +29,7 @@ class AlertSchedulerTest {
         assertThat(scheduled.cron()).isEmpty();
         assertThat(Arrays.stream(AlertScheduler.class.getDeclaredMethods())
                 .filter(method -> method.isAnnotationPresent(Scheduled.class)).count()).isEqualTo(1);
-        assertThat(AlertSchedulingConfiguration.class.isAnnotationPresent(EnableScheduling.class)).isTrue();
+        assertThat(ApplicationConfiguration.class.isAnnotationPresent(EnableScheduling.class)).isTrue();
     }
 
     @Test

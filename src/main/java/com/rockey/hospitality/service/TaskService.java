@@ -1,68 +1,71 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.dto.auth.DepartmentSummary;
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.common.PageCriteria;
-import com.rockey.hospitality.dto.task.TaskSearchCriteria;
-import com.rockey.hospitality.dto.task.CreateTaskRequest;
-import com.rockey.hospitality.dto.task.TaskEventSummary;
-import com.rockey.hospitality.dto.task.TaskEmployeeSummary;
-import com.rockey.hospitality.dto.task.TaskResponse;
-import com.rockey.hospitality.dto.task.TaskRoomSummary;
-import com.rockey.hospitality.dto.task.UpdateTaskRequest;
+import com.rockey.hospitality.dto.AuthDtos.DepartmentSummary;
+import com.rockey.hospitality.dto.CommonDtos.PageCriteria;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.TaskDtos.CreateTaskRequest;
+import com.rockey.hospitality.dto.TaskDtos.TaskEmployeeSummary;
+import com.rockey.hospitality.dto.TaskDtos.TaskEventSummary;
+import com.rockey.hospitality.dto.TaskDtos.TaskResponse;
+import com.rockey.hospitality.dto.TaskDtos.TaskRoomSummary;
+import com.rockey.hospitality.dto.TaskDtos.TaskSearchCriteria;
+import com.rockey.hospitality.dto.TaskDtos.UpdateTaskRequest;
 import com.rockey.hospitality.entity.Department;
 import com.rockey.hospitality.entity.Employee;
-import com.rockey.hospitality.entity.EmployeeStatus;
 import com.rockey.hospitality.entity.Event;
-import com.rockey.hospitality.entity.EventStatus;
-import com.rockey.hospitality.entity.Role;
 import com.rockey.hospitality.entity.Room;
 import com.rockey.hospitality.entity.Task;
-import com.rockey.hospitality.entity.TaskPriority;
-import com.rockey.hospitality.entity.TaskStatus;
 import com.rockey.hospitality.entity.User;
-import com.rockey.hospitality.exception.BadRequestException;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ForbiddenException;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.repository.DepartmentRepository;
 import com.rockey.hospitality.repository.EmployeeRepository;
 import com.rockey.hospitality.repository.EventRepository;
 import com.rockey.hospitality.repository.RoomRepository;
 import com.rockey.hospitality.repository.TaskRepository;
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-
 /**
- * Coordinates Task lifecycle and optional Employee, Room, and Event references.
- * Reference locks and service authorization keep new work eligible and existing history intact.
+ * STUDY NOTE: A Service holds business rules and coordinates an application workflow.
+ * Here, @Service lets Spring manage and inject this component; @Transactional groups database work so unchecked
+ * failures roll back writes.
+ * TaskService validates assignment/references and lifecycle changes while retaining completed or cancelled
+ * work.
+ * TaskController delegates here; Task, Department, Employee, Room and Event repositories provide the
+ * persisted data through JPA/Hibernate.
  */
-// Registers this business/security service for constructor injection.
 @Service
 public class TaskService {
+
+    // Transaction study key: Spring applies @Transactional when another component calls this managed service.
+    // readOnly=true requests a read-oriented transaction; it keeps lazy reads and DTO mapping inside the
+    // persistence boundary.
+    // readOnly is not an authorization rule; repositories still run only after the service's scope checks.
 
     /**
      * OPEN, ASSIGNED, and IN_PROGRESS Tasks count as active work for guards and aggregates.
      */
-    public static final Set<TaskStatus> NON_TERMINAL_STATUSES = Set.of(
-            TaskStatus.OPEN,
-            TaskStatus.ASSIGNED,
-            TaskStatus.IN_PROGRESS
+    public static final Set<Task.Status> NON_TERMINAL_STATUSES = Set.of(
+            Task.Status.OPEN,
+            Task.Status.ASSIGNED,
+            Task.Status.IN_PROGRESS
     );
     /**
      * COMPLETED and CANCELLED Task states are terminal and excluded from active-work conditions.
      */
-    public static final Set<TaskStatus> TERMINAL_STATUSES = Set.of(
-            TaskStatus.COMPLETED,
-            TaskStatus.CANCELLED
+    public static final Set<Task.Status> TERMINAL_STATUSES = Set.of(
+            Task.Status.COMPLETED,
+            Task.Status.CANCELLED
     );
     /**
      * Maximum of 100 rows per requested page, shared by this service's pagination checks.
@@ -82,21 +85,21 @@ public class TaskService {
     /**
      * Explicit allowed next-status map used to reject skipped or terminal lifecycle changes.
      */
-    private static final Map<TaskStatus, Set<TaskStatus>> ALLOWED_TRANSITIONS = Map.of(
-            TaskStatus.OPEN,
-            Set.of(TaskStatus.ASSIGNED, TaskStatus.CANCELLED),
-            TaskStatus.ASSIGNED,
+    private static final Map<Task.Status, Set<Task.Status>> ALLOWED_TRANSITIONS = Map.of(
+            Task.Status.OPEN,
+            Set.of(Task.Status.ASSIGNED, Task.Status.CANCELLED),
+            Task.Status.ASSIGNED,
             Set.of(
-                    TaskStatus.OPEN,
-                    TaskStatus.IN_PROGRESS,
-                    TaskStatus.COMPLETED,
-                    TaskStatus.CANCELLED
+                    Task.Status.OPEN,
+                    Task.Status.IN_PROGRESS,
+                    Task.Status.COMPLETED,
+                    Task.Status.CANCELLED
             ),
-            TaskStatus.IN_PROGRESS,
-            Set.of(TaskStatus.COMPLETED, TaskStatus.CANCELLED),
-            TaskStatus.COMPLETED,
+            Task.Status.IN_PROGRESS,
+            Set.of(Task.Status.COMPLETED, Task.Status.CANCELLED),
+            Task.Status.COMPLETED,
             Set.of(),
-            TaskStatus.CANCELLED,
+            Task.Status.CANCELLED,
             Set.of()
     );
 
@@ -141,7 +144,6 @@ public class TaskService {
     /**
      * Validates optional reference IDs and delegates filter and page execution to the shared search helper.
      */
-    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public PagedResponse<TaskResponse> listTasks(TaskSearchCriteria criteria, PageCriteria pagination) {
         validateOptionalPositiveId(criteria.departmentId(), "Department filter");
@@ -155,7 +157,6 @@ public class TaskService {
      * Checks due time and locks eligible Department, Employee, and Room references before saving new work.
      * The optional Event must exist and cannot be cancelled.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public TaskResponse createTask(CreateTaskRequest request) {
         // Locked reference checks prevent deactivation racing the creation of new work.
@@ -182,9 +183,8 @@ public class TaskService {
     /**
      * Loads a Task and allows ADMIN oversight or the linked STAFF assignee's own read.
      */
-    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
-    public TaskResponse getTask(Long taskId, Long requesterUserId, Role requesterRole) {
+    public TaskResponse getTask(Long taskId, Long requesterUserId, User.Role requesterRole) {
         Task task = findTask(taskId);
         ensureTaskAccess(task, requesterUserId, requesterRole);
         return toResponse(task);
@@ -194,7 +194,6 @@ public class TaskService {
      * Validates references and lifecycle transitions before replacing non-terminal Task details.
      * Terminal transitions preserve assignee history and set completion time only for COMPLETED.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public TaskResponse updateTask(Long taskId, UpdateTaskRequest request) {
         Task task = findTask(taskId);
@@ -208,14 +207,14 @@ public class TaskService {
             validateNewDueAt(request.getDueAt(), now);
         }
 
-        TaskStatus requestedStatus = request.getStatus();
+        Task.Status requestedStatus = request.getStatus();
         if (task.getStatus() != requestedStatus) {
             ensureTransitionAllowed(task.getStatus(), requestedStatus);
         }
         validateStatusAndAssignee(requestedStatus, employee);
         ensureTerminalTransitionPreservesAssignee(task, requestedStatus, employee);
 
-        LocalDateTime completedAt = requestedStatus == TaskStatus.COMPLETED ? now : null;
+        LocalDateTime completedAt = requestedStatus == Task.Status.COMPLETED ? now : null;
         task.update(
                 request.getTitle().trim(),
                 normalizeDescription(request.getDescription()),
@@ -234,12 +233,11 @@ public class TaskService {
     /**
      * Transitions eligible work to CANCELLED without deleting its relationship history.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public TaskResponse cancelTask(Long taskId) {
         Task task = findTask(taskId);
         ensureNotTerminal(task);
-        ensureTransitionAllowed(task.getStatus(), TaskStatus.CANCELLED);
+        ensureTransitionAllowed(task.getStatus(), Task.Status.CANCELLED);
         task.cancel();
         return toResponse(taskRepository.save(task));
     }
@@ -247,16 +245,15 @@ public class TaskService {
     /**
      * Checks access, allowed transition, and an existing assignee before storing COMPLETED with the current server time.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public TaskResponse completeTask(
             Long taskId,
             Long requesterUserId,
-            Role requesterRole
+            User.Role requesterRole
     ) {
         Task task = findTask(taskId);
         ensureTaskAccess(task, requesterUserId, requesterRole);
-        ensureTransitionAllowed(task.getStatus(), TaskStatus.COMPLETED);
+        ensureTransitionAllowed(task.getStatus(), Task.Status.COMPLETED);
         if (task.getAssignedEmployee() == null) {
             throw new ConflictException("A task must be assigned before completion.");
         }
@@ -268,14 +265,13 @@ public class TaskService {
      * Assigns an eligible active Employee or removes an assignment on non-terminal work.
      * IN_PROGRESS Tasks cannot be unassigned.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public TaskResponse assignTask(Long taskId, Long employeeId) {
         Task task = findTask(taskId);
         ensureNotTerminal(task);
 
         if (employeeId == null) {
-            if (task.getStatus() == TaskStatus.IN_PROGRESS) {
+            if (task.getStatus() == Task.Status.IN_PROGRESS) {
                 throw new ConflictException("An in-progress task cannot be unassigned.");
             }
             task.assign(null);
@@ -288,21 +284,20 @@ public class TaskService {
     /**
      * Pages one Employee's tasks for ADMIN or that Employee's linked STAFF User only.
      */
-    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public PagedResponse<TaskResponse> listAssignedTasks(
             Long employeeId,
-            TaskStatus status,
-            TaskPriority priority,
+            Task.Status status,
+            Task.Priority priority,
             Boolean overdue,
             PageCriteria pagination,
             Long requesterUserId,
-            Role requesterRole
+            User.Role requesterRole
     ) {
         Employee employee = findEmployee(employeeId);
-        if (requesterRole != Role.ADMIN) {
+        if (requesterRole != User.Role.ADMIN) {
             User user = employee.getUser();
-            if (requesterRole != Role.STAFF
+            if (requesterRole != User.Role.STAFF
                     || user == null
                     || !user.getId().equals(requesterUserId)) {
                 throw new ForbiddenException("Assigned task access is forbidden.");
@@ -334,14 +329,14 @@ public class TaskService {
     /**
      * Allows ADMIN or the Task's linked STAFF assignee, not every employee in the same Department.
      */
-    private void ensureTaskAccess(Task task, Long requesterUserId, Role requesterRole) {
+    private void ensureTaskAccess(Task task, Long requesterUserId, User.Role requesterRole) {
         // STAFF may read only their own assignment; sharing a Department is not ownership.
-        if (requesterRole == Role.ADMIN) {
+        if (requesterRole == User.Role.ADMIN) {
             return;
         }
         Employee assignedEmployee = task.getAssignedEmployee();
         User user = assignedEmployee == null ? null : assignedEmployee.getUser();
-        if (requesterRole != Role.STAFF
+        if (requesterRole != User.Role.STAFF
                 || user == null
                 || !user.getId().equals(requesterUserId)) {
             throw new ForbiddenException("Task access is forbidden.");
@@ -351,14 +346,14 @@ public class TaskService {
     /**
      * Requires an assignee for ASSIGNED, IN_PROGRESS, and COMPLETED work, and no assignee for OPEN work.
      */
-    private void validateStatusAndAssignee(TaskStatus status, Employee employee) {
-        if ((status == TaskStatus.ASSIGNED
-                || status == TaskStatus.IN_PROGRESS
-                || status == TaskStatus.COMPLETED)
+    private void validateStatusAndAssignee(Task.Status status, Employee employee) {
+        if ((status == Task.Status.ASSIGNED
+                || status == Task.Status.IN_PROGRESS
+                || status == Task.Status.COMPLETED)
                 && employee == null) {
             throw new ConflictException(status + " tasks require an assignee.");
         }
-        if (status == TaskStatus.OPEN && employee != null) {
+        if (status == Task.Status.OPEN && employee != null) {
             throw new ConflictException("OPEN tasks cannot have an assignee.");
         }
     }
@@ -368,7 +363,7 @@ public class TaskService {
      */
     private void ensureTerminalTransitionPreservesAssignee(
             Task task,
-            TaskStatus requestedStatus,
+            Task.Status requestedStatus,
             Employee requestedEmployee
     ) {
         if (!TERMINAL_STATUSES.contains(requestedStatus)
@@ -386,7 +381,7 @@ public class TaskService {
     /**
      * Rejects status changes not present in the Task lifecycle transition map.
      */
-    private void ensureTransitionAllowed(TaskStatus current, TaskStatus requested) {
+    private void ensureTransitionAllowed(Task.Status current, Task.Status requested) {
         if (!ALLOWED_TRANSITIONS.getOrDefault(current, Set.of()).contains(requested)) {
             throw new ConflictException(
                     "Task transition from " + current + " to " + requested + " is not allowed."
@@ -442,7 +437,7 @@ public class TaskService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Employee not found with id " + employeeId + "."
                 ));
-        if (employee.getStatus() != EmployeeStatus.ACTIVE
+        if (employee.getStatus() != Employee.Status.ACTIVE
                 || !Boolean.TRUE.equals(employee.getDepartment().getActive())) {
             throw new ConflictException("Tasks can be assigned only to active employees.");
         }
@@ -487,7 +482,7 @@ public class TaskService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Event not found with id " + eventId + "."
                 ));
-        if (event.getStatus() == EventStatus.CANCELLED) {
+        if (event.getStatus() == Event.Status.CANCELLED) {
             throw new ConflictException("Tasks cannot reference a cancelled event.");
         }
         return event;

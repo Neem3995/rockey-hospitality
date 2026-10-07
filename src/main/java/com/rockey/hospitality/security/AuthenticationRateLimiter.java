@@ -1,19 +1,20 @@
 package com.rockey.hospitality.security;
 
-import com.rockey.hospitality.exception.RateLimitExceededException;
-import org.springframework.stereotype.Service;
-
+import com.rockey.hospitality.exception.ApiException.RateLimitExceededException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.stereotype.Service;
 
 /**
- * Limits authentication attempts using in-memory, time-bounded counters.
- * Concurrent maps make counter updates safe within this application process, not across separate servers.
+ * STUDY NOTE: Rate limiting caps how many authentication attempts are allowed within a time window.
+ * Here, @Service lets AuthService share these process-local login, registration and refresh counters.
+ * Clock makes expiry testable, and ConcurrentHashMap updates counters atomically within this server
+ * process, not across servers.
+ * Exceeded limits throw a controlled failure that becomes HTTP 429.
  */
-// Registers this business/security service for constructor injection.
 @Service
 public class AuthenticationRateLimiter {
 

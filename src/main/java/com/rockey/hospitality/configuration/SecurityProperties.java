@@ -10,10 +10,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Binds external security settings without embedding private values in source.
- * These settings control token lifetimes, refresh-cookie flags, and the browser-origin allowlist.
+ * STUDY NOTE: A configuration-properties object holds application settings rather than business data.
+ * Here, @ConfigurationProperties binds rockey.security settings to these fields; @Component makes Spring manage
+ * the object.
+ * Here, @Validated checks required settings at startup instead of accepting invalid token lifetimes or a missing
+ * signing key.
+ * Token services, SecurityConfiguration and AuthController share these lifetimes, cookie options and
+ * allowed origins.
  */
-// Registers this class as a Spring-managed component discovered during startup.
 @Component
 // Enables validation of the bound configuration properties.
 @Validated
@@ -21,10 +25,14 @@ import java.util.List;
 @ConfigurationProperties(prefix = "rockey.security")
 public class SecurityProperties {
 
+    // Validation study key (the numbers/patterns are specified on each annotated field):
+    // @NotBlank requires non-null text containing at least one non-whitespace character.
+    // @Positive checks that a supplied number is greater than zero.
+    // Most shape/range validators accept null; @NotNull or @NotBlank supplies required-value checks.
+
     /**
      * Required private Base64 signing-key configuration; source contains no key value.
      */
-    // Requires non-null text containing at least one non-whitespace character.
     @NotBlank
     private String jwtSecret;
 

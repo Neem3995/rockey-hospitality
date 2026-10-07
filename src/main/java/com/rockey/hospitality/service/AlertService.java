@@ -1,41 +1,45 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.dto.alert.AlertEmployeeSummary;
-import com.rockey.hospitality.dto.alert.AlertResponse;
-import com.rockey.hospitality.dto.alert.AlertTaskSummary;
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.common.PageCriteria;
-import com.rockey.hospitality.dto.alert.AlertSearchCriteria;
+import com.rockey.hospitality.dto.AlertDtos.AlertEmployeeSummary;
+import com.rockey.hospitality.dto.AlertDtos.AlertResponse;
+import com.rockey.hospitality.dto.AlertDtos.AlertSearchCriteria;
+import com.rockey.hospitality.dto.AlertDtos.AlertTaskSummary;
+import com.rockey.hospitality.dto.CommonDtos.PageCriteria;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
 import com.rockey.hospitality.entity.Alert;
-import com.rockey.hospitality.entity.AlertStatus;
-import com.rockey.hospitality.entity.AlertType;
 import com.rockey.hospitality.entity.Employee;
-import com.rockey.hospitality.entity.EmployeeStatus;
-import com.rockey.hospitality.entity.Role;
-import com.rockey.hospitality.exception.BadRequestException;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ForbiddenException;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
+import com.rockey.hospitality.entity.User;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.repository.AlertRepository;
 import com.rockey.hospitality.repository.EmployeeRepository;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Clock;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.Set;
-
 /**
- * Handles alert reads and lifecycle changes with recipient ownership checks.
- * Resolving an alert preserves its row and history.
+ * STUDY NOTE: A Service holds business rules and coordinates an application workflow.
+ * Here, @Service lets Spring manage and inject this component; @Transactional groups database work so unchecked
+ * failures roll back writes.
+ * AlertService enforces recipient access and read/resolve lifecycle rules while retaining alert history.
+ * AlertController delegates here; Alert and Employee repositories provide the persisted data through
+ * JPA/Hibernate.
  */
-// Registers this business/security service for constructor injection.
 @Service
 public class AlertService {
+
+    // Transaction study key: Spring applies @Transactional when another component calls this managed service.
+    // readOnly=true requests a read-oriented transaction; it keeps lazy reads and DTO mapping inside the
+    // persistence boundary.
+    // readOnly is not an authorization rule; repositories still run only after the service's scope checks.
 
     /**
      * Allowlist of sortable persisted fields, rejecting arbitrary property paths from request input.
@@ -67,24 +71,23 @@ public class AlertService {
      * Applies optional filters and pagination, restricting STAFF to its eligible Employee identity.
      * With no status filter, the repository excludes resolved history.
      */
-    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public PagedResponse<AlertResponse> listAlerts(AlertSearchCriteria criteria, PageCriteria pagination,
-                                                 Long userId, Role role) {
+                                                 Long userId, User.Role role) {
         Long employeeId = criteria.employeeId();
-        AlertType type = criteria.type();
-        AlertStatus status = criteria.status();
+        Alert.Type type = criteria.type();
+        Alert.Status status = criteria.status();
         ensureViewer(role);
         if (employeeId != null && employeeId <= 0) throw new BadRequestException("Employee filter must be positive.");
         Long scope = employeeId;
-        if (role == Role.STAFF) {
+        if (role == User.Role.STAFF) {
             Long ownId = findActiveEmployee(userId).getId();
             if (employeeId != null && !employeeId.equals(ownId)) {
                 throw new ForbiddenException("STAFF may view only its own alerts.");
             }
             scope = ownId;
         }
-        Page<Alert> alerts = alertRepository.search(scope, type, status, AlertStatus.RESOLVED,
+        Page<Alert> alerts = alertRepository.search(scope, type, status, Alert.Status.RESOLVED,
                 pageRequest(pagination.page(), pagination.size(), pagination.sort()));
         return new PagedResponse<>(alerts.getContent().stream().map(this::toResponse).toList(),
                 alerts.getNumber(), alerts.getSize(), alerts.getTotalElements(), alerts.getTotalPages(), alerts.isLast());
@@ -93,12 +96,11 @@ public class AlertService {
     /**
      * Returns a safe alert DTO after role checks and, for STAFF, recipient ownership.
      */
-    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
-    public AlertResponse getAlert(Long id, Long userId, Role role) {
+    public AlertResponse getAlert(Long id, Long userId, User.Role role) {
         ensureViewer(role);
         Alert alert = alertRepository.findById(id).orElseThrow(() -> notFound(id));
-        if (role == Role.STAFF) ensureOwner(alert, userId);
+        if (role == User.Role.STAFF) ensureOwner(alert, userId);
         return toResponse(alert);
     }
 
@@ -106,14 +108,13 @@ public class AlertService {
      * Locks an UNREAD alert and permits only its eligible owner to mark it READ, including an ADMIN's own alert.
      * Other statuses conflict instead of silently changing history.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
-    public AlertResponse markRead(Long id, Long userId, Role role) {
+    public AlertResponse markRead(Long id, Long userId, User.Role role) {
         ensureViewer(role);
         Alert alert = findForUpdate(id);
         // ADMIN oversight does not grant permission to mark someone else's alert READ.
         ensureOwner(alert, userId);
-        if (alert.getStatus() != AlertStatus.UNREAD) {
+        if (alert.getStatus() != Alert.Status.UNREAD) {
             throw new ConflictException("Only UNREAD alerts may transition to READ.");
         }
         alert.markRead(LocalDateTime.now(clock));
@@ -124,14 +125,13 @@ public class AlertService {
      * Locks and resolves an unresolved alert without deleting it.
      * STAFF must own it; ADMIN may resolve alerts for oversight.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
-    public void resolveAlert(Long id, Long userId, Role role) {
+    public void resolveAlert(Long id, Long userId, User.Role role) {
         // Resolving records the lifecycle outcome; it does not erase the recipient's history.
         ensureViewer(role);
         Alert alert = findForUpdate(id);
-        if (role == Role.STAFF) ensureOwner(alert, userId);
-        if (alert.getStatus() == AlertStatus.RESOLVED) {
+        if (role == User.Role.STAFF) ensureOwner(alert, userId);
+        if (alert.getStatus() == Alert.Status.RESOLVED) {
             throw new ConflictException("Alert is already resolved.");
         }
         alert.resolve(LocalDateTime.now(clock));
@@ -141,8 +141,8 @@ public class AlertService {
     /**
      * Rejects roles other than STAFF and ADMIN before alert access.
      */
-    private void ensureViewer(Role role) {
-        if (role != Role.STAFF && role != Role.ADMIN) throw new ForbiddenException("Alert access is forbidden.");
+    private void ensureViewer(User.Role role) {
+        if (role != User.Role.STAFF && role != User.Role.ADMIN) throw new ForbiddenException("Alert access is forbidden.");
     }
 
     /**
@@ -151,7 +151,7 @@ public class AlertService {
     private Employee findActiveEmployee(Long userId) {
         Employee employee = employeeRepository.findByUserId(userId)
                 .orElseThrow(() -> new ForbiddenException("An active employee profile is required."));
-        if (employee.getStatus() != EmployeeStatus.ACTIVE || !Boolean.TRUE.equals(employee.getDepartment().getActive())) {
+        if (employee.getStatus() != Employee.Status.ACTIVE || !Boolean.TRUE.equals(employee.getDepartment().getActive())) {
             throw new ForbiddenException("An active employee profile is required.");
         }
         return employee;

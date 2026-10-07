@@ -3,11 +3,17 @@ package com.rockey.hospitality.configuration;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rockey.hospitality.controller.*;
-import com.rockey.hospitality.entity.Role;
 import com.rockey.hospitality.entity.User;
 import com.rockey.hospitality.repository.UserRepository;
 import com.rockey.hospitality.security.*;
+import com.rockey.hospitality.security.SecurityHandlers.RestAccessDeniedHandler;
+import com.rockey.hospitality.security.SecurityHandlers.RestAuthenticationEntryPoint;
+import com.rockey.hospitality.security.SecurityHandlers.SecurityErrorWriter;
 import com.rockey.hospitality.service.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.SecureRandom;
+import java.util.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -26,12 +32,6 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.SecureRandom;
-import java.util.*;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -47,7 +47,7 @@ class BackendContractTest {
     @Import({AuthController.class, DepartmentController.class, EmployeeController.class,
             RoomController.class, TaskController.class, EventController.class, InventoryController.class,
             AlertController.class, AnalyticsController.class, ApplicationConfiguration.class,
-            SecurityConfiguration.class, OpenApiConfiguration.class, JwtAuthenticationFilter.class,
+            SecurityConfiguration.class, ApplicationConfiguration.class, JwtAuthenticationFilter.class,
             JwtService.class, RockeyUserDetailsService.class, RestAuthenticationEntryPoint.class,
             RestAccessDeniedHandler.class, SecurityErrorWriter.class})
     static class DocumentationApplication { }
@@ -74,7 +74,7 @@ class BackendContractTest {
         registry.add("rockey.security.jwt-secret", () -> Base64.getEncoder().encodeToString(key));
     }
 
-    private String bearer(Role role) {
+    private String bearer(User.Role role) {
         User user = new User("Documentation Test", "documentation@example.test", "test-only-hash");
         ReflectionTestUtils.setField(user, "id", 999L);
         ReflectionTestUtils.setField(user, "role", role);
@@ -84,7 +84,7 @@ class BackendContractTest {
 
     @Test
     void generatedContractMatchesAll51OperationsAndApprovedFilters() throws Exception {
-        String body = mvc.perform(get("/v3/api-docs").header("Authorization", bearer(Role.ADMIN)))
+        String body = mvc.perform(get("/v3/api-docs").header("Authorization", bearer(User.Role.ADMIN)))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         JsonNode document = mapper.readTree(body);
         Set<String> expected = new TreeSet<>();
@@ -128,8 +128,8 @@ class BackendContractTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = Role.class, names = {"USER", "STAFF"})
-    void documentationIsAdminOnly(Role role) throws Exception {
+    @EnumSource(value = User.Role.class, names = {"USER", "STAFF"})
+    void documentationIsAdminOnly(User.Role role) throws Exception {
         mvc.perform(get("/v3/api-docs").header("Authorization", bearer(role))).andExpect(status().isForbidden());
     }
 
@@ -162,7 +162,7 @@ class BackendContractTest {
 
     @Test
     void securityHeadersAndHttpsOnlyHsts() throws Exception {
-        String token = bearer(Role.ADMIN);
+        String token = bearer(User.Role.ADMIN);
         mvc.perform(get("/api/analytics/dashboard").header("Authorization", token))
                 .andExpect(status().isOk()).andExpect(header().string("X-Content-Type-Options", "nosniff"))
                 .andExpect(header().string("X-Frame-Options", "DENY"))
@@ -173,8 +173,8 @@ class BackendContractTest {
 
     @Test
     void approvedSignedIntegerParsingIsUnchanged() throws Exception {
-        mvc.perform(get("/api/analytics/rooms").param("floor", "+1").header("Authorization", bearer(Role.ADMIN)))
+        mvc.perform(get("/api/analytics/rooms").param("floor", "+1").header("Authorization", bearer(User.Role.ADMIN)))
                 .andExpect(status().isOk());
-        verify(analytics).rooms(1, Role.ADMIN);
+        verify(analytics).rooms(1, User.Role.ADMIN);
     }
 }

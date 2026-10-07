@@ -1,32 +1,30 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.dto.task.TaskSearchCriteria;
-import com.rockey.hospitality.dto.common.PageCriteria;
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.task.CreateTaskRequest;
-import com.rockey.hospitality.dto.task.TaskResponse;
-import com.rockey.hospitality.dto.task.UpdateTaskRequest;
+import com.rockey.hospitality.dto.CommonDtos.PageCriteria;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.TaskDtos.CreateTaskRequest;
+import com.rockey.hospitality.dto.TaskDtos.TaskResponse;
+import com.rockey.hospitality.dto.TaskDtos.TaskSearchCriteria;
+import com.rockey.hospitality.dto.TaskDtos.UpdateTaskRequest;
 import com.rockey.hospitality.entity.Department;
 import com.rockey.hospitality.entity.Employee;
-import com.rockey.hospitality.entity.EmployeeStatus;
 import com.rockey.hospitality.entity.Event;
-import com.rockey.hospitality.entity.EventStatus;
-import com.rockey.hospitality.entity.Role;
 import com.rockey.hospitality.entity.Room;
-import com.rockey.hospitality.entity.RoomStatus;
 import com.rockey.hospitality.entity.Task;
-import com.rockey.hospitality.entity.TaskPriority;
-import com.rockey.hospitality.entity.TaskStatus;
 import com.rockey.hospitality.entity.User;
-import com.rockey.hospitality.exception.BadRequestException;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ForbiddenException;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.repository.DepartmentRepository;
 import com.rockey.hospitality.repository.EmployeeRepository;
 import com.rockey.hospitality.repository.EventRepository;
 import com.rockey.hospitality.repository.RoomRepository;
 import com.rockey.hospitality.repository.TaskRepository;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,12 +38,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-import java.util.stream.Stream;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -100,8 +92,8 @@ class TaskServiceTest {
 
         TaskResponse response = taskService.createTask(request);
 
-        assertThat(response.getStatus()).isEqualTo(TaskStatus.OPEN);
-        assertThat(response.getPriority()).isEqualTo(TaskPriority.MEDIUM);
+        assertThat(response.getStatus()).isEqualTo(Task.Status.OPEN);
+        assertThat(response.getPriority()).isEqualTo(Task.Priority.MEDIUM);
         assertThat(response.getAssignedEmployee()).isNull();
         assertThat(response.getRoom()).isNull();
         assertThat(response.getTitle()).isEqualTo("Inspect room");
@@ -110,12 +102,12 @@ class TaskServiceTest {
     @Test
     void createWithActiveEmployeeAndRoomStartsAssigned() {
         Department department = department(3L, true);
-        Employee employee = employee(12L, 21L, department, EmployeeStatus.ACTIVE);
+        Employee employee = employee(12L, 21L, department, Employee.Status.ACTIVE);
         Room room = room(218L, true);
         CreateTaskRequest request = createRequest();
         request.setAssignedEmployeeId(12L);
         request.setRoomId(218L);
-        request.setPriority(TaskPriority.HIGH);
+        request.setPriority(Task.Priority.HIGH);
         when(departmentRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(department));
         when(employeeRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(employee));
         when(roomRepository.findByIdForUpdate(218L)).thenReturn(Optional.of(room));
@@ -123,16 +115,16 @@ class TaskServiceTest {
 
         TaskResponse response = taskService.createTask(request);
 
-        assertThat(response.getStatus()).isEqualTo(TaskStatus.ASSIGNED);
+        assertThat(response.getStatus()).isEqualTo(Task.Status.ASSIGNED);
         assertThat(response.getAssignedEmployee().getId()).isEqualTo(12L);
         assertThat(response.getRoom().getId()).isEqualTo(218L);
-        assertThat(response.getPriority()).isEqualTo(TaskPriority.HIGH);
+        assertThat(response.getPriority()).isEqualTo(Task.Priority.HIGH);
     }
 
     @Test
     void createLinksEligibleEventAndReturnsShallowSummary() {
         Department department = department(3L, true);
-        Event event = event(7L, EventStatus.OPEN);
+        Event event = event(7L, Event.Status.OPEN);
         CreateTaskRequest request = createRequest();
         request.setEventId(7L);
         when(departmentRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(department));
@@ -143,7 +135,7 @@ class TaskServiceTest {
 
         assertThat(response.getEvent()).isNotNull();
         assertThat(response.getEvent().getId()).isEqualTo(7L);
-        assertThat(response.getEvent().getStatus()).isEqualTo(EventStatus.OPEN);
+        assertThat(response.getEvent().getStatus()).isEqualTo(Event.Status.OPEN);
     }
 
     @Test
@@ -153,7 +145,7 @@ class TaskServiceTest {
         cancelledRequest.setEventId(7L);
         when(departmentRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(department));
         when(eventRepository.findById(7L))
-                .thenReturn(Optional.of(event(7L, EventStatus.CANCELLED)));
+                .thenReturn(Optional.of(event(7L, Event.Status.CANCELLED)));
 
         assertThatThrownBy(() -> taskService.createTask(cancelledRequest))
                 .isInstanceOf(ConflictException.class)
@@ -192,7 +184,7 @@ class TaskServiceTest {
                 12L,
                 21L,
                 activeDepartment,
-                EmployeeStatus.INACTIVE
+                Employee.Status.INACTIVE
         )));
         assertThatThrownBy(() -> taskService.createTask(request))
                 .isInstanceOf(ConflictException.class)
@@ -219,16 +211,16 @@ class TaskServiceTest {
     @Test
     void listPassesAllFiltersPaginationAndOverdueTrue() {
         Department department = department(3L, true);
-        Task task = task(41L, TaskStatus.ASSIGNED, department,
-                employee(12L, 21L, department, EmployeeStatus.ACTIVE), room(218L, true));
+        Task task = task(41L, Task.Status.ASSIGNED, department,
+                employee(12L, 21L, department, Employee.Status.ACTIVE), room(218L, true));
         PageRequest pageRequest = PageRequest.of(
                 1,
                 5,
                 Sort.by(Sort.Direction.ASC, "dueAt")
         );
-        when(taskRepository.search(eq(new TaskSearchCriteria(3L, TaskStatus.ASSIGNED, TaskPriority.HIGH, 12L, 218L, 7L, true)), any(LocalDateTime.class), eq(TaskService.TERMINAL_STATUSES), eq(pageRequest))).thenReturn(new PageImpl<>(List.of(task), pageRequest, 7));
+        when(taskRepository.search(eq(new TaskSearchCriteria(3L, Task.Status.ASSIGNED, Task.Priority.HIGH, 12L, 218L, 7L, true)), any(LocalDateTime.class), eq(TaskService.TERMINAL_STATUSES), eq(pageRequest))).thenReturn(new PageImpl<>(List.of(task), pageRequest, 7));
 
-        PagedResponse<TaskResponse> response = taskService.listTasks(new TaskSearchCriteria(3L, TaskStatus.ASSIGNED, TaskPriority.HIGH, 12L, 218L, 7L, true), new PageCriteria(1, 5, "dueAt,asc"));
+        PagedResponse<TaskResponse> response = taskService.listTasks(new TaskSearchCriteria(3L, Task.Status.ASSIGNED, Task.Priority.HIGH, 12L, 218L, 7L, true), new PageCriteria(1, 5, "dueAt,asc"));
 
         assertThat(response.getContent()).hasSize(1);
         assertThat(response.getPage()).isEqualTo(1);
@@ -272,13 +264,13 @@ class TaskServiceTest {
     @Test
     void getAllowsAdminAndAssignedStaffButRejectsOtherStaff() {
         Department department = department(3L, true);
-        Employee assigned = employee(12L, 21L, department, EmployeeStatus.ACTIVE);
-        Task task = task(41L, TaskStatus.ASSIGNED, department, assigned, null);
+        Employee assigned = employee(12L, 21L, department, Employee.Status.ACTIVE);
+        Task task = task(41L, Task.Status.ASSIGNED, department, assigned, null);
         when(taskRepository.findById(41L)).thenReturn(Optional.of(task));
 
-        assertThat(taskService.getTask(41L, 3L, Role.ADMIN).getId()).isEqualTo(41L);
-        assertThat(taskService.getTask(41L, 21L, Role.STAFF).getId()).isEqualTo(41L);
-        assertThatThrownBy(() -> taskService.getTask(41L, 22L, Role.STAFF))
+        assertThat(taskService.getTask(41L, 3L, User.Role.ADMIN).getId()).isEqualTo(41L);
+        assertThat(taskService.getTask(41L, 21L, User.Role.STAFF).getId()).isEqualTo(41L);
+        assertThatThrownBy(() -> taskService.getTask(41L, 22L, User.Role.STAFF))
                 .isInstanceOf(ForbiddenException.class);
     }
 
@@ -286,24 +278,24 @@ class TaskServiceTest {
     void getRejectsMissingTask() {
         when(taskRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> taskService.getTask(99L, 3L, Role.ADMIN))
+        assertThatThrownBy(() -> taskService.getTask(99L, 3L, User.Role.ADMIN))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @ParameterizedTest
     @MethodSource("allowedTransitions")
-    void updatePermitsCanonicalTransitions(TaskStatus current, TaskStatus requested) {
+    void updatePermitsCanonicalTransitions(Task.Status current, Task.Status requested) {
         Department department = department(3L, true);
-        Employee assigned = current == TaskStatus.OPEN
+        Employee assigned = current == Task.Status.OPEN
                 ? null
-                : employee(12L, 21L, department, EmployeeStatus.ACTIVE);
+                : employee(12L, 21L, department, Employee.Status.ACTIVE);
         Task task = task(41L, current, department, assigned, null);
         UpdateTaskRequest request = updateRequest(requested);
-        Employee requestedEmployee = requested == TaskStatus.OPEN
-                || (current == TaskStatus.OPEN && requested == TaskStatus.CANCELLED)
+        Employee requestedEmployee = requested == Task.Status.OPEN
+                || (current == Task.Status.OPEN && requested == Task.Status.CANCELLED)
                 ? null
                 : assigned == null
-                ? employee(12L, 21L, department, EmployeeStatus.ACTIVE)
+                ? employee(12L, 21L, department, Employee.Status.ACTIVE)
                 : assigned;
         request.setAssignedEmployeeId(
                 requestedEmployee == null ? null : requestedEmployee.getId()
@@ -318,7 +310,7 @@ class TaskServiceTest {
         TaskResponse response = taskService.updateTask(41L, request);
 
         assertThat(response.getStatus()).isEqualTo(requested);
-        if (requested == TaskStatus.COMPLETED) {
+        if (requested == Task.Status.COMPLETED) {
             assertThat(response.getCompletedAt()).isNotNull();
         } else {
             assertThat(response.getCompletedAt()).isNull();
@@ -328,9 +320,9 @@ class TaskServiceTest {
     @Test
     void updateRejectsInvalidTransitionAndTerminalMutation() {
         Department department = department(3L, true);
-        Employee employee = employee(12L, 21L, department, EmployeeStatus.ACTIVE);
-        Task open = task(41L, TaskStatus.OPEN, department, null, null);
-        UpdateTaskRequest invalid = updateRequest(TaskStatus.COMPLETED);
+        Employee employee = employee(12L, 21L, department, Employee.Status.ACTIVE);
+        Task open = task(41L, Task.Status.OPEN, department, null, null);
+        UpdateTaskRequest invalid = updateRequest(Task.Status.COMPLETED);
         invalid.setAssignedEmployeeId(12L);
         when(taskRepository.findById(41L)).thenReturn(Optional.of(open));
         when(departmentRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(department));
@@ -340,9 +332,9 @@ class TaskServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("OPEN to COMPLETED");
 
-        Task completed = task(42L, TaskStatus.COMPLETED, department, employee, null);
+        Task completed = task(42L, Task.Status.COMPLETED, department, employee, null);
         when(taskRepository.findById(42L)).thenReturn(Optional.of(completed));
-        UpdateTaskRequest request = updateRequest(TaskStatus.COMPLETED);
+        UpdateTaskRequest request = updateRequest(Task.Status.COMPLETED);
         assertThatThrownBy(() -> taskService.updateTask(42L, request)).isInstanceOf(ConflictException.class)
                 .hasMessage("Completed or cancelled tasks are terminal.");
     }
@@ -350,10 +342,10 @@ class TaskServiceTest {
     @Test
     void updateRejectsChangedPastDueDateButAllowsExistingOverdueDate() {
         Department department = department(3L, true);
-        Task task = task(41L, TaskStatus.OPEN, department, null, null);
+        Task task = task(41L, Task.Status.OPEN, department, null, null);
         LocalDateTime existingPastDue = LocalDateTime.now().minusDays(1);
         ReflectionTestUtils.setField(task, "dueAt", existingPastDue);
-        UpdateTaskRequest request = updateRequest(TaskStatus.OPEN);
+        UpdateTaskRequest request = updateRequest(Task.Status.OPEN);
         request.setDueAt(existingPastDue);
         when(taskRepository.findById(41L)).thenReturn(Optional.of(task));
         when(departmentRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(department));
@@ -370,14 +362,14 @@ class TaskServiceTest {
     @Test
     void cancelPreservesHistoryAndRejectsTerminalTasks() {
         Department department = department(3L, true);
-        Employee employee = employee(12L, 21L, department, EmployeeStatus.ACTIVE);
-        Task task = task(41L, TaskStatus.ASSIGNED, department, employee, null);
+        Employee employee = employee(12L, 21L, department, Employee.Status.ACTIVE);
+        Task task = task(41L, Task.Status.ASSIGNED, department, employee, null);
         when(taskRepository.findById(41L)).thenReturn(Optional.of(task));
         when(taskRepository.save(task)).thenReturn(task);
 
         TaskResponse response = taskService.cancelTask(41L);
 
-        assertThat(response.getStatus()).isEqualTo(TaskStatus.CANCELLED);
+        assertThat(response.getStatus()).isEqualTo(Task.Status.CANCELLED);
         assertThat(response.getAssignedEmployee().getId()).isEqualTo(12L);
         verify(taskRepository, never()).delete(any());
 
@@ -388,29 +380,29 @@ class TaskServiceTest {
     @Test
     void assignedStaffCompletesTaskAndServerSetsCompletionTime() {
         Department department = department(3L, true);
-        Employee employee = employee(12L, 21L, department, EmployeeStatus.ACTIVE);
-        Task task = task(41L, TaskStatus.IN_PROGRESS, department, employee, null);
+        Employee employee = employee(12L, 21L, department, Employee.Status.ACTIVE);
+        Task task = task(41L, Task.Status.IN_PROGRESS, department, employee, null);
         when(taskRepository.findById(41L)).thenReturn(Optional.of(task));
         when(taskRepository.save(task)).thenReturn(task);
 
-        TaskResponse response = taskService.completeTask(41L, 21L, Role.STAFF);
+        TaskResponse response = taskService.completeTask(41L, 21L, User.Role.STAFF);
 
-        assertThat(response.getStatus()).isEqualTo(TaskStatus.COMPLETED);
+        assertThat(response.getStatus()).isEqualTo(Task.Status.COMPLETED);
         assertThat(response.getCompletedAt()).isNotNull();
     }
 
     @Test
     void completionRejectsOtherStaffAndOpenTask() {
         Department department = department(3L, true);
-        Employee employee = employee(12L, 21L, department, EmployeeStatus.ACTIVE);
-        Task assigned = task(41L, TaskStatus.ASSIGNED, department, employee, null);
+        Employee employee = employee(12L, 21L, department, Employee.Status.ACTIVE);
+        Task assigned = task(41L, Task.Status.ASSIGNED, department, employee, null);
         when(taskRepository.findById(41L)).thenReturn(Optional.of(assigned));
-        assertThatThrownBy(() -> taskService.completeTask(41L, 22L, Role.STAFF))
+        assertThatThrownBy(() -> taskService.completeTask(41L, 22L, User.Role.STAFF))
                 .isInstanceOf(ForbiddenException.class);
 
-        Task open = task(42L, TaskStatus.OPEN, department, null, null);
+        Task open = task(42L, Task.Status.OPEN, department, null, null);
         when(taskRepository.findById(42L)).thenReturn(Optional.of(open));
-        assertThatThrownBy(() -> taskService.completeTask(42L, 3L, Role.ADMIN))
+        assertThatThrownBy(() -> taskService.completeTask(42L, 3L, User.Role.ADMIN))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("OPEN to COMPLETED");
     }
@@ -418,23 +410,23 @@ class TaskServiceTest {
     @Test
     void assignAndUnassignApplyCanonicalStateChanges() {
         Department department = department(3L, true);
-        Employee employee = employee(12L, 21L, department, EmployeeStatus.ACTIVE);
-        Task task = task(41L, TaskStatus.OPEN, department, null, null);
+        Employee employee = employee(12L, 21L, department, Employee.Status.ACTIVE);
+        Task task = task(41L, Task.Status.OPEN, department, null, null);
         when(taskRepository.findById(41L)).thenReturn(Optional.of(task));
         when(employeeRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(employee));
         when(taskRepository.save(task)).thenReturn(task);
 
         assertThat(taskService.assignTask(41L, 12L).getStatus())
-                .isEqualTo(TaskStatus.ASSIGNED);
+                .isEqualTo(Task.Status.ASSIGNED);
         assertThat(taskService.assignTask(41L, null).getStatus())
-                .isEqualTo(TaskStatus.OPEN);
+                .isEqualTo(Task.Status.OPEN);
     }
 
     @Test
     void assignRejectsInactiveEmployeeAndInProgressUnassignment() {
         Department department = department(3L, true);
-        Employee inactive = employee(12L, 21L, department, EmployeeStatus.INACTIVE);
-        Task open = task(41L, TaskStatus.OPEN, department, null, null);
+        Employee inactive = employee(12L, 21L, department, Employee.Status.INACTIVE);
+        Task open = task(41L, Task.Status.OPEN, department, null, null);
         when(taskRepository.findById(41L)).thenReturn(Optional.of(open));
         when(employeeRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(inactive));
         assertThatThrownBy(() -> taskService.assignTask(41L, 12L))
@@ -442,9 +434,9 @@ class TaskServiceTest {
 
         Task inProgress = task(
                 42L,
-                TaskStatus.IN_PROGRESS,
+                Task.Status.IN_PROGRESS,
                 department,
-                employee(13L, 22L, department, EmployeeStatus.ACTIVE),
+                employee(13L, 22L, department, Employee.Status.ACTIVE),
                 null
         );
         when(taskRepository.findById(42L)).thenReturn(Optional.of(inProgress));
@@ -456,31 +448,31 @@ class TaskServiceTest {
     @Test
     void assignedListAllowsSelfStaffAndAdminButRejectsOtherStaff() {
         Department department = department(3L, true);
-        Employee employee = employee(12L, 21L, department, EmployeeStatus.ACTIVE);
+        Employee employee = employee(12L, 21L, department, Employee.Status.ACTIVE);
         PageRequest pageRequest = PageRequest.of(
                 0,
                 20,
                 Sort.by(Sort.Direction.DESC, "createdAt")
         );
         when(employeeRepository.findById(12L)).thenReturn(Optional.of(employee));
-        when(taskRepository.search(eq(new TaskSearchCriteria(null, TaskStatus.ASSIGNED, TaskPriority.HIGH, 12L, null, null, false)), any(LocalDateTime.class), eq(TaskService.TERMINAL_STATUSES), eq(pageRequest))).thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
+        when(taskRepository.search(eq(new TaskSearchCriteria(null, Task.Status.ASSIGNED, Task.Priority.HIGH, 12L, null, null, false)), any(LocalDateTime.class), eq(TaskService.TERMINAL_STATUSES), eq(pageRequest))).thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
 
-        taskService.listAssignedTasks(12L, TaskStatus.ASSIGNED, TaskPriority.HIGH, false, new PageCriteria(0, 20, "createdAt,desc"), 21L, Role.STAFF);
-        taskService.listAssignedTasks(12L, TaskStatus.ASSIGNED, TaskPriority.HIGH, false, new PageCriteria(0, 20, "createdAt,desc"), 3L, Role.ADMIN);
+        taskService.listAssignedTasks(12L, Task.Status.ASSIGNED, Task.Priority.HIGH, false, new PageCriteria(0, 20, "createdAt,desc"), 21L, User.Role.STAFF);
+        taskService.listAssignedTasks(12L, Task.Status.ASSIGNED, Task.Priority.HIGH, false, new PageCriteria(0, 20, "createdAt,desc"), 3L, User.Role.ADMIN);
         PageCriteria paginationCriteria1 = new PageCriteria(0, 20, "createdAt,desc");
-        assertThatThrownBy(() -> taskService.listAssignedTasks(12L, null, null, null, paginationCriteria1, 22L, Role.STAFF)).isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> taskService.listAssignedTasks(12L, null, null, null, paginationCriteria1, 22L, User.Role.STAFF)).isInstanceOf(ForbiddenException.class);
     }
 
     private static Stream<Arguments> allowedTransitions() {
         return Stream.of(
-                Arguments.of(TaskStatus.OPEN, TaskStatus.ASSIGNED),
-                Arguments.of(TaskStatus.OPEN, TaskStatus.CANCELLED),
-                Arguments.of(TaskStatus.ASSIGNED, TaskStatus.OPEN),
-                Arguments.of(TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS),
-                Arguments.of(TaskStatus.ASSIGNED, TaskStatus.COMPLETED),
-                Arguments.of(TaskStatus.ASSIGNED, TaskStatus.CANCELLED),
-                Arguments.of(TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED),
-                Arguments.of(TaskStatus.IN_PROGRESS, TaskStatus.CANCELLED)
+                Arguments.of(Task.Status.OPEN, Task.Status.ASSIGNED),
+                Arguments.of(Task.Status.OPEN, Task.Status.CANCELLED),
+                Arguments.of(Task.Status.ASSIGNED, Task.Status.OPEN),
+                Arguments.of(Task.Status.ASSIGNED, Task.Status.IN_PROGRESS),
+                Arguments.of(Task.Status.ASSIGNED, Task.Status.COMPLETED),
+                Arguments.of(Task.Status.ASSIGNED, Task.Status.CANCELLED),
+                Arguments.of(Task.Status.IN_PROGRESS, Task.Status.COMPLETED),
+                Arguments.of(Task.Status.IN_PROGRESS, Task.Status.CANCELLED)
         );
     }
 
@@ -489,17 +481,17 @@ class TaskServiceTest {
         request.setTitle("  Inspect room  ");
         request.setDescription("  Check readiness.  ");
         request.setDepartmentId(3L);
-        request.setPriority(TaskPriority.MEDIUM);
+        request.setPriority(Task.Priority.MEDIUM);
         request.setDueAt(LocalDateTime.of(2030, 10, 4, 15, 0));
         return request;
     }
 
-    private UpdateTaskRequest updateRequest(TaskStatus status) {
+    private UpdateTaskRequest updateRequest(Task.Status status) {
         UpdateTaskRequest request = new UpdateTaskRequest();
         request.setTitle("Updated task");
         request.setDescription("Updated instructions");
         request.setDepartmentId(3L);
-        request.setPriority(TaskPriority.HIGH);
+        request.setPriority(Task.Priority.HIGH);
         request.setStatus(status);
         request.setDueAt(LocalDateTime.of(2030, 10, 5, 15, 0));
         return request;
@@ -518,11 +510,11 @@ class TaskServiceTest {
             Long id,
             Long userId,
             Department department,
-            EmployeeStatus status
+            Employee.Status status
     ) {
         User user = new User("Worker", "worker" + userId + "@example.test", "hash");
         ReflectionTestUtils.setField(user, "id", userId);
-        user.provisionEmployeeAccess(Role.STAFF, department);
+        user.provisionEmployeeAccess(User.Role.STAFF, department);
         Employee employee = new Employee(
                 "Worker",
                 "worker" + id + "@example.test",
@@ -536,13 +528,13 @@ class TaskServiceTest {
     }
 
     private Room room(Long id, boolean active) {
-        Room room = new Room("218", "STANDARD", 2, RoomStatus.READY, null);
+        Room room = new Room("218", "STANDARD", 2, Room.Status.READY, null);
         ReflectionTestUtils.setField(room, "id", id);
         ReflectionTestUtils.setField(room, "active", active);
         return room;
     }
 
-    private Event event(Long id, EventStatus status) {
+    private Event event(Long id, Event.Status status) {
         Event event = new Event(
                 "Leadership Conference",
                 null,
@@ -557,7 +549,7 @@ class TaskServiceTest {
 
     private Task task(
             Long id,
-            TaskStatus status,
+            Task.Status status,
             Department department,
             Employee employee,
             Room room
@@ -568,12 +560,12 @@ class TaskServiceTest {
                 department,
                 employee,
                 room,
-                TaskPriority.HIGH,
+                Task.Priority.HIGH,
                 LocalDateTime.of(2030, 10, 4, 15, 0)
         );
         ReflectionTestUtils.setField(task, "id", id);
         ReflectionTestUtils.setField(task, "status", status);
-        if (status == TaskStatus.COMPLETED) {
+        if (status == Task.Status.COMPLETED) {
             ReflectionTestUtils.setField(
                     task,
                     "completedAt",

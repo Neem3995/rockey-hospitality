@@ -16,14 +16,15 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
-
 import java.time.LocalDateTime;
 
 /**
- * Persists one employee-addressed alert with optional Task context and a stable source key.
- * Read and resolution timestamps preserve its lifecycle history.
+ * STUDY NOTE: An Entity is a Java class JPA/Hibernate maps to stored database rows.
+ * Here, @Entity marks this persistent class, while @Table selects the alerts MySQL table.
+ * Alert stores one recipient Employee, optional Task context and source/lifecycle history used by
+ * AlertService and automation.
+ * schema.sql creates the tables; Hibernate validates their shape instead of creating them.
  */
-// Marks a JPA-mapped database entity; the configured application validates the supplied schema instead of creating it.
 @Entity
 // Maps to the existing alerts table; @Index describes existing lookup indexes. These mappings do not create the application schema.
 @Table(name = "alerts", indexes = {
@@ -33,34 +34,42 @@ import java.time.LocalDateTime;
 })
 public class Alert {
 
+    // Persistence study key:
+    // @JoinColumn names a foreign-key column linking this row to another table's primary key.
+    // @Id marks the primary key; @GeneratedValue(IDENTITY) lets MySQL generate it on insertion.
+    // @Column maps a Java field to a SQL column; nullable/length settings describe the supplied schema.
+    // @Enumerated(STRING) stores enum names such as UNREAD, not positions such as 0 or 1.
+    // @Index describes an existing lookup index; schema.sql, not these comments or mappings, creates it.
+    // Time study key: callbacks use server-local LocalDateTime; Hibernate's JDBC time-zone setting is UTC.
+    // MySQL DATETIME has no zone label; do not silently treat every operational API LocalDateTime as UTC.
+    // Validation study key (the numbers/patterns are specified on each annotated field):
+    // @NotBlank requires non-null text containing at least one non-whitespace character.
+    // @NotNull requires a value; it does not check text length or a numeric range.
+    // @Size checks length/count against the declared min/max (text length for the fields here).
+    // @Positive checks that a supplied number is greater than zero.
+    // Most shape/range validators accept null; @NotNull or @NotBlank supplies required-value checks.
+
     /**
      * Database identifier used to refer to this resource in requests and relationships.
      */
-    // Identifies the entity's primary-key field.
     @Id
-    // Uses the database IDENTITY mechanism to generate the primary key.
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    // Requires a supplied number to be greater than zero; null is handled separately.
     @Positive
     private Long id;
 
     /**
      * Alert source category used by filtering and automated reconciliation.
      */
-    // Requires a value; further shape or range checks are separate.
     @NotNull
-    // Stores the enum's name as text, not its numeric ordinal.
     @Enumerated(EnumType.STRING)
     // Maps this field to its matching SQL column (non-null, length 20) in the supplied schema.
     @Column(nullable = false, length = 20)
-    private AlertType type = AlertType.SYSTEM;
+    private Alert.Type type = Alert.Type.SYSTEM;
 
     /**
      * Safe client-facing explanatory text without private authentication or database details.
      */
-    // Requires non-null text containing at least one non-whitespace character.
     @NotBlank
-    // Checks supplied text length from 3 to 500 characters; required text is checked separately.
     @Size(min = 3, max = 500)
     // Maps this field to its matching SQL column (non-null, length 500) in the supplied schema.
     @Column(nullable = false, length = 500)
@@ -69,29 +78,25 @@ public class Alert {
     /**
      * Alert urgency enum; distinct from its source type and read/resolved state.
      */
-    // Requires a value; further shape or range checks are separate.
     @NotNull
-    // Stores the enum's name as text, not its numeric ordinal.
     @Enumerated(EnumType.STRING)
     // Maps this field to its matching SQL column (non-null, length 20) in the supplied schema.
     @Column(nullable = false, length = 20)
-    private AlertSeverity severity = AlertSeverity.INFO;
+    private Alert.Severity severity = Alert.Severity.INFO;
 
     /**
      * Lifecycle enum value interpreted by this resource's service and transition rules.
      */
-    // Requires a value; further shape or range checks are separate.
     @NotNull
-    // Stores the enum's name as text, not its numeric ordinal.
     @Enumerated(EnumType.STRING)
     // Maps this field to its matching SQL column (non-null, length 20) in the supplied schema.
     @Column(nullable = false, length = 20)
-    private AlertStatus status = AlertStatus.UNREAD;
+    private Alert.Status status = Alert.Status.UNREAD;
 
     /**
      * Required recipient Employee used for ownership checks and serialized alert reconciliation.
      */
-    // Many rows can reference the same related entity; LAZY loads the relationship when it is needed within the service transaction.
+    // @ManyToOne lets many Alert rows reference the same Employee; LAZY defers loading it until needed.
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     // An Employee owns the notice; sourceKey correlates generated Room/Task/Inventory conditions.
     // Stores this relationship's foreign key in employee_id, which must be present.
@@ -101,7 +106,7 @@ public class Alert {
     /**
      * Optional Task context; Room and Inventory alerts can have no Task reference.
      */
-    // Many rows can reference the same related entity; LAZY loads the relationship when it is needed within the service transaction.
+    // @ManyToOne lets many Alert rows reference the same Task; LAZY defers loading it until needed.
     @ManyToOne(fetch = FetchType.LAZY)
     // Stores this relationship's foreign key in task_id, which may be null.
     @JoinColumn(name = "task_id")
@@ -110,7 +115,6 @@ public class Alert {
     /**
      * Stable source-condition identifier used to suppress equivalent unresolved alerts.
      */
-    // Checks supplied text length up to 120 characters; required text is checked separately.
     @Size(max = 120)
     // Maps this field to source_key SQL column (length 120) in the supplied schema.
     @Column(name = "source_key", length = 120)
@@ -146,7 +150,7 @@ public class Alert {
     /**
      * Builds an alert with recipient, optional Task, source key, and supplied creation time, trimming its message.
      */
-    public Alert(AlertType type, String message, Employee employee, Task task,
+    public Alert(Alert.Type type, String message, Employee employee, Task task,
                  String sourceKey, LocalDateTime createdAt) {
         this.type = type;
         this.message = message.trim();
@@ -161,7 +165,7 @@ public class Alert {
      * Service validation decides whether this transition is allowed.
      */
     public void markRead(LocalDateTime now) {
-        status = AlertStatus.READ;
+        status = Alert.Status.READ;
         if (readAt == null) readAt = now;
     }
 
@@ -169,20 +173,84 @@ public class Alert {
      * Sets RESOLVED and fills missing read and resolution times while preserving earlier timestamps.
      */
     public void resolve(LocalDateTime now) {
-        status = AlertStatus.RESOLVED;
+        status = Alert.Status.RESOLVED;
         if (readAt == null) readAt = now;
         if (resolvedAt == null) resolvedAt = now;
     }
 
     public Long getId() { return id; }
-    public AlertType getType() { return type; }
+    public Alert.Type getType() { return type; }
     public String getMessage() { return message; }
-    public AlertSeverity getSeverity() { return severity; }
-    public AlertStatus getStatus() { return status; }
+    public Alert.Severity getSeverity() { return severity; }
+    public Alert.Status getStatus() { return status; }
     public Employee getEmployee() { return employee; }
     public Task getTask() { return task; }
     public String getSourceKey() { return sourceKey; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getReadAt() { return readAt; }
     public LocalDateTime getResolvedAt() { return resolvedAt; }
+
+
+    /**
+     * Alert.Status is an enum: a Java type limited to a fixed set of valid choices.
+     * Tracks alert lifecycle: UNREAD has not been acknowledged, READ remains unresolved, and RESOLVED preserves finished history.
+     */
+    public enum Status {
+        /**
+         * Unacknowledged and unresolved alert.
+         */
+        UNREAD,
+        /**
+         * Acknowledged alert still awaiting resolution.
+         */
+        READ,
+        /**
+         * Finished alert retained for history.
+         */
+        RESOLVED }
+
+    /**
+     * Alert.Severity is an enum: a Java type limited to a fixed set of valid choices.
+     * Describes alert urgency: INFO, WARNING, HIGH, or CRITICAL.
+     * Current automated alerts use the Alert entity's INFO default.
+     */
+    public enum Severity {
+        /**
+         * Informational urgency and the current default.
+         */
+        INFO,
+        /**
+         * Warning urgency represented in the model.
+         */
+        WARNING,
+        /**
+         * High urgency represented in the model.
+         */
+        HIGH,
+        /**
+         * Critical urgency represented in the model.
+         */
+        CRITICAL }
+
+    /**
+     * Alert.Type is an enum: a Java type limited to a fixed set of valid choices.
+     * Identifies the source category used for filtering and automation: ROOM, TASK, INVENTORY, or SYSTEM.
+     */
+    public enum Type {
+        /**
+         * Room-readiness source condition.
+         */
+        ROOM,
+        /**
+         * Assigned Task overdue or priority source condition.
+         */
+        TASK,
+        /**
+         * Stock at or below its threshold.
+         */
+        INVENTORY,
+        /**
+         * General system alert category retained in the model.
+         */
+        SYSTEM }
 }

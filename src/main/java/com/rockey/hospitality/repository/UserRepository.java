@@ -6,10 +6,16 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.Optional;
 
 /**
- * Spring Data JPA supplies standard persistence operations for User entities through JpaRepository.
- * Domain services use the methods below for filtered reads, eligibility checks, and locked writes where declared.
+ * STUDY NOTE: A Repository is the data-access layer a Service uses to reach database data.
+ * JpaRepository lets Spring Data supply standard create/read/update/delete methods without writing basic
+ * SQL.
+ * Authentication, Employee and registration services use account lookups, uniqueness checks and membership
+ * checks.
+ * Spring creates this interface's implementation and sends its queries through JPA/Hibernate to MySQL.
  */
 public interface UserRepository extends JpaRepository<User, Long> {
+
+    // Repository study key: findBy/existsBy/countBy names are interpreted by Spring Data as queries.
 
     /**
      * Finds an account by case-insensitive email for authentication and current-principal loading.

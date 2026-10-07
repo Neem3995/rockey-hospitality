@@ -16,10 +16,12 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 
 /**
- * Persists one operational Department and its active flag.
- * Soft deactivation keeps related employee, work, and inventory history.
+ * STUDY NOTE: An Entity is a Java class JPA/Hibernate maps to stored database rows.
+ * Here, @Entity marks this persistent class, while @Table selects the departments MySQL table.
+ * Department stores work-group identity and active state; services check its Employee, Task and Inventory
+ * references before deactivation.
+ * schema.sql creates the tables; Hibernate validates their shape instead of creating them.
  */
-// Marks a JPA-mapped database entity; the configured application validates the supplied schema instead of creating it.
 @Entity
 // Maps to the existing departments table; @UniqueConstraint describes unique keys. These mappings do not create the application schema.
 @Table(
@@ -27,25 +29,34 @@ import java.time.LocalDateTime;
         uniqueConstraints = @UniqueConstraint(name = "uk_departments_name", columnNames = "name")
 )
 public class Department {
+
+    // Persistence study key:
+    // @UniqueConstraint describes a unique key so duplicate field values or join pairs cannot be stored.
+    // @Id marks the primary key; @GeneratedValue(IDENTITY) lets MySQL generate it on insertion.
+    // @Column maps a Java field to a SQL column; nullable/length settings describe the supplied schema.
+    // @PrePersist runs before the first insert; the callback supplies lifecycle defaults and timestamps.
+    // @PreUpdate runs before an entity update; the callback refreshes its update timestamp.
+    // Time study key: callbacks use server-local LocalDateTime; Hibernate's JDBC time-zone setting is UTC.
+    // MySQL DATETIME has no zone label; do not silently treat every operational API LocalDateTime as UTC.
+    // Validation study key (the numbers/patterns are specified on each annotated field):
+    // @NotBlank requires non-null text containing at least one non-whitespace character.
+    // @Size checks length/count against the declared min/max (text length for the fields here).
+    // @Positive checks that a supplied number is greater than zero.
+    // Most shape/range validators accept null; @NotNull or @NotBlank supplies required-value checks.
     // Employees, Tasks and Inventory reference this row; deactivation must preserve their history.
 
     /**
      * Database identifier used to refer to this resource in requests and relationships.
      */
-    // Identifies the entity's primary-key field.
     @Id
-    // Uses the database IDENTITY mechanism to generate the primary key.
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    // Requires a supplied number to be greater than zero; null is handled separately.
     @Positive
     private Long id;
 
     /**
      * Stored display name for this record; it grants no permissions.
      */
-    // Requires non-null text containing at least one non-whitespace character.
     @NotBlank
-    // Checks supplied text length from 2 to 100 characters; required text is checked separately.
     @Size(min = 2, max = 100)
     // Maps this field to its matching SQL column (non-null, length 100) in the supplied schema.
     @Column(nullable = false, length = 100)
@@ -54,7 +65,6 @@ public class Department {
     /**
      * Optional descriptive text; services normalize blank values where required.
      */
-    // Checks supplied text length up to 255 characters; required text is checked separately.
     @Size(max = 255)
     // Maps this field to its matching SQL column (length 255) in the supplied schema.
     @Column(length = 255)
@@ -98,7 +108,6 @@ public class Department {
     /**
      * Defaults a missing active flag and initializes creation/update timestamps from server-local time.
      */
-    // Runs this lifecycle callback before the entity's first insert.
     @PrePersist
     void prepareForInsert() {
         LocalDateTime now = LocalDateTime.now();
@@ -112,7 +121,6 @@ public class Department {
     /**
      * Refreshes updatedAt using server-local time before Hibernate writes an entity update.
      */
-    // Runs this lifecycle callback before a changed entity is written.
     @PreUpdate
     void prepareForUpdate() {
         updatedAt = LocalDateTime.now();

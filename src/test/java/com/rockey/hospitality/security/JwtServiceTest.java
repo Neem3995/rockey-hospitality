@@ -1,23 +1,21 @@
 package com.rockey.hospitality.security;
 
 import com.rockey.hospitality.configuration.SecurityProperties;
-import com.rockey.hospitality.entity.Role;
 import com.rockey.hospitality.entity.User;
+import com.rockey.hospitality.security.JwtService;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
-import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
-
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.Date;
-
+import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -30,14 +28,14 @@ class JwtServiceTest {
                 properties(),
                 Clock.fixed(now, ZoneOffset.UTC)
         );
-        User user = user(12L, Role.ADMIN);
+        User user = user(12L, User.Role.ADMIN);
 
-        IssuedAccessToken token = jwtService.issueAccessToken(user);
-        AccessTokenClaims claims = jwtService.parseAccessToken(token.getValue());
+        JwtService.IssuedAccessToken token = jwtService.issueAccessToken(user);
+        JwtService.AccessTokenClaims claims = jwtService.parseAccessToken(token.getValue());
 
         assertThat(claims.getUserId()).isEqualTo(12L);
         assertThat(claims.getEmail()).isEqualTo("admin@example.test");
-        assertThat(claims.getRole()).isEqualTo(Role.ADMIN);
+        assertThat(claims.getRole()).isEqualTo(User.Role.ADMIN);
         assertThat(token.getExpiresAt()).isEqualTo(now.plusSeconds(15 * 60));
     }
 
@@ -48,7 +46,7 @@ class JwtServiceTest {
                 properties,
                 Clock.fixed(Instant.parse("2020-01-01T00:00:00Z"), ZoneOffset.UTC)
         );
-        String token = issuingService.issueAccessToken(user(12L, Role.USER)).getValue();
+        String token = issuingService.issueAccessToken(user(12L, User.Role.USER)).getValue();
         JwtService validatingService = new JwtService(
                 properties,
                 Clock.fixed(Instant.parse("2020-01-01T00:16:00Z"), ZoneOffset.UTC)
@@ -94,7 +92,7 @@ class JwtServiceTest {
         return properties;
     }
 
-    private User user(Long id, Role role) {
+    private User user(Long id, User.Role role) {
         User user = new User("Admin User", "admin@example.test", "bcrypt-hash");
         ReflectionTestUtils.setField(user, "id", id);
         ReflectionTestUtils.setField(user, "role", role);

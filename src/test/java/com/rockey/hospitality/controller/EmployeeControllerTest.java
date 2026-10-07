@@ -3,16 +3,18 @@ package com.rockey.hospitality.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.rockey.hospitality.dto.auth.DepartmentSummary;
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.employee.CreateEmployeeRequest;
-import com.rockey.hospitality.dto.employee.EmployeeResponse;
-import com.rockey.hospitality.dto.employee.UpdateEmployeeRequest;
-import com.rockey.hospitality.entity.EmployeeStatus;
-import com.rockey.hospitality.exception.BadRequestException;
+import com.rockey.hospitality.dto.AuthDtos.DepartmentSummary;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.EmployeeDtos.CreateEmployeeRequest;
+import com.rockey.hospitality.dto.EmployeeDtos.EmployeeResponse;
+import com.rockey.hospitality.dto.EmployeeDtos.UpdateEmployeeRequest;
+import com.rockey.hospitality.entity.Employee;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.exception.GlobalExceptionHandler;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
 import com.rockey.hospitality.service.EmployeeService;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,10 +25,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -72,7 +70,7 @@ class EmployeeControllerTest {
     void listEmployeesReturnsPagedResponseAndPassesFilters() throws Exception {
         when(employeeService.listEmployees(
                 3L,
-                EmployeeStatus.ACTIVE,
+                Employee.Status.ACTIVE,
                 1,
                 5,
                 "createdAt,desc"
@@ -209,7 +207,7 @@ class EmployeeControllerTest {
                 "worker@example.test",
                 new DepartmentSummary(3L, "Housekeeping"),
                 "Room Attendant",
-                EmployeeStatus.ACTIVE,
+                Employee.Status.ACTIVE,
                 LocalDateTime.of(2026, 10, 3, 9, 0),
                 LocalDateTime.of(2026, 10, 3, 9, 0)
         );

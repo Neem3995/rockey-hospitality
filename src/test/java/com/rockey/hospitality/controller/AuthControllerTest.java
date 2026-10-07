@@ -1,20 +1,20 @@
 package com.rockey.hospitality.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.rockey.hospitality.configuration.SecurityProperties;
-import com.rockey.hospitality.dto.auth.AuthResponse;
-import com.rockey.hospitality.dto.auth.CurrentUserResponse;
-import com.rockey.hospitality.entity.Role;
-import com.rockey.hospitality.entity.UserStatus;
+import com.rockey.hospitality.dto.AuthDtos.AuthResponse;
+import com.rockey.hospitality.dto.AuthDtos.CurrentUserResponse;
+import com.rockey.hospitality.entity.User;
+import com.rockey.hospitality.exception.ApiException.InvalidCredentialsException;
+import com.rockey.hospitality.exception.ApiException.RateLimitExceededException;
 import com.rockey.hospitality.exception.GlobalExceptionHandler;
-import com.rockey.hospitality.exception.InvalidCredentialsException;
-import com.rockey.hospitality.exception.RateLimitExceededException;
 import com.rockey.hospitality.service.AuthService;
-import com.rockey.hospitality.service.AuthSession;
 import jakarta.servlet.http.Cookie;
+import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,10 +28,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
-
-import java.time.Instant;
-import java.util.List;
-
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -275,14 +271,14 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.error").value("Too Many Requests"));
     }
 
-    private AuthSession session() {
+    private AuthService.AuthSession session() {
         CurrentUserResponse user = new CurrentUserResponse(
                 1L,
                 "Guest User",
                 "guest@example.test",
-                Role.USER,
+                User.Role.USER,
                 null,
-                UserStatus.ACTIVE,
+                User.Status.ACTIVE,
                 null
         );
         AuthResponse response = new AuthResponse(
@@ -292,6 +288,6 @@ class AuthControllerTest {
                 Instant.parse("2026-10-10T20:00:00Z"),
                 user
         );
-        return new AuthSession(response, "raw-refresh-token");
+        return new AuthService.AuthSession(response, "raw-refresh-token");
     }
 }

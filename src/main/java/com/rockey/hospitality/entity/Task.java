@@ -17,14 +17,15 @@ import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
-
 import java.time.LocalDateTime;
 
 /**
- * Persists operational work with a required Department and optional assignee, Room, and Event.
- * Terminal lifecycle changes preserve references instead of deleting the row.
+ * STUDY NOTE: An Entity is a Java class JPA/Hibernate maps to stored database rows.
+ * Here, @Entity marks this persistent class, while @Table selects the tasks MySQL table.
+ * Task stores work for TaskService with a required Department and optional Employee, Room and Event
+ * references.
+ * schema.sql creates the tables; Hibernate validates their shape instead of creating them.
  */
-// Marks a JPA-mapped database entity; the configured application validates the supplied schema instead of creating it.
 @Entity
 // Maps to the existing tasks table; @Index describes existing lookup indexes. These mappings do not create the application schema.
 @Table(
@@ -45,23 +46,34 @@ import java.time.LocalDateTime;
 )
 public class Task {
 
+    // Persistence study key:
+    // @JoinColumn names a foreign-key column linking this row to another table's primary key.
+    // @Id marks the primary key; @GeneratedValue(IDENTITY) lets MySQL generate it on insertion.
+    // @Column maps a Java field to a SQL column; nullable/length settings describe the supplied schema.
+    // @Enumerated(STRING) stores enum names such as OPEN, not positions such as 0 or 1.
+    // @PrePersist runs before the first insert; the callback supplies lifecycle defaults and timestamps.
+    // @PreUpdate runs before an entity update; the callback refreshes its update timestamp.
+    // @Index describes an existing lookup index; schema.sql, not these comments or mappings, creates it.
+    // Time study key: callbacks use server-local LocalDateTime; Hibernate's JDBC time-zone setting is UTC.
+    // MySQL DATETIME has no zone label; do not silently treat every operational API LocalDateTime as UTC.
+    // Validation study key (the numbers/patterns are specified on each annotated field):
+    // @NotBlank requires non-null text containing at least one non-whitespace character.
+    // @Size checks length/count against the declared min/max (text length for the fields here).
+    // @Positive checks that a supplied number is greater than zero.
+    // Most shape/range validators accept null; @NotNull or @NotBlank supplies required-value checks.
+
     /**
      * Database identifier used to refer to this resource in requests and relationships.
      */
-    // Identifies the entity's primary-key field.
     @Id
-    // Uses the database IDENTITY mechanism to generate the primary key.
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    // Requires a supplied number to be greater than zero; null is handled separately.
     @Positive
     private Long id;
 
     /**
      * Human-readable work or Event title.
      */
-    // Requires non-null text containing at least one non-whitespace character.
     @NotBlank
-    // Checks supplied text length from 3 to 120 characters; required text is checked separately.
     @Size(min = 3, max = 120)
     // Maps this field to its matching SQL column (non-null, length 120) in the supplied schema.
     @Column(nullable = false, length = 120)
@@ -70,7 +82,6 @@ public class Task {
     /**
      * Optional descriptive text; services normalize blank values where required.
      */
-    // Checks supplied text length up to 1000 characters; required text is checked separately.
     @Size(max = 1000)
     // Maps this field to its matching SQL column (length 1000) in the supplied schema.
     @Column(length = 1000)
@@ -79,25 +90,23 @@ public class Task {
     /**
      * Lifecycle enum value interpreted by this resource's service and transition rules.
      */
-    // Stores the enum's name as text, not its numeric ordinal.
     @Enumerated(EnumType.STRING)
     // Maps this field to its matching SQL column (non-null, length 20) in the supplied schema.
     @Column(nullable = false, length = 20)
-    private TaskStatus status = TaskStatus.OPEN;
+    private Task.Status status = Task.Status.OPEN;
 
     /**
      * Task urgency enum; the service/entity defaults omitted creation priority to MEDIUM, while updates require a value.
      */
-    // Stores the enum's name as text, not its numeric ordinal.
     @Enumerated(EnumType.STRING)
     // Maps this field to its matching SQL column (non-null, length 20) in the supplied schema.
     @Column(nullable = false, length = 20)
-    private TaskPriority priority = TaskPriority.MEDIUM;
+    private Task.Priority priority = Task.Priority.MEDIUM;
 
     /**
      * Required owning Department for the work; service checks require an active destination.
      */
-    // Many rows can reference the same related entity; LAZY loads the relationship when it is needed within the service transaction.
+    // @ManyToOne lets many Task rows reference the same Department; LAZY defers loading it until needed.
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     // Department is required; assignee, Room and Event are optional work context below.
     // Stores this relationship's foreign key in department_id, which must be present.
@@ -107,7 +116,7 @@ public class Task {
     /**
      * Optional assignee whose linked User determines STAFF ownership; terminal work retains this history.
      */
-    // Many rows can reference the same related entity; LAZY loads the relationship when it is needed within the service transaction.
+    // @ManyToOne lets many Task rows reference the same Employee; LAZY defers loading it until needed.
     @ManyToOne(fetch = FetchType.LAZY)
     // Stores this relationship's foreign key in assigned_employee_id, which may be null.
     @JoinColumn(name = "assigned_employee_id")
@@ -116,7 +125,7 @@ public class Task {
     /**
      * Optional Room context; new references require an active Room.
      */
-    // Many rows can reference the same related entity; LAZY loads the relationship when it is needed within the service transaction.
+    // @ManyToOne lets many Task rows reference the same Room; LAZY defers loading it until needed.
     @ManyToOne(fetch = FetchType.LAZY)
     // Stores this relationship's foreign key in room_id, which may be null.
     @JoinColumn(name = "room_id")
@@ -125,7 +134,7 @@ public class Task {
     /**
      * Optional Event preparation context; cancelled Events cannot be assigned to new or edited Tasks.
      */
-    // Many rows can reference the same related entity; LAZY loads the relationship when it is needed within the service transaction.
+    // @ManyToOne lets many Task rows reference the same Event; LAZY defers loading it until needed.
     @ManyToOne(fetch = FetchType.LAZY)
     // Stores this relationship's foreign key in event_id, which may be null.
     @JoinColumn(name = "event_id")
@@ -176,7 +185,7 @@ public class Task {
             Employee assignedEmployee,
             Room room,
             Event event,
-            TaskPriority priority,
+            Task.Priority priority,
             LocalDateTime dueAt
     ) {
         this.title = title;
@@ -185,9 +194,9 @@ public class Task {
         this.assignedEmployee = assignedEmployee;
         this.room = room;
         this.event = event;
-        this.priority = priority == null ? TaskPriority.MEDIUM : priority;
+        this.priority = priority == null ? Task.Priority.MEDIUM : priority;
         this.dueAt = dueAt;
-        this.status = assignedEmployee == null ? TaskStatus.OPEN : TaskStatus.ASSIGNED;
+        this.status = assignedEmployee == null ? Task.Status.OPEN : Task.Status.ASSIGNED;
     }
 
     /**
@@ -199,7 +208,7 @@ public class Task {
             Department department,
             Employee assignedEmployee,
             Room room,
-            TaskPriority priority,
+            Task.Priority priority,
             LocalDateTime dueAt
     ) {
         this(
@@ -217,15 +226,14 @@ public class Task {
     /**
      * Defaults status from assignment and priority to MEDIUM and initializes creation/update timestamps from server-local time.
      */
-    // Runs this lifecycle callback before the entity's first insert.
     @PrePersist
     void prepareForInsert() {
         LocalDateTime now = LocalDateTime.now();
         if (status == null) {
-            status = assignedEmployee == null ? TaskStatus.OPEN : TaskStatus.ASSIGNED;
+            status = assignedEmployee == null ? Task.Status.OPEN : Task.Status.ASSIGNED;
         }
         if (priority == null) {
-            priority = TaskPriority.MEDIUM;
+            priority = Task.Priority.MEDIUM;
         }
         createdAt = now;
         updatedAt = now;
@@ -234,7 +242,6 @@ public class Task {
     /**
      * Refreshes updatedAt using server-local time before Hibernate writes an entity update.
      */
-    // Runs this lifecycle callback before a changed entity is written.
     @PreUpdate
     void prepareForUpdate() {
         updatedAt = LocalDateTime.now();
@@ -250,8 +257,8 @@ public class Task {
             Employee assignedEmployee,
             Room room,
             Event event,
-            TaskPriority priority,
-            TaskStatus status,
+            Task.Priority priority,
+            Task.Status status,
             LocalDateTime dueAt,
             LocalDateTime completedAt
     ) {
@@ -273,10 +280,10 @@ public class Task {
      */
     public void assign(Employee employee) {
         assignedEmployee = employee;
-        if (employee == null && status == TaskStatus.ASSIGNED) {
-            status = TaskStatus.OPEN;
-        } else if (employee != null && status == TaskStatus.OPEN) {
-            status = TaskStatus.ASSIGNED;
+        if (employee == null && status == Task.Status.ASSIGNED) {
+            status = Task.Status.OPEN;
+        } else if (employee != null && status == Task.Status.OPEN) {
+            status = Task.Status.ASSIGNED;
         }
     }
 
@@ -284,7 +291,7 @@ public class Task {
      * Records COMPLETED and the supplied completion time after service access and transition checks.
      */
     public void complete(LocalDateTime completionTime) {
-        status = TaskStatus.COMPLETED;
+        status = Task.Status.COMPLETED;
         completedAt = completionTime;
     }
 
@@ -292,7 +299,7 @@ public class Task {
      * Records CANCELLED, clears completion time, and leaves relationship history intact.
      */
     public void cancel() {
-        status = TaskStatus.CANCELLED;
+        status = Task.Status.CANCELLED;
         completedAt = null;
     }
 
@@ -308,11 +315,11 @@ public class Task {
         return description;
     }
 
-    public TaskStatus getStatus() {
+    public Task.Status getStatus() {
         return status;
     }
 
-    public TaskPriority getPriority() {
+    public Task.Priority getPriority() {
         return priority;
     }
 
@@ -346,5 +353,58 @@ public class Task {
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+
+    /**
+     * Task.Status is an enum: a Java type limited to a fixed set of valid choices.
+     * Tracks OPEN, ASSIGNED, and IN_PROGRESS work, with COMPLETED and CANCELLED as terminal history.
+     * TaskService enforces transitions and assignee requirements.
+     */
+    public enum Status {
+        /**
+         * Unassigned, non-terminal work.
+         */
+        OPEN,
+        /**
+         * Non-terminal work with an assignee.
+         */
+        ASSIGNED,
+        /**
+         * Assigned work currently underway.
+         */
+        IN_PROGRESS,
+        /**
+         * Terminal work with completion time and retained assignee history.
+         */
+        COMPLETED,
+        /**
+         * Terminal cancelled work retaining references without a completion time.
+         */
+        CANCELLED
+    }
+
+    /**
+     * Task.Priority is an enum: a Java type limited to a fixed set of valid choices.
+     * Labels work urgency as LOW, MEDIUM, HIGH, or URGENT.
+     * MEDIUM is the default; HIGH and URGENT are used by Task alert automation.
+     */
+    public enum Priority {
+        /**
+         * Lower-priority work.
+         */
+        LOW,
+        /**
+         * Default work priority.
+         */
+        MEDIUM,
+        /**
+         * High-priority work included in Task alert conditions.
+         */
+        HIGH,
+        /**
+         * Urgent work included in Task alert conditions.
+         */
+        URGENT
     }
 }

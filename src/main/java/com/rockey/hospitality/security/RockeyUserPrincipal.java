@@ -1,20 +1,23 @@
 package com.rockey.hospitality.security;
 
-import com.rockey.hospitality.entity.Role;
 import com.rockey.hospitality.entity.User;
-import com.rockey.hospitality.entity.UserStatus;
+import java.util.Collection;
+import java.util.List;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import java.util.Collection;
-import java.util.List;
-
 /**
- * Adapts a database User to Spring Security's authenticated identity.
- * Its internal password hash is for authentication, not a response field.
+ * STUDY NOTE: A principal is the authenticated identity Spring Security passes to controllers.
+ * This class adapts User to Spring's UserDetails contract and maps USER/STAFF/ADMIN to role authorities
+ * used for authorization.
+ * Employee jobRole and Department describe work context, not security permissions.
+ * The password hash stays internal for authentication and is not a response DTO field.
  */
 public class RockeyUserPrincipal implements UserDetails {
+
+    // @Override shows that this method implements a superclass/interface contract rather than inventing a
+    // separate hook.
 
     /**
      * Database identifier used to refer to this resource in requests and relationships.
@@ -31,7 +34,7 @@ public class RockeyUserPrincipal implements UserDetails {
     /**
      * USER/STAFF/ADMIN security role used by backend authorization.
      */
-    private final Role role;
+    private final User.Role role;
     /**
      * Current database account eligibility snapshot used by JWT authentication.
      */
@@ -45,14 +48,14 @@ public class RockeyUserPrincipal implements UserDetails {
         this.email = user.getEmail();
         this.passwordHash = user.getPasswordHash();
         this.role = user.getRole();
-        this.active = user.getStatus() == UserStatus.ACTIVE;
+        this.active = user.getStatus() == User.Status.ACTIVE;
     }
 
     public Long getId() {
         return id;
     }
 
-    public Role getRole() {
+    public User.Role getRole() {
         return role;
     }
 
@@ -60,25 +63,21 @@ public class RockeyUserPrincipal implements UserDetails {
      * Converts the stored security role into Spring's ROLE_ authority format for route authorization.
      * Employee jobRole is not an authority.
      */
-    // Implements the inherited Java/Spring contract rather than defining a separate callback.
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
     }
 
-    // Implements the inherited Java/Spring contract rather than defining a separate callback.
     @Override
     public String getPassword() {
         return passwordHash;
     }
 
-    // Implements the inherited Java/Spring contract rather than defining a separate callback.
     @Override
     public String getUsername() {
         return email;
     }
 
-    // Implements the inherited Java/Spring contract rather than defining a separate callback.
     @Override
     public boolean isEnabled() {
         return active;

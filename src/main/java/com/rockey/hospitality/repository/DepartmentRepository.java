@@ -11,21 +11,27 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Spring Data JPA supplies standard persistence operations for Department entities through JpaRepository.
- * Domain services use the methods below for filtered reads, eligibility checks, and locked writes where declared.
+ * STUDY NOTE: A Repository is the data-access layer a Service uses to reach database data.
+ * JpaRepository lets Spring Data supply standard create/read/update/delete methods without writing basic
+ * SQL.
+ * Department and other services share locked lookups so assignment cannot bypass deactivation checks.
+ * Spring creates this interface's implementation and sends its queries through JPA/Hibernate to MySQL.
  */
 public interface DepartmentRepository extends JpaRepository<Department, Long> {
+
+    // Repository study key: findBy/existsBy/countBy names are interpreted by Spring Data as queries.
+    // @Query supplies fixed JPQL (entity/field-based query text), not string-interpolated user input.
+    // @Param binds a Java argument to a named query value instead of inserting it into query text.
+    // @Lock(PESSIMISTIC_WRITE) keeps a database row locked until the caller's transaction ends to serialize
+    // conflicting changes.
 
     /**
      * Locks one Department so reference assignment and deactivation checks share the same serialization point.
      */
-    // Acquires a PESSIMISTIC_WRITE database row lock until the caller's transaction ends.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     // Creation/transfer and deactivation share this lock to keep active-reference checks valid.
-    // Executes this fixed JPQL query; supplied filter values are bound parameters rather than query text.
     @Query("SELECT department FROM Department department WHERE department.id = :id")
     Optional<Department> findByIdForUpdate(
-            // Binds this argument as the named id query parameter, not interpolated query text.
             @Param("id") Long id);
 
     /**

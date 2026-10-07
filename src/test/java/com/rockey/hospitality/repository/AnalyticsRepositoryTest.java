@@ -1,18 +1,18 @@
 package com.rockey.hospitality.repository;
 
 import com.rockey.hospitality.entity.*;
+import com.rockey.hospitality.entity.Employee;
+import com.rockey.hospitality.entity.Task;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.hibernate.SessionFactory;
 import org.hibernate.cfg.Configuration;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -28,7 +28,7 @@ class AnalyticsRepositoryTest {
     private AnalyticsRepository repository;
     private String hql;
     private static final LocalDateTime NOW = LocalDateTime.of(2030, 1, 1, 12, 0);
-    private static final List<TaskStatus> NON_TERMINAL = List.of(TaskStatus.OPEN, TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS);
+    private static final List<Task.Status> NON_TERMINAL = List.of(Task.Status.OPEN, Task.Status.ASSIGNED, Task.Status.IN_PROGRESS);
 
     @BeforeAll static void compileMappingsWithoutDatabase() {
         Configuration configuration = new Configuration()
@@ -140,7 +140,7 @@ class AnalyticsRepositoryTest {
 
     @Test void completedPreparationIsEventLinkedCompletedTasksOnly() {
         repository.completedEventTaskCount(); assertTrue(hql.contains("task.event IS NOT NULL AND task.status = :status"));
-        verify(countQuery).setParameter("status", TaskStatus.COMPLETED);
+        verify(countQuery).setParameter("status", Task.Status.COMPLETED);
     }
 
     @Test void dashboardDepartmentCountIsActiveOnly() {
@@ -150,7 +150,7 @@ class AnalyticsRepositoryTest {
     @Test void staffingCountsIncludeActiveEmployeesWithoutUserLogins() {
         repository.activeEmployeesByDepartment(List.of(3L, 7L));
         assertFalse(hql.contains("employee.user")); assertTrue(hql.contains("GROUP BY employee.department.id"));
-        verify(groupQuery).setParameter("ids", List.of(3L, 7L)); verify(groupQuery).setParameter("status", EmployeeStatus.ACTIVE);
+        verify(groupQuery).setParameter("ids", List.of(3L, 7L)); verify(groupQuery).setParameter("status", Employee.Status.ACTIVE);
     }
 
     @Test void workloadUsesTaskDepartmentAndCanonicalNonTerminalSet() {

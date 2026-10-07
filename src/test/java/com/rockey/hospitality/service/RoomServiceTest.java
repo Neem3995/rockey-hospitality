@@ -1,25 +1,26 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.dto.common.PageCriteria;
-import com.rockey.hospitality.dto.room.RoomSearchCriteria;
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.room.CreateRoomRequest;
-import com.rockey.hospitality.dto.room.RoomResponse;
-import com.rockey.hospitality.dto.room.UpdateRoomRequest;
+import com.rockey.hospitality.dto.CommonDtos.PageCriteria;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.RoomDtos.CreateRoomRequest;
+import com.rockey.hospitality.dto.RoomDtos.RoomResponse;
+import com.rockey.hospitality.dto.RoomDtos.RoomSearchCriteria;
+import com.rockey.hospitality.dto.RoomDtos.UpdateRoomRequest;
 import com.rockey.hospitality.entity.Department;
 import com.rockey.hospitality.entity.Employee;
-import com.rockey.hospitality.entity.EmployeeStatus;
-import com.rockey.hospitality.entity.Role;
 import com.rockey.hospitality.entity.Room;
-import com.rockey.hospitality.entity.RoomStatus;
 import com.rockey.hospitality.entity.User;
-import com.rockey.hospitality.exception.BadRequestException;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ForbiddenException;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.repository.EmployeeRepository;
 import com.rockey.hospitality.repository.RoomRepository;
 import com.rockey.hospitality.repository.TaskRepository;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,12 +34,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-import java.util.stream.Stream;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -82,7 +77,7 @@ class RoomServiceTest {
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
         verify(roomRepository).save(captor.capture());
         assertThat(captor.getValue().getRoomNumber()).isEqualTo("AB-12");
-        assertThat(response.getStatus()).isEqualTo(RoomStatus.READY);
+        assertThat(response.getStatus()).isEqualTo(Room.Status.READY);
         assertThat(response.getRoomType()).isEqualTo("STANDARD");
         assertThat(response.getNextArrivalAt()).isEqualTo(request.getNextArrivalAt());
     }
@@ -113,21 +108,21 @@ class RoomServiceTest {
 
     @Test
     void adminListPassesAllFiltersAndReturnsCanonicalPageMetadata() {
-        Room room = room(12L, RoomStatus.DIRTY, true);
+        Room room = room(12L, Room.Status.DIRTY, true);
         PageRequest pageRequest = PageRequest.of(
                 1,
                 5,
                 Sort.by(Sort.Direction.DESC, "createdAt")
         );
         when(roomRepository.search(
-                RoomStatus.DIRTY,
+                Room.Status.DIRTY,
                 2,
                 "Standard",
                 false,
                 pageRequest
         )).thenReturn(new PageImpl<>(List.of(room), pageRequest, 7));
 
-        PagedResponse<RoomResponse> response = roomService.listRooms(new RoomSearchCriteria(RoomStatus.DIRTY, 2, " Standard ", false), new PageCriteria(1, 5, "createdAt,desc"), Role.ADMIN);
+        PagedResponse<RoomResponse> response = roomService.listRooms(new RoomSearchCriteria(Room.Status.DIRTY, 2, " Standard ", false), new PageCriteria(1, 5, "createdAt,desc"), User.Role.ADMIN);
 
         assertThat(response.getContent()).hasSize(1);
         assertThat(response.getPage()).isEqualTo(1);
@@ -145,7 +140,7 @@ class RoomServiceTest {
         when(roomRepository.search(null, null, null, true, pageRequest))
                 .thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
 
-        roomService.listRooms(new RoomSearchCriteria(null, null, null, null), new PageCriteria(0, 20, "roomNumber,asc"), Role.STAFF);
+        roomService.listRooms(new RoomSearchCriteria(null, null, null, null), new PageCriteria(0, 20, "roomNumber,asc"), User.Role.STAFF);
 
         verify(roomRepository).search(null, null, null, true, pageRequest);
     }
@@ -154,7 +149,7 @@ class RoomServiceTest {
     void staffCannotRequestInactiveRooms() {
         RoomSearchCriteria filterCriteria13 = new RoomSearchCriteria(null, null, null, false);
         PageCriteria paginationCriteria14 = new PageCriteria(0, 20, "roomNumber,asc");
-        assertThatThrownBy(() -> roomService.listRooms(filterCriteria13, paginationCriteria14, Role.STAFF)).isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> roomService.listRooms(filterCriteria13, paginationCriteria14, User.Role.STAFF)).isInstanceOf(ForbiddenException.class);
 
         verify(roomRepository, never()).search(any(), any(), any(), any(), any());
     }
@@ -163,27 +158,27 @@ class RoomServiceTest {
     void listRejectsInvalidFiltersPaginationAndSort() {
         RoomSearchCriteria filterCriteria11 = new RoomSearchCriteria(null, 0, null, null);
         PageCriteria paginationCriteria12 = new PageCriteria(0, 20, "roomNumber,asc");
-        assertThatThrownBy(() -> roomService.listRooms(filterCriteria11, paginationCriteria12, Role.ADMIN)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> roomService.listRooms(filterCriteria11, paginationCriteria12, User.Role.ADMIN)).isInstanceOf(BadRequestException.class);
         RoomSearchCriteria filterCriteria9 = new RoomSearchCriteria(null, null, " ", null);
         PageCriteria paginationCriteria10 = new PageCriteria(0, 20, "roomNumber,asc");
-        assertThatThrownBy(() -> roomService.listRooms(filterCriteria9, paginationCriteria10, Role.ADMIN)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> roomService.listRooms(filterCriteria9, paginationCriteria10, User.Role.ADMIN)).isInstanceOf(BadRequestException.class);
         RoomSearchCriteria filterCriteria7 = new RoomSearchCriteria(null, null, null, null);
         PageCriteria paginationCriteria8 = new PageCriteria(-1, 20, "roomNumber,asc");
-        assertThatThrownBy(() -> roomService.listRooms(filterCriteria7, paginationCriteria8, Role.ADMIN)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> roomService.listRooms(filterCriteria7, paginationCriteria8, User.Role.ADMIN)).isInstanceOf(BadRequestException.class);
         RoomSearchCriteria filterCriteria5 = new RoomSearchCriteria(null, null, null, null);
         PageCriteria paginationCriteria6 = new PageCriteria(0, 101, "roomNumber,asc");
-        assertThatThrownBy(() -> roomService.listRooms(filterCriteria5, paginationCriteria6, Role.ADMIN)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> roomService.listRooms(filterCriteria5, paginationCriteria6, User.Role.ADMIN)).isInstanceOf(BadRequestException.class);
         RoomSearchCriteria filterCriteria3 = new RoomSearchCriteria(null, null, null, null);
         PageCriteria paginationCriteria4 = new PageCriteria(0, 20, "passwordHash,asc");
-        assertThatThrownBy(() -> roomService.listRooms(filterCriteria3, paginationCriteria4, Role.ADMIN)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> roomService.listRooms(filterCriteria3, paginationCriteria4, User.Role.ADMIN)).isInstanceOf(BadRequestException.class);
     }
 
     @Test
     void getAllowsStaffToViewActiveRoom() {
         when(roomRepository.findById(12L))
-                .thenReturn(Optional.of(room(12L, RoomStatus.READY, true)));
+                .thenReturn(Optional.of(room(12L, Room.Status.READY, true)));
 
-        RoomResponse response = roomService.getRoom(12L, Role.STAFF);
+        RoomResponse response = roomService.getRoom(12L, User.Role.STAFF);
 
         assertThat(response.getId()).isEqualTo(12L);
         assertThat(response.getActive()).isTrue();
@@ -191,13 +186,13 @@ class RoomServiceTest {
 
     @Test
     void getRejectsInactiveRoomForStaffButAllowsAdmin() {
-        Room room = room(12L, RoomStatus.OUT_OF_SERVICE, false);
+        Room room = room(12L, Room.Status.OUT_OF_SERVICE, false);
         when(roomRepository.findById(12L)).thenReturn(Optional.of(room));
 
-        assertThatThrownBy(() -> roomService.getRoom(12L, Role.STAFF))
+        assertThatThrownBy(() -> roomService.getRoom(12L, User.Role.STAFF))
                 .isInstanceOf(ForbiddenException.class);
 
-        RoomResponse adminResponse = roomService.getRoom(12L, Role.ADMIN);
+        RoomResponse adminResponse = roomService.getRoom(12L, User.Role.ADMIN);
         assertThat(adminResponse.getActive()).isFalse();
     }
 
@@ -205,13 +200,13 @@ class RoomServiceTest {
     void getRejectsMissingRoom() {
         when(roomRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> roomService.getRoom(99L, Role.ADMIN))
+        assertThatThrownBy(() -> roomService.getRoom(99L, User.Role.ADMIN))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
     void updateChangesDetailsArrivalAndActiveStateWithoutChangingStatus() {
-        Room room = room(12L, RoomStatus.MAINTENANCE, false);
+        Room room = room(12L, Room.Status.MAINTENANCE, false);
         UpdateRoomRequest request = updateRequest();
         request.setActive(true);
         when(roomRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(room));
@@ -223,7 +218,7 @@ class RoomServiceTest {
         assertThat(response.getFloor()).isEqualTo(3);
         assertThat(response.getNextArrivalAt()).isEqualTo(request.getNextArrivalAt());
         assertThat(response.getActive()).isTrue();
-        assertThat(response.getStatus()).isEqualTo(RoomStatus.MAINTENANCE);
+        assertThat(response.getStatus()).isEqualTo(Room.Status.MAINTENANCE);
     }
 
     @Test
@@ -239,7 +234,7 @@ class RoomServiceTest {
 
     @Test
     void deactivateIsIdempotentSoftLifecycleChange() {
-        Room room = room(12L, RoomStatus.READY, true);
+        Room room = room(12L, Room.Status.READY, true);
         when(roomRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(room));
         when(roomRepository.save(room)).thenReturn(room);
 
@@ -252,26 +247,26 @@ class RoomServiceTest {
 
     @Test
     void canonicalTurnoverSequenceReachesReadyWithoutBookingData() {
-        Room room = room(12L, RoomStatus.OCCUPIED, true);
+        Room room = room(12L, Room.Status.OCCUPIED, true);
         when(roomRepository.findById(12L)).thenReturn(Optional.of(room));
         when(roomRepository.save(room)).thenReturn(room);
 
-        roomService.updateStatus(12L, RoomStatus.DIRTY, 3L, Role.ADMIN);
-        roomService.updateStatus(12L, RoomStatus.CLEANING, 3L, Role.ADMIN);
-        roomService.updateStatus(12L, RoomStatus.INSPECTION, 3L, Role.ADMIN);
+        roomService.updateStatus(12L, Room.Status.DIRTY, 3L, User.Role.ADMIN);
+        roomService.updateStatus(12L, Room.Status.CLEANING, 3L, User.Role.ADMIN);
+        roomService.updateStatus(12L, Room.Status.INSPECTION, 3L, User.Role.ADMIN);
         RoomResponse response = roomService.updateStatus(
                 12L,
-                RoomStatus.READY,
+                Room.Status.READY,
                 3L,
-                Role.ADMIN
+                User.Role.ADMIN
         );
 
-        assertThat(response.getStatus()).isEqualTo(RoomStatus.READY);
+        assertThat(response.getStatus()).isEqualTo(Room.Status.READY);
     }
 
     @ParameterizedTest
     @MethodSource("allowedTransitions")
-    void permitsEveryCanonicalTransition(RoomStatus current, RoomStatus requested) {
+    void permitsEveryCanonicalTransition(Room.Status current, Room.Status requested) {
         Room room = room(12L, current, true);
         when(roomRepository.findById(12L)).thenReturn(Optional.of(room));
         when(roomRepository.save(room)).thenReturn(room);
@@ -280,7 +275,7 @@ class RoomServiceTest {
                 12L,
                 requested,
                 3L,
-                Role.ADMIN
+                User.Role.ADMIN
         );
 
         assertThat(response.getStatus()).isEqualTo(requested);
@@ -288,14 +283,14 @@ class RoomServiceTest {
 
     @Test
     void rejectsDirectDirtyToReadyTransition() {
-        Room room = room(12L, RoomStatus.DIRTY, true);
+        Room room = room(12L, Room.Status.DIRTY, true);
         when(roomRepository.findById(12L)).thenReturn(Optional.of(room));
 
         assertThatThrownBy(() -> roomService.updateStatus(
                 12L,
-                RoomStatus.READY,
+                Room.Status.READY,
                 3L,
-                Role.ADMIN
+                User.Role.ADMIN
         )).isInstanceOf(ConflictException.class)
                 .hasMessageContaining("DIRTY to READY");
 
@@ -305,13 +300,13 @@ class RoomServiceTest {
     @Test
     void rejectsStatusChangeForInactiveRoom() {
         when(roomRepository.findById(12L))
-                .thenReturn(Optional.of(room(12L, RoomStatus.READY, false)));
+                .thenReturn(Optional.of(room(12L, Room.Status.READY, false)));
 
         assertThatThrownBy(() -> roomService.updateStatus(
                 12L,
-                RoomStatus.DIRTY,
+                Room.Status.DIRTY,
                 3L,
-                Role.ADMIN
+                User.Role.ADMIN
         )).isInstanceOf(ConflictException.class)
                 .hasMessage("Inactive rooms cannot change status.");
     }
@@ -319,59 +314,59 @@ class RoomServiceTest {
     @Test
     void staffWithActiveEmployeeAndDepartmentCanApplyValidTransition() {
         Department department = department(true);
-        Employee employee = employee(21L, department, EmployeeStatus.ACTIVE);
-        Room room = room(12L, RoomStatus.DIRTY, true);
+        Employee employee = employee(21L, department, Employee.Status.ACTIVE);
+        Room room = room(12L, Room.Status.DIRTY, true);
         when(roomRepository.findById(12L)).thenReturn(Optional.of(room));
         when(employeeRepository.findByUserId(21L)).thenReturn(Optional.of(employee));
         when(roomRepository.save(room)).thenReturn(room);
 
         RoomResponse response = roomService.updateStatus(
                 12L,
-                RoomStatus.CLEANING,
+                Room.Status.CLEANING,
                 21L,
-                Role.STAFF
+                User.Role.STAFF
         );
 
-        assertThat(response.getStatus()).isEqualTo(RoomStatus.CLEANING);
+        assertThat(response.getStatus()).isEqualTo(Room.Status.CLEANING);
     }
 
     @Test
     void staffWithoutOperationalEmployeeProfileIsForbidden() {
         when(roomRepository.findById(12L))
-                .thenReturn(Optional.of(room(12L, RoomStatus.DIRTY, true)));
+                .thenReturn(Optional.of(room(12L, Room.Status.DIRTY, true)));
         when(employeeRepository.findByUserId(21L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> roomService.updateStatus(
                 12L,
-                RoomStatus.CLEANING,
+                Room.Status.CLEANING,
                 21L,
-                Role.STAFF
+                User.Role.STAFF
         )).isInstanceOf(ForbiddenException.class);
     }
 
     @Test
     void inactiveEmployeeOrDepartmentCannotUpdateRoomStatus() {
-        Room room = room(12L, RoomStatus.DIRTY, true);
+        Room room = room(12L, Room.Status.DIRTY, true);
         when(roomRepository.findById(12L)).thenReturn(Optional.of(room));
         when(employeeRepository.findByUserId(21L))
                 .thenReturn(Optional.of(employee(
                         21L,
                         department(true),
-                        EmployeeStatus.INACTIVE
+                        Employee.Status.INACTIVE
                 )));
 
         assertThatThrownBy(() -> roomService.updateStatus(
-                12L, RoomStatus.CLEANING, 21L, Role.STAFF
+                12L, Room.Status.CLEANING, 21L, User.Role.STAFF
         )).isInstanceOf(ForbiddenException.class);
 
         when(employeeRepository.findByUserId(21L))
                 .thenReturn(Optional.of(employee(
                         21L,
                         department(false),
-                        EmployeeStatus.ACTIVE
+                        Employee.Status.ACTIVE
                 )));
         assertThatThrownBy(() -> roomService.updateStatus(
-                12L, RoomStatus.CLEANING, 21L, Role.STAFF
+                12L, Room.Status.CLEANING, 21L, User.Role.STAFF
         )).isInstanceOf(ForbiddenException.class);
     }
 
@@ -379,9 +374,9 @@ class RoomServiceTest {
     void userRoleCannotAccessRoomService() {
         RoomSearchCriteria filterCriteria1 = new RoomSearchCriteria(null, null, null, null);
         PageCriteria paginationCriteria2 = new PageCriteria(0, 20, "roomNumber,asc");
-        assertThatThrownBy(() -> roomService.listRooms(filterCriteria1, paginationCriteria2, Role.USER)).isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> roomService.listRooms(filterCriteria1, paginationCriteria2, User.Role.USER)).isInstanceOf(ForbiddenException.class);
         assertThatThrownBy(() -> roomService.updateStatus(
-                12L, RoomStatus.DIRTY, 1L, Role.USER
+                12L, Room.Status.DIRTY, 1L, User.Role.USER
         )).isInstanceOf(ForbiddenException.class);
 
         verify(roomRepository, never()).search(any(), any(), any(), any(), any());
@@ -390,7 +385,7 @@ class RoomServiceTest {
 
     @Test
     void deactivateRejectsRoomWithNonTerminalTasks() {
-        Room room = room(12L, RoomStatus.READY, true);
+        Room room = room(12L, Room.Status.READY, true);
         when(roomRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(room));
         when(taskRepository.existsByRoomIdAndStatusIn(
                 12L,
@@ -407,7 +402,7 @@ class RoomServiceTest {
 
     @Test
     void updateCannotBypassActiveTaskDeactivationGuard() {
-        Room room = room(12L, RoomStatus.READY, true);
+        Room room = room(12L, Room.Status.READY, true);
         UpdateRoomRequest request = updateRequest();
         request.setActive(false);
         when(roomRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(room));
@@ -424,27 +419,27 @@ class RoomServiceTest {
 
     private static Stream<Arguments> allowedTransitions() {
         return Stream.of(
-                Arguments.of(RoomStatus.READY, RoomStatus.OCCUPIED),
-                Arguments.of(RoomStatus.READY, RoomStatus.DIRTY),
-                Arguments.of(RoomStatus.READY, RoomStatus.MAINTENANCE),
-                Arguments.of(RoomStatus.READY, RoomStatus.OUT_OF_SERVICE),
-                Arguments.of(RoomStatus.OCCUPIED, RoomStatus.DIRTY),
-                Arguments.of(RoomStatus.OCCUPIED, RoomStatus.MAINTENANCE),
-                Arguments.of(RoomStatus.OCCUPIED, RoomStatus.OUT_OF_SERVICE),
-                Arguments.of(RoomStatus.DIRTY, RoomStatus.CLEANING),
-                Arguments.of(RoomStatus.DIRTY, RoomStatus.MAINTENANCE),
-                Arguments.of(RoomStatus.DIRTY, RoomStatus.OUT_OF_SERVICE),
-                Arguments.of(RoomStatus.CLEANING, RoomStatus.INSPECTION),
-                Arguments.of(RoomStatus.CLEANING, RoomStatus.MAINTENANCE),
-                Arguments.of(RoomStatus.CLEANING, RoomStatus.OUT_OF_SERVICE),
-                Arguments.of(RoomStatus.INSPECTION, RoomStatus.READY),
-                Arguments.of(RoomStatus.INSPECTION, RoomStatus.CLEANING),
-                Arguments.of(RoomStatus.INSPECTION, RoomStatus.MAINTENANCE),
-                Arguments.of(RoomStatus.INSPECTION, RoomStatus.OUT_OF_SERVICE),
-                Arguments.of(RoomStatus.MAINTENANCE, RoomStatus.INSPECTION),
-                Arguments.of(RoomStatus.MAINTENANCE, RoomStatus.OUT_OF_SERVICE),
-                Arguments.of(RoomStatus.OUT_OF_SERVICE, RoomStatus.MAINTENANCE),
-                Arguments.of(RoomStatus.OUT_OF_SERVICE, RoomStatus.INSPECTION)
+                Arguments.of(Room.Status.READY, Room.Status.OCCUPIED),
+                Arguments.of(Room.Status.READY, Room.Status.DIRTY),
+                Arguments.of(Room.Status.READY, Room.Status.MAINTENANCE),
+                Arguments.of(Room.Status.READY, Room.Status.OUT_OF_SERVICE),
+                Arguments.of(Room.Status.OCCUPIED, Room.Status.DIRTY),
+                Arguments.of(Room.Status.OCCUPIED, Room.Status.MAINTENANCE),
+                Arguments.of(Room.Status.OCCUPIED, Room.Status.OUT_OF_SERVICE),
+                Arguments.of(Room.Status.DIRTY, Room.Status.CLEANING),
+                Arguments.of(Room.Status.DIRTY, Room.Status.MAINTENANCE),
+                Arguments.of(Room.Status.DIRTY, Room.Status.OUT_OF_SERVICE),
+                Arguments.of(Room.Status.CLEANING, Room.Status.INSPECTION),
+                Arguments.of(Room.Status.CLEANING, Room.Status.MAINTENANCE),
+                Arguments.of(Room.Status.CLEANING, Room.Status.OUT_OF_SERVICE),
+                Arguments.of(Room.Status.INSPECTION, Room.Status.READY),
+                Arguments.of(Room.Status.INSPECTION, Room.Status.CLEANING),
+                Arguments.of(Room.Status.INSPECTION, Room.Status.MAINTENANCE),
+                Arguments.of(Room.Status.INSPECTION, Room.Status.OUT_OF_SERVICE),
+                Arguments.of(Room.Status.MAINTENANCE, Room.Status.INSPECTION),
+                Arguments.of(Room.Status.MAINTENANCE, Room.Status.OUT_OF_SERVICE),
+                Arguments.of(Room.Status.OUT_OF_SERVICE, Room.Status.MAINTENANCE),
+                Arguments.of(Room.Status.OUT_OF_SERVICE, Room.Status.INSPECTION)
         );
     }
 
@@ -453,7 +448,7 @@ class RoomServiceTest {
         request.setRoomNumber("218");
         request.setRoomType(" STANDARD ");
         request.setFloor(2);
-        request.setInitialStatus(RoomStatus.DIRTY);
+        request.setInitialStatus(Room.Status.DIRTY);
         request.setNextArrivalAt(LocalDateTime.of(2030, 10, 3, 15, 0));
         return request;
     }
@@ -467,7 +462,7 @@ class RoomServiceTest {
         return request;
     }
 
-    private Room room(Long id, RoomStatus status, boolean active) {
+    private Room room(Long id, Room.Status status, boolean active) {
         Room room = new Room("218", "STANDARD", 2, status, null);
         ReflectionTestUtils.setField(room, "id", id);
         ReflectionTestUtils.setField(room, "active", active);
@@ -486,11 +481,11 @@ class RoomServiceTest {
     private Employee employee(
             Long userId,
             Department department,
-            EmployeeStatus status
+            Employee.Status status
     ) {
         User user = new User("Worker", "worker@example.test", "bcrypt-hash");
         ReflectionTestUtils.setField(user, "id", userId);
-        user.provisionEmployeeAccess(Role.STAFF, department);
+        user.provisionEmployeeAccess(User.Role.STAFF, department);
         Employee employee = new Employee(
                 "Worker",
                 "worker@example.test",

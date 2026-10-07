@@ -1,28 +1,28 @@
 package com.rockey.hospitality.controller;
 
-import com.rockey.hospitality.dto.task.TaskSearchCriteria;
-import com.rockey.hospitality.dto.common.PageCriteria;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.rockey.hospitality.dto.auth.DepartmentSummary;
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.task.AssignTaskRequest;
-import com.rockey.hospitality.dto.task.CreateTaskRequest;
-import com.rockey.hospitality.dto.task.TaskEventSummary;
-import com.rockey.hospitality.dto.task.TaskEmployeeSummary;
-import com.rockey.hospitality.dto.task.TaskResponse;
-import com.rockey.hospitality.dto.task.TaskRoomSummary;
-import com.rockey.hospitality.dto.task.UpdateTaskRequest;
-import com.rockey.hospitality.entity.Role;
-import com.rockey.hospitality.entity.EventStatus;
-import com.rockey.hospitality.entity.TaskPriority;
-import com.rockey.hospitality.entity.TaskStatus;
+import com.rockey.hospitality.dto.AuthDtos.DepartmentSummary;
+import com.rockey.hospitality.dto.CommonDtos.PageCriteria;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.TaskDtos.AssignTaskRequest;
+import com.rockey.hospitality.dto.TaskDtos.CreateTaskRequest;
+import com.rockey.hospitality.dto.TaskDtos.TaskEmployeeSummary;
+import com.rockey.hospitality.dto.TaskDtos.TaskEventSummary;
+import com.rockey.hospitality.dto.TaskDtos.TaskResponse;
+import com.rockey.hospitality.dto.TaskDtos.TaskRoomSummary;
+import com.rockey.hospitality.dto.TaskDtos.TaskSearchCriteria;
+import com.rockey.hospitality.dto.TaskDtos.UpdateTaskRequest;
+import com.rockey.hospitality.entity.Event;
+import com.rockey.hospitality.entity.Task;
 import com.rockey.hospitality.entity.User;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.exception.GlobalExceptionHandler;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
 import com.rockey.hospitality.security.RockeyUserPrincipal;
 import com.rockey.hospitality.service.TaskService;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,10 +37,6 @@ import org.springframework.security.web.method.annotation.AuthenticationPrincipa
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -85,7 +81,7 @@ class TaskControllerTest {
 
     @Test
     void listTasksPassesFiltersIncludingOverdue() throws Exception {
-        when(taskService.listTasks(new TaskSearchCriteria(3L, TaskStatus.ASSIGNED, TaskPriority.HIGH, 12L, 218L, 7L, true), new PageCriteria(1, 5, "dueAt,asc"))).thenReturn(new PagedResponse<>(List.of(response()), 1, 5, 6, 2, true));
+        when(taskService.listTasks(new TaskSearchCriteria(3L, Task.Status.ASSIGNED, Task.Priority.HIGH, 12L, 218L, 7L, true), new PageCriteria(1, 5, "dueAt,asc"))).thenReturn(new PagedResponse<>(List.of(response()), 1, 5, 6, 2, true));
 
         mockMvc.perform(get("/api/tasks")
                         .param("departmentId", "3")
@@ -136,14 +132,14 @@ class TaskControllerTest {
 
     @Test
     void getTaskPassesAuthenticatedIdentity() throws Exception {
-        when(taskService.getTask(41L, 21L, Role.STAFF)).thenReturn(response());
+        when(taskService.getTask(41L, 21L, User.Role.STAFF)).thenReturn(response());
 
         mockMvc.perform(get("/api/tasks/41")
-                        .principal(authentication(21L, Role.STAFF)))
+                        .principal(authentication(21L, User.Role.STAFF)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.assignedEmployee.id").value(12));
 
-        verify(taskService).getTask(41L, 21L, Role.STAFF);
+        verify(taskService).getTask(41L, 21L, User.Role.STAFF);
     }
 
     @Test
@@ -160,7 +156,7 @@ class TaskControllerTest {
 
     @Test
     void deleteCancelsAndReturnsTaskResponse() throws Exception {
-        when(taskService.cancelTask(41L)).thenReturn(response(TaskStatus.CANCELLED));
+        when(taskService.cancelTask(41L)).thenReturn(response(Task.Status.CANCELLED));
 
         mockMvc.perform(delete("/api/tasks/41"))
                 .andExpect(status().isOk())
@@ -169,11 +165,11 @@ class TaskControllerTest {
 
     @Test
     void completePassesAuthenticatedIdentity() throws Exception {
-        when(taskService.completeTask(41L, 21L, Role.STAFF))
-                .thenReturn(response(TaskStatus.COMPLETED));
+        when(taskService.completeTask(41L, 21L, User.Role.STAFF))
+                .thenReturn(response(Task.Status.COMPLETED));
 
         mockMvc.perform(patch("/api/tasks/41/complete")
-                        .principal(authentication(21L, Role.STAFF)))
+                        .principal(authentication(21L, User.Role.STAFF)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("COMPLETED"));
     }
@@ -188,7 +184,7 @@ class TaskControllerTest {
                                 """))
                 .andExpect(status().isOk());
 
-        when(taskService.assignTask(41L, null)).thenReturn(response(TaskStatus.OPEN));
+        when(taskService.assignTask(41L, null)).thenReturn(response(Task.Status.OPEN));
         mockMvc.perform(patch("/api/tasks/41/assigned-employee")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
@@ -201,10 +197,10 @@ class TaskControllerTest {
 
     @Test
     void assignedListPassesSelfIdentityAndFilters() throws Exception {
-        when(taskService.listAssignedTasks(12L, TaskStatus.ASSIGNED, TaskPriority.HIGH, false, new PageCriteria(0, 20, "createdAt,desc"), 21L, Role.STAFF)).thenReturn(new PagedResponse<>(List.of(response()), 0, 20, 1, 1, true));
+        when(taskService.listAssignedTasks(12L, Task.Status.ASSIGNED, Task.Priority.HIGH, false, new PageCriteria(0, 20, "createdAt,desc"), 21L, User.Role.STAFF)).thenReturn(new PagedResponse<>(List.of(response()), 0, 20, 1, 1, true));
 
         mockMvc.perform(get("/api/tasks/assigned/12")
-                        .principal(authentication(21L, Role.STAFF))
+                        .principal(authentication(21L, User.Role.STAFF))
                         .param("status", "ASSIGNED")
                         .param("priority", "HIGH")
                         .param("overdue", "false"))
@@ -214,11 +210,11 @@ class TaskControllerTest {
 
     @Test
     void missingTaskReturnsCanonical404() throws Exception {
-        when(taskService.getTask(99L, 3L, Role.ADMIN))
+        when(taskService.getTask(99L, 3L, User.Role.ADMIN))
                 .thenThrow(new ResourceNotFoundException("Task not found with id 99."));
 
         mockMvc.perform(get("/api/tasks/99")
-                        .principal(authentication(3L, Role.ADMIN)))
+                        .principal(authentication(3L, User.Role.ADMIN)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404));
     }
@@ -254,7 +250,7 @@ class TaskControllerTest {
                 """;
     }
 
-    private UsernamePasswordAuthenticationToken authentication(Long id, Role role) {
+    private UsernamePasswordAuthenticationToken authentication(Long id, User.Role role) {
         User user = new User("Test User", role.name().toLowerCase() + "@example.test", "hash");
         ReflectionTestUtils.setField(user, "id", id);
         ReflectionTestUtils.setField(user, "role", role);
@@ -270,28 +266,28 @@ class TaskControllerTest {
     }
 
     private TaskResponse response() {
-        return response(TaskStatus.ASSIGNED);
+        return response(Task.Status.ASSIGNED);
     }
 
-    private TaskResponse response(TaskStatus status) {
+    private TaskResponse response(Task.Status status) {
         return new TaskResponse(
                 41L,
                 "Inspect room",
                 "Check readiness.",
                 status,
-                TaskPriority.HIGH,
+                Task.Priority.HIGH,
                 new DepartmentSummary(3L, "Housekeeping"),
-                status == TaskStatus.OPEN ? null : new TaskEmployeeSummary(12L, "Worker"),
+                status == Task.Status.OPEN ? null : new TaskEmployeeSummary(12L, "Worker"),
                 new TaskRoomSummary(218L, "218"),
                 new TaskEventSummary(
                         7L,
                         "Leadership Conference",
                         LocalDateTime.of(2030, 10, 10, 9, 0),
-                        EventStatus.OPEN
+                        Event.Status.OPEN
                 ),
                 LocalDateTime.of(2026, 10, 3, 9, 0),
                 LocalDateTime.of(2030, 10, 4, 15, 0),
-                status == TaskStatus.COMPLETED
+                status == Task.Status.COMPLETED
                         ? LocalDateTime.of(2026, 10, 3, 12, 0)
                         : null,
                 LocalDateTime.of(2026, 10, 3, 10, 0)

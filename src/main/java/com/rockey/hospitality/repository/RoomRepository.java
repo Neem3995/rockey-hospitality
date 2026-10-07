@@ -1,55 +1,56 @@
 package com.rockey.hospitality.repository;
 
 import com.rockey.hospitality.entity.Room;
-import com.rockey.hospitality.entity.RoomStatus;
 import jakarta.persistence.LockModeType;
-import org.springframework.data.jpa.repository.Lock;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import java.time.LocalDateTime;
-import java.util.List;
 
 /**
- * Spring Data JPA supplies standard persistence operations for Room entities through JpaRepository.
- * Domain services use the methods below for filtered reads, eligibility checks, and locked writes where declared.
+ * STUDY NOTE: A Repository is the data-access layer a Service uses to reach database data.
+ * JpaRepository lets Spring Data supply standard create/read/update/delete methods without writing basic
+ * SQL.
+ * RoomService and automation use scoped searches, uniqueness checks, readiness sources and locked lifecycle
+ * changes.
+ * Spring creates this interface's implementation and sends its queries through JPA/Hibernate to MySQL.
  */
 public interface RoomRepository extends JpaRepository<Room, Long> {
+
+    // Repository study key: findBy/existsBy/countBy names are interpreted by Spring Data as queries.
+    // @Query supplies fixed JPQL (entity/field-based query text), not string-interpolated user input.
+    // @Param binds a Java argument to a named query value instead of inserting it into query text.
+    // @Lock(PESSIMISTIC_WRITE) keeps a database row locked until the caller's transaction ends to serialize
+    // conflicting changes.
 
     /**
      * Locks one Room for deactivation and new Task reference checks.
      */
-    // Acquires a PESSIMISTIC_WRITE database row lock until the caller's transaction ends.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    // Executes this fixed JPQL query; supplied filter values are bound parameters rather than query text.
     @Query("SELECT room FROM Room room WHERE room.id = :id")
     java.util.Optional<Room> findByIdForUpdate(
-            // Binds this argument as the named id query parameter, not interpolated query text.
             @Param("id") Long id);
 
     /**
      * Finds active, non-READY Rooms whose arrivals fall within the inclusive readiness window.
      */
-    // Executes this fixed JPQL query; supplied filter values are bound parameters rather than query text.
     @Query("""
             SELECT room FROM Room room
             WHERE room.active = TRUE AND room.status <> :ready
               AND room.nextArrivalAt >= :now AND room.nextArrivalAt <= :windowEnd
             """)
     List<Room> findReadinessAlertSources(
-            // Binds this argument as the named now query parameter, not interpolated query text.
             @Param("now") LocalDateTime now,
-                                        // Binds this argument as the named windowEnd query parameter, not interpolated query text.
                                         @Param("windowEnd") LocalDateTime windowEnd,
-                                        // Binds this argument as the named ready query parameter, not interpolated query text.
-                                        @Param("ready") RoomStatus ready);
+                                        @Param("ready") Room.Status ready);
 
     /**
      * Pages optional status, floor, case-insensitive type, and active filters without constructing query text from input.
      */
-    // Executes this fixed JPQL query; supplied filter values are bound parameters rather than query text.
     @Query("""
             SELECT room
             FROM Room room
@@ -59,13 +60,9 @@ public interface RoomRepository extends JpaRepository<Room, Long> {
               AND (:active IS NULL OR room.active = :active)
             """)
     Page<Room> search(
-            // Binds this argument as the named status query parameter, not interpolated query text.
-            @Param("status") RoomStatus status,
-            // Binds this argument as the named floor query parameter, not interpolated query text.
+            @Param("status") Room.Status status,
             @Param("floor") Integer floor,
-            // Binds this argument as the named roomType query parameter, not interpolated query text.
             @Param("roomType") String roomType,
-            // Binds this argument as the named active query parameter, not interpolated query text.
             @Param("active") Boolean active,
             Pageable pageable
     );

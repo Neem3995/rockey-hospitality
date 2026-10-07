@@ -3,20 +3,21 @@ package com.rockey.hospitality.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.rockey.hospitality.dto.auth.DepartmentSummary;
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.inventory.CreateInventoryItemRequest;
-import com.rockey.hospitality.dto.inventory.InventoryItemResponse;
-import com.rockey.hospitality.dto.inventory.UpdateInventoryItemRequest;
-import com.rockey.hospitality.entity.Role;
+import com.rockey.hospitality.dto.AuthDtos.DepartmentSummary;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.InventoryDtos.CreateInventoryItemRequest;
+import com.rockey.hospitality.dto.InventoryDtos.InventoryItemResponse;
+import com.rockey.hospitality.dto.InventoryDtos.UpdateInventoryItemRequest;
 import com.rockey.hospitality.entity.User;
-import com.rockey.hospitality.exception.BadRequestException;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.exception.GlobalExceptionHandler;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
 import com.rockey.hospitality.security.RockeyUserPrincipal;
 import com.rockey.hospitality.service.InventoryService;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,10 +34,6 @@ import org.springframework.security.web.method.annotation.AuthenticationPrincipa
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -70,7 +67,7 @@ class InventoryControllerTest {
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))
                 .build();
-        authenticate(Role.ADMIN);
+        authenticate(User.Role.ADMIN);
     }
 
     @AfterEach
@@ -81,8 +78,8 @@ class InventoryControllerTest {
 
     @Test
     void listPassesFiltersPageSortAndAuthenticatedIdentity() throws Exception {
-        authenticate(Role.STAFF);
-        when(service.listInventory(3L, true, 1, 5, "quantity,desc", 21L, Role.STAFF))
+        authenticate(User.Role.STAFF);
+        when(service.listInventory(3L, true, 1, 5, "quantity,desc", 21L, User.Role.STAFF))
                 .thenReturn(new PagedResponse<>(List.of(response()), 1, 5, 6, 2, true));
         mvc.perform(get("/api/inventory").param("departmentId", "3").param("active", "true")
                         .param("page", "1").param("size", "5").param("sort", "quantity,desc"))
@@ -94,12 +91,12 @@ class InventoryControllerTest {
 
     @Test
     void defaultListUsesCanonicalPageDefaults() throws Exception {
-        when(service.listInventory(null, null, 0, 20, "name,asc", 3L, Role.ADMIN))
+        when(service.listInventory(null, null, 0, 20, "name,asc", 3L, User.Role.ADMIN))
                 .thenReturn(new PagedResponse<>(List.of(), 0, 20, 0, 0, true));
         mvc.perform(get("/api/inventory"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isEmpty());
-        verify(service).listInventory(null, null, 0, 20, "name,asc", 3L, Role.ADMIN);
+        verify(service).listInventory(null, null, 0, 20, "name,asc", 3L, User.Role.ADMIN);
     }
 
     @Test
@@ -120,11 +117,11 @@ class InventoryControllerTest {
 
     @Test
     void getUsesCurrentUserAndRole() throws Exception {
-        authenticate(Role.STAFF);
-        when(service.getInventoryItem(88L, 21L, Role.STAFF)).thenReturn(response());
+        authenticate(User.Role.STAFF);
+        when(service.getInventoryItem(88L, 21L, User.Role.STAFF)).thenReturn(response());
         mvc.perform(get("/api/inventory/88"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.sku").value("HK-TOWEL-BATH"));
-        verify(service).getInventoryItem(88L, 21L, Role.STAFF);
+        verify(service).getInventoryItem(88L, 21L, User.Role.STAFF);
     }
 
     @Test
@@ -196,7 +193,7 @@ class InventoryControllerTest {
 
     @Test
     void missingItemUsesCanonical404() throws Exception {
-        when(service.getInventoryItem(99L, 3L, Role.ADMIN))
+        when(service.getInventoryItem(99L, 3L, User.Role.ADMIN))
                 .thenThrow(new ResourceNotFoundException("Inventory item not found with id 99."));
         mvc.perform(get("/api/inventory/99"))
                 .andExpect(status().isNotFound()).andExpect(jsonPath("$.status").value(404));
@@ -204,16 +201,16 @@ class InventoryControllerTest {
 
     @Test
     void crossDepartmentReadUsesCanonical403() throws Exception {
-        authenticate(Role.STAFF);
-        when(service.getInventoryItem(88L, 21L, Role.STAFF))
+        authenticate(User.Role.STAFF);
+        when(service.getInventoryItem(88L, 21L, User.Role.STAFF))
                 .thenThrow(new ForbiddenException("Inventory access is forbidden."));
         mvc.perform(get("/api/inventory/88"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.status").value(403));
     }
 
-    private void authenticate(Role role) {
+    private void authenticate(User.Role role) {
         User user = new User("Test User", "inventory@example.test", "hash");
-        ReflectionTestUtils.setField(user, "id", role == Role.STAFF ? 21L : 3L);
+        ReflectionTestUtils.setField(user, "id", role == User.Role.STAFF ? 21L : 3L);
         ReflectionTestUtils.setField(user, "role", role);
         RockeyUserPrincipal principal = new RockeyUserPrincipal(user);
         SecurityContextHolder.getContext().setAuthentication(

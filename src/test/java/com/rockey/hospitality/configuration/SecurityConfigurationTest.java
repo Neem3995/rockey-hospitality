@@ -1,52 +1,54 @@
 package com.rockey.hospitality.configuration;
 
-import com.rockey.hospitality.dto.room.RoomSearchCriteria;
-import com.rockey.hospitality.dto.task.TaskSearchCriteria;
-import com.rockey.hospitality.dto.common.PageCriteria;
+import com.rockey.hospitality.controller.AlertController;
 import com.rockey.hospitality.controller.AuthController;
 import com.rockey.hospitality.controller.DepartmentController;
 import com.rockey.hospitality.controller.EmployeeController;
 import com.rockey.hospitality.controller.EventController;
 import com.rockey.hospitality.controller.InventoryController;
-import com.rockey.hospitality.controller.AlertController;
 import com.rockey.hospitality.controller.RoomController;
 import com.rockey.hospitality.controller.TaskController;
-import com.rockey.hospitality.dto.auth.AuthResponse;
-import com.rockey.hospitality.dto.auth.CurrentUserResponse;
-import com.rockey.hospitality.dto.auth.DepartmentSummary;
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.employee.CreateEmployeeRequest;
-import com.rockey.hospitality.dto.employee.EmployeeResponse;
-import com.rockey.hospitality.dto.inventory.CreateInventoryItemRequest;
-import com.rockey.hospitality.dto.inventory.UpdateInventoryItemRequest;
-import com.rockey.hospitality.dto.room.CreateRoomRequest;
-import com.rockey.hospitality.dto.room.RoomResponse;
-import com.rockey.hospitality.dto.task.CreateTaskRequest;
-import com.rockey.hospitality.dto.task.TaskResponse;
-import com.rockey.hospitality.entity.Role;
+import com.rockey.hospitality.dto.AuthDtos.AuthResponse;
+import com.rockey.hospitality.dto.AuthDtos.CurrentUserResponse;
+import com.rockey.hospitality.dto.AuthDtos.DepartmentSummary;
+import com.rockey.hospitality.dto.CommonDtos.PageCriteria;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.EmployeeDtos.CreateEmployeeRequest;
+import com.rockey.hospitality.dto.EmployeeDtos.EmployeeResponse;
+import com.rockey.hospitality.dto.InventoryDtos.CreateInventoryItemRequest;
+import com.rockey.hospitality.dto.InventoryDtos.UpdateInventoryItemRequest;
+import com.rockey.hospitality.dto.RoomDtos.CreateRoomRequest;
+import com.rockey.hospitality.dto.RoomDtos.RoomResponse;
+import com.rockey.hospitality.dto.RoomDtos.RoomSearchCriteria;
+import com.rockey.hospitality.dto.TaskDtos.CreateTaskRequest;
+import com.rockey.hospitality.dto.TaskDtos.TaskResponse;
+import com.rockey.hospitality.dto.TaskDtos.TaskSearchCriteria;
+import com.rockey.hospitality.entity.Employee;
+import com.rockey.hospitality.entity.Room;
+import com.rockey.hospitality.entity.Task;
 import com.rockey.hospitality.entity.User;
-import com.rockey.hospitality.entity.UserStatus;
-import com.rockey.hospitality.entity.EmployeeStatus;
-import com.rockey.hospitality.entity.RoomStatus;
-import com.rockey.hospitality.entity.TaskPriority;
-import com.rockey.hospitality.entity.TaskStatus;
 import com.rockey.hospitality.repository.UserRepository;
 import com.rockey.hospitality.security.JwtAuthenticationFilter;
 import com.rockey.hospitality.security.JwtService;
-import com.rockey.hospitality.security.RestAccessDeniedHandler;
-import com.rockey.hospitality.security.RestAuthenticationEntryPoint;
 import com.rockey.hospitality.security.RockeyUserDetailsService;
-import com.rockey.hospitality.security.SecurityErrorWriter;
-import com.rockey.hospitality.service.DepartmentService;
+import com.rockey.hospitality.security.SecurityHandlers.RestAccessDeniedHandler;
+import com.rockey.hospitality.security.SecurityHandlers.RestAuthenticationEntryPoint;
+import com.rockey.hospitality.security.SecurityHandlers.SecurityErrorWriter;
+import com.rockey.hospitality.service.AlertService;
 import com.rockey.hospitality.service.AuthService;
-import com.rockey.hospitality.service.AuthSession;
+import com.rockey.hospitality.service.DepartmentService;
 import com.rockey.hospitality.service.EmployeeService;
 import com.rockey.hospitality.service.EventService;
-import com.rockey.hospitality.service.RegistrationService;
 import com.rockey.hospitality.service.InventoryService;
-import com.rockey.hospitality.service.AlertService;
+import com.rockey.hospitality.service.RegistrationService;
 import com.rockey.hospitality.service.RoomService;
 import com.rockey.hospitality.service.TaskService;
+import java.security.SecureRandom;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.Base64;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -59,14 +61,6 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.security.SecureRandom;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.util.Base64;
-import java.util.List;
-import java.util.Optional;
-
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -157,7 +151,7 @@ class SecurityConfigurationTest {
                 "user@example.test",
                 "valid-password",
                 "127.0.0.1"
-        )).thenReturn(authSession(1L, "user@example.test", Role.USER));
+        )).thenReturn(authSession(1L, "user@example.test", User.Role.USER));
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -173,8 +167,8 @@ class SecurityConfigurationTest {
 
     @Test
     void authenticatedAccountCanReadOwnProfile() throws Exception {
-        String token = tokenFor(1L, "user@example.test", Role.USER);
-        CurrentUserResponse response = currentUser(1L, "user@example.test", Role.USER);
+        String token = tokenFor(1L, "user@example.test", User.Role.USER);
+        CurrentUserResponse response = currentUser(1L, "user@example.test", User.Role.USER);
         when(authService.getCurrentUser(1L)).thenReturn(response);
 
         mockMvc.perform(get("/api/auth/me")
@@ -186,7 +180,7 @@ class SecurityConfigurationTest {
 
     @Test
     void authenticatedLogoutRevokesSessionAndExpiresRefreshCookie() throws Exception {
-        String token = tokenFor(1L, "user@example.test", Role.USER);
+        String token = tokenFor(1L, "user@example.test", User.Role.USER);
 
         mockMvc.perform(post("/api/auth/logout")
                         .header("Authorization", "Bearer " + token))
@@ -233,7 +227,7 @@ class SecurityConfigurationTest {
 
     @Test
     void userRoleCannotReadOperationalDepartments() throws Exception {
-        String token = tokenFor(1L, "user@example.test", Role.USER);
+        String token = tokenFor(1L, "user@example.test", User.Role.USER);
 
         mockMvc.perform(get("/api/departments")
                         .header("Authorization", "Bearer " + token))
@@ -244,7 +238,7 @@ class SecurityConfigurationTest {
     @Test
     void staffRoleCanReadDepartments() throws Exception {
         when(departmentService.listDepartments(null)).thenReturn(List.of());
-        String token = tokenFor(2L, "staff@example.test", Role.STAFF);
+        String token = tokenFor(2L, "staff@example.test", User.Role.STAFF);
 
         mockMvc.perform(get("/api/departments")
                         .header("Authorization", "Bearer " + token))
@@ -253,7 +247,7 @@ class SecurityConfigurationTest {
 
     @Test
     void staffRoleCannotManageDepartments() throws Exception {
-        String token = tokenFor(2L, "staff@example.test", Role.STAFF);
+        String token = tokenFor(2L, "staff@example.test", User.Role.STAFF);
 
         mockMvc.perform(post("/api/departments")
                         .header("Authorization", "Bearer " + token)
@@ -268,7 +262,7 @@ class SecurityConfigurationTest {
 
     @Test
     void adminRoleCanDeactivateDepartment() throws Exception {
-        String token = tokenFor(3L, "admin@example.test", Role.ADMIN);
+        String token = tokenFor(3L, "admin@example.test", User.Role.ADMIN);
 
         mockMvc.perform(delete("/api/departments/1")
                         .header("Authorization", "Bearer " + token))
@@ -279,9 +273,9 @@ class SecurityConfigurationTest {
 
     @Test
     void inactiveAccountCannotUsePreviouslyIssuedAccessToken() throws Exception {
-        User user = user(4L, "inactive@example.test", Role.STAFF);
+        User user = user(4L, "inactive@example.test", User.Role.STAFF);
         String token = jwtService.issueAccessToken(user).getValue();
-        ReflectionTestUtils.setField(user, "status", UserStatus.INACTIVE);
+        ReflectionTestUtils.setField(user, "status", User.Status.INACTIVE);
         when(userRepository.findByEmailIgnoreCase("inactive@example.test"))
                 .thenReturn(Optional.of(user));
 
@@ -292,9 +286,9 @@ class SecurityConfigurationTest {
 
     @Test
     void changedServerRoleInvalidatesStaleRoleClaim() throws Exception {
-        User user = user(5L, "changed@example.test", Role.USER);
+        User user = user(5L, "changed@example.test", User.Role.USER);
         String token = jwtService.issueAccessToken(user).getValue();
-        ReflectionTestUtils.setField(user, "role", Role.STAFF);
+        ReflectionTestUtils.setField(user, "role", User.Role.STAFF);
         when(userRepository.findByEmailIgnoreCase("changed@example.test"))
                 .thenReturn(Optional.of(user));
 
@@ -312,7 +306,7 @@ class SecurityConfigurationTest {
 
     @Test
     void staffCannotListEmployees() throws Exception {
-        String token = tokenFor(2L, "staff@example.test", Role.STAFF);
+        String token = tokenFor(2L, "staff@example.test", User.Role.STAFF);
 
         mockMvc.perform(get("/api/employees")
                         .header("Authorization", "Bearer " + token))
@@ -321,7 +315,7 @@ class SecurityConfigurationTest {
 
     @Test
     void adminCanListEmployees() throws Exception {
-        String token = tokenFor(3L, "admin@example.test", Role.ADMIN);
+        String token = tokenFor(3L, "admin@example.test", User.Role.ADMIN);
         when(employeeService.listEmployees(null, null, 0, 20, "name,asc"))
                 .thenReturn(new PagedResponse<>(List.of(), 0, 20, 0, 0, true));
 
@@ -333,8 +327,8 @@ class SecurityConfigurationTest {
 
     @Test
     void linkedStaffCanReadOwnEmployeeRecord() throws Exception {
-        String token = tokenFor(2L, "staff@example.test", Role.STAFF);
-        when(employeeService.getEmployee(12L, 2L, Role.STAFF))
+        String token = tokenFor(2L, "staff@example.test", User.Role.STAFF);
+        when(employeeService.getEmployee(12L, 2L, User.Role.STAFF))
                 .thenReturn(employeeResponse(12L, 2L));
 
         mockMvc.perform(get("/api/employees/12")
@@ -342,12 +336,12 @@ class SecurityConfigurationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(12));
 
-        verify(employeeService).getEmployee(12L, 2L, Role.STAFF);
+        verify(employeeService).getEmployee(12L, 2L, User.Role.STAFF);
     }
 
     @Test
     void staffCannotUpdateEmployee() throws Exception {
-        String token = tokenFor(2L, "staff@example.test", Role.STAFF);
+        String token = tokenFor(2L, "staff@example.test", User.Role.STAFF);
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
                         .put("/api/employees/12")
@@ -367,7 +361,7 @@ class SecurityConfigurationTest {
 
     @Test
     void adminCanCreateEmployee() throws Exception {
-        String token = tokenFor(3L, "admin@example.test", Role.ADMIN);
+        String token = tokenFor(3L, "admin@example.test", User.Role.ADMIN);
         when(employeeService.createEmployee(any(CreateEmployeeRequest.class)))
                 .thenReturn(employeeResponse(12L, null));
 
@@ -396,7 +390,7 @@ class SecurityConfigurationTest {
 
     @Test
     void userCannotReadRooms() throws Exception {
-        String token = tokenFor(1L, "user@example.test", Role.USER);
+        String token = tokenFor(1L, "user@example.test", User.Role.USER);
 
         mockMvc.perform(get("/api/rooms")
                         .header("Authorization", "Bearer " + token))
@@ -405,8 +399,8 @@ class SecurityConfigurationTest {
 
     @Test
     void staffCanListRooms() throws Exception {
-        String token = tokenFor(2L, "staff@example.test", Role.STAFF);
-        when(roomService.listRooms(new RoomSearchCriteria(null, null, null, null), new PageCriteria(0, 20, "roomNumber,asc"), Role.STAFF)).thenReturn(new PagedResponse<>(List.of(), 0, 20, 0, 0, true));
+        String token = tokenFor(2L, "staff@example.test", User.Role.STAFF);
+        when(roomService.listRooms(new RoomSearchCriteria(null, null, null, null), new PageCriteria(0, 20, "roomNumber,asc"), User.Role.STAFF)).thenReturn(new PagedResponse<>(List.of(), 0, 20, 0, 0, true));
 
         mockMvc.perform(get("/api/rooms")
                         .header("Authorization", "Bearer " + token))
@@ -416,7 +410,7 @@ class SecurityConfigurationTest {
 
     @Test
     void staffCannotCreateRoom() throws Exception {
-        String token = tokenFor(2L, "staff@example.test", Role.STAFF);
+        String token = tokenFor(2L, "staff@example.test", User.Role.STAFF);
 
         mockMvc.perform(post("/api/rooms")
                         .header("Authorization", "Bearer " + token)
@@ -427,7 +421,7 @@ class SecurityConfigurationTest {
 
     @Test
     void adminCanCreateRoom() throws Exception {
-        String token = tokenFor(3L, "admin@example.test", Role.ADMIN);
+        String token = tokenFor(3L, "admin@example.test", User.Role.ADMIN);
         when(roomService.createRoom(any(CreateRoomRequest.class)))
                 .thenReturn(roomResponse());
 
@@ -441,12 +435,12 @@ class SecurityConfigurationTest {
 
     @Test
     void staffCanRequestRoomStatusTransition() throws Exception {
-        String token = tokenFor(2L, "staff@example.test", Role.STAFF);
+        String token = tokenFor(2L, "staff@example.test", User.Role.STAFF);
         when(roomService.updateStatus(
                 12L,
-                RoomStatus.CLEANING,
+                Room.Status.CLEANING,
                 2L,
-                Role.STAFF
+                User.Role.STAFF
         )).thenReturn(roomResponse());
 
         mockMvc.perform(patch("/api/rooms/12/status")
@@ -459,15 +453,15 @@ class SecurityConfigurationTest {
 
         verify(roomService).updateStatus(
                 12L,
-                RoomStatus.CLEANING,
+                Room.Status.CLEANING,
                 2L,
-                Role.STAFF
+                User.Role.STAFF
         );
     }
 
     @Test
     void userCannotRequestRoomStatusTransition() throws Exception {
-        String token = tokenFor(1L, "user@example.test", Role.USER);
+        String token = tokenFor(1L, "user@example.test", User.Role.USER);
 
         mockMvc.perform(patch("/api/rooms/12/status")
                         .header("Authorization", "Bearer " + token)
@@ -487,7 +481,7 @@ class SecurityConfigurationTest {
 
     @Test
     void userCannotReadTasks() throws Exception {
-        String token = tokenFor(1L, "user@example.test", Role.USER);
+        String token = tokenFor(1L, "user@example.test", User.Role.USER);
 
         mockMvc.perform(get("/api/tasks/41")
                         .header("Authorization", "Bearer " + token))
@@ -496,7 +490,7 @@ class SecurityConfigurationTest {
 
     @Test
     void staffCannotSearchAllTasks() throws Exception {
-        String token = tokenFor(2L, "staff@example.test", Role.STAFF);
+        String token = tokenFor(2L, "staff@example.test", User.Role.STAFF);
 
         mockMvc.perform(get("/api/tasks")
                         .header("Authorization", "Bearer " + token))
@@ -505,7 +499,7 @@ class SecurityConfigurationTest {
 
     @Test
     void adminCanSearchAllTasks() throws Exception {
-        String token = tokenFor(3L, "admin@example.test", Role.ADMIN);
+        String token = tokenFor(3L, "admin@example.test", User.Role.ADMIN);
         when(taskService.listTasks(new TaskSearchCriteria(null, null, null, null, null, null, null), new PageCriteria(0, 20, "createdAt,desc"))).thenReturn(new PagedResponse<>(List.of(), 0, 20, 0, 0, true));
 
         mockMvc.perform(get("/api/tasks")
@@ -516,21 +510,21 @@ class SecurityConfigurationTest {
 
     @Test
     void staffCanRequestAssignedTaskDetail() throws Exception {
-        String token = tokenFor(2L, "staff@example.test", Role.STAFF);
-        when(taskService.getTask(41L, 2L, Role.STAFF)).thenReturn(taskResponse());
+        String token = tokenFor(2L, "staff@example.test", User.Role.STAFF);
+        when(taskService.getTask(41L, 2L, User.Role.STAFF)).thenReturn(taskResponse());
 
         mockMvc.perform(get("/api/tasks/41")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(41));
 
-        verify(taskService).getTask(41L, 2L, Role.STAFF);
+        verify(taskService).getTask(41L, 2L, User.Role.STAFF);
     }
 
     @Test
     void staffCanRequestAssignedTaskCompletion() throws Exception {
-        String token = tokenFor(2L, "staff@example.test", Role.STAFF);
-        when(taskService.completeTask(41L, 2L, Role.STAFF)).thenReturn(taskResponse());
+        String token = tokenFor(2L, "staff@example.test", User.Role.STAFF);
+        when(taskService.completeTask(41L, 2L, User.Role.STAFF)).thenReturn(taskResponse());
 
         mockMvc.perform(patch("/api/tasks/41/complete")
                         .header("Authorization", "Bearer " + token))
@@ -539,8 +533,8 @@ class SecurityConfigurationTest {
 
     @Test
     void staffCanRequestOwnAssignedTaskList() throws Exception {
-        String token = tokenFor(2L, "staff@example.test", Role.STAFF);
-        when(taskService.listAssignedTasks(12L, null, null, null, new PageCriteria(0, 20, "createdAt,desc"), 2L, Role.STAFF)).thenReturn(new PagedResponse<>(List.of(), 0, 20, 0, 0, true));
+        String token = tokenFor(2L, "staff@example.test", User.Role.STAFF);
+        when(taskService.listAssignedTasks(12L, null, null, null, new PageCriteria(0, 20, "createdAt,desc"), 2L, User.Role.STAFF)).thenReturn(new PagedResponse<>(List.of(), 0, 20, 0, 0, true));
 
         mockMvc.perform(get("/api/tasks/assigned/12")
                         .header("Authorization", "Bearer " + token))
@@ -550,7 +544,7 @@ class SecurityConfigurationTest {
 
     @Test
     void staffCannotCreateOrAssignTasks() throws Exception {
-        String token = tokenFor(2L, "staff@example.test", Role.STAFF);
+        String token = tokenFor(2L, "staff@example.test", User.Role.STAFF);
 
         mockMvc.perform(post("/api/tasks")
                         .header("Authorization", "Bearer " + token)
@@ -568,7 +562,7 @@ class SecurityConfigurationTest {
 
     @Test
     void adminCanCreateTask() throws Exception {
-        String token = tokenFor(3L, "admin@example.test", Role.ADMIN);
+        String token = tokenFor(3L, "admin@example.test", User.Role.ADMIN);
         when(taskService.createTask(any(CreateTaskRequest.class))).thenReturn(taskResponse());
 
         mockMvc.perform(post("/api/tasks")
@@ -584,7 +578,7 @@ class SecurityConfigurationTest {
         when(eventService.listEvents(null, null, null, 0, 20, "eventDateTime,asc"))
                 .thenReturn(new PagedResponse<>(List.of(), 0, 20, 0, 0, true));
 
-        for (Role role : Role.values()) {
+        for (User.Role role : User.Role.values()) {
             long id = role.ordinal() + 10L;
             String email = role.name().toLowerCase() + "-events@example.test";
             String token = tokenFor(id, email, role);
@@ -596,7 +590,7 @@ class SecurityConfigurationTest {
 
     @Test
     void onlyUserMayUseSelfRegistrationEndpoints() throws Exception {
-        String userToken = tokenFor(31L, "attendee@example.test", Role.USER);
+        String userToken = tokenFor(31L, "attendee@example.test", User.Role.USER);
         mockMvc.perform(post("/api/events/7/registrations")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isCreated());
@@ -607,7 +601,7 @@ class SecurityConfigurationTest {
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isNoContent());
 
-        String staffToken = tokenFor(21L, "event-staff@example.test", Role.STAFF);
+        String staffToken = tokenFor(21L, "event-staff@example.test", User.Role.STAFF);
         mockMvc.perform(post("/api/events/7/registrations")
                         .header("Authorization", "Bearer " + staffToken))
                 .andExpect(status().isForbidden());
@@ -615,7 +609,7 @@ class SecurityConfigurationTest {
                         .header("Authorization", "Bearer " + staffToken))
                 .andExpect(status().isForbidden());
 
-        String adminToken = tokenFor(3L, "event-admin@example.test", Role.ADMIN);
+        String adminToken = tokenFor(3L, "event-admin@example.test", User.Role.ADMIN);
         mockMvc.perform(post("/api/events/7/registrations")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isForbidden());
@@ -623,7 +617,7 @@ class SecurityConfigurationTest {
 
     @Test
     void onlyAdminMayManageEvents() throws Exception {
-        String userToken = tokenFor(31L, "event-user@example.test", Role.USER);
+        String userToken = tokenFor(31L, "event-user@example.test", User.Role.USER);
         mockMvc.perform(post("/api/events")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -633,7 +627,7 @@ class SecurityConfigurationTest {
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isForbidden());
 
-        String adminToken = tokenFor(3L, "events-admin@example.test", Role.ADMIN);
+        String adminToken = tokenFor(3L, "events-admin@example.test", User.Role.ADMIN);
         mockMvc.perform(post("/api/events")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -655,7 +649,7 @@ class SecurityConfigurationTest {
 
     @Test
     void userCannotReadInventory() throws Exception {
-        String token = tokenFor(31L, "inventory-user@example.test", Role.USER);
+        String token = tokenFor(31L, "inventory-user@example.test", User.Role.USER);
         mockMvc.perform(get("/api/inventory").header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/inventory/88").header("Authorization", "Bearer " + token))
@@ -664,8 +658,8 @@ class SecurityConfigurationTest {
 
     @Test
     void staffAndAdminMayReadInventory() throws Exception {
-        for (Role role : List.of(Role.STAFF, Role.ADMIN)) {
-            Long id = role == Role.STAFF ? 21L : 3L;
+        for (User.Role role : List.of(User.Role.STAFF, User.Role.ADMIN)) {
+            Long id = role == User.Role.STAFF ? 21L : 3L;
             String token = tokenFor(id, role.name().toLowerCase() + "-inventory@example.test", role);
             mockMvc.perform(get("/api/inventory").header("Authorization", "Bearer " + token))
                     .andExpect(status().isOk());
@@ -677,7 +671,7 @@ class SecurityConfigurationTest {
 
     @Test
     void staffAndUserCannotManageInventory() throws Exception {
-        for (Role role : List.of(Role.STAFF, Role.USER)) {
+        for (User.Role role : List.of(User.Role.STAFF, User.Role.USER)) {
             String token = tokenFor((long) role.ordinal() + 10L,
                     role.name().toLowerCase() + "-inventory-write@example.test", role);
             mockMvc.perform(post("/api/inventory").header("Authorization", "Bearer " + token)
@@ -693,7 +687,7 @@ class SecurityConfigurationTest {
 
     @Test
     void adminMayCreateRestockAndSoftDeactivateInventory() throws Exception {
-        String token = tokenFor(3L, "inventory-admin@example.test", Role.ADMIN);
+        String token = tokenFor(3L, "inventory-admin@example.test", User.Role.ADMIN);
         mockMvc.perform(post("/api/inventory").header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON).content(validInventoryCreateJson()))
                 .andExpect(status().isCreated());
@@ -731,7 +725,7 @@ class SecurityConfigurationTest {
 
     @Test
     void userCannotAccessAnyAlertOperation() throws Exception {
-        String token = tokenFor(31L, "alert-user@example.test", Role.USER);
+        String token = tokenFor(31L, "alert-user@example.test", User.Role.USER);
         mockMvc.perform(get("/api/alerts").header("Authorization", "Bearer " + token)).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/alerts/501").header("Authorization", "Bearer " + token)).andExpect(status().isForbidden());
         mockMvc.perform(put("/api/alerts/501/read").header("Authorization", "Bearer " + token)).andExpect(status().isForbidden());
@@ -740,8 +734,8 @@ class SecurityConfigurationTest {
 
     @Test
     void staffAndAdminReachCanonicalAlertOperationsWithPrincipalIdentity() throws Exception {
-        for (Role role : List.of(Role.STAFF, Role.ADMIN)) {
-            Long id = role == Role.STAFF ? 21L : 3L;
+        for (User.Role role : List.of(User.Role.STAFF, User.Role.ADMIN)) {
+            Long id = role == User.Role.STAFF ? 21L : 3L;
             String token = tokenFor(id, role.name().toLowerCase() + "-alerts@example.test", role);
             mockMvc.perform(get("/api/alerts").header("Authorization", "Bearer " + token)).andExpect(status().isOk());
             mockMvc.perform(get("/api/alerts/501").header("Authorization", "Bearer " + token)).andExpect(status().isOk());
@@ -755,26 +749,26 @@ class SecurityConfigurationTest {
 
     @Test
     void noManualAlertCreationOrGenericUpdateRouteIsGranted() throws Exception {
-        String token = tokenFor(3L, "alert-admin@example.test", Role.ADMIN);
+        String token = tokenFor(3L, "alert-admin@example.test", User.Role.ADMIN);
         mockMvc.perform(post("/api/alerts").header("Authorization", "Bearer " + token)).andExpect(status().isForbidden());
         mockMvc.perform(put("/api/alerts/501").header("Authorization", "Bearer " + token)).andExpect(status().isForbidden());
     }
 
-    private String tokenFor(Long id, String email, Role role) {
+    private String tokenFor(Long id, String email, User.Role role) {
         User user = user(id, email, role);
         when(userRepository.findByEmailIgnoreCase(email)).thenReturn(Optional.of(user));
         return jwtService.issueAccessToken(user).getValue();
     }
 
-    private User user(Long id, String email, Role role) {
+    private User user(Long id, String email, User.Role role) {
         User user = new User("Test User", email, "bcrypt-hash");
         ReflectionTestUtils.setField(user, "id", id);
         ReflectionTestUtils.setField(user, "role", role);
         return user;
     }
 
-    private AuthSession authSession(Long id, String email, Role role) {
-        return new AuthSession(
+    private AuthService.AuthSession authSession(Long id, String email, User.Role role) {
+        return new AuthService.AuthSession(
                 new AuthResponse(
                         "access-token",
                         "Bearer",
@@ -786,14 +780,14 @@ class SecurityConfigurationTest {
         );
     }
 
-    private CurrentUserResponse currentUser(Long id, String email, Role role) {
+    private CurrentUserResponse currentUser(Long id, String email, User.Role role) {
         return new CurrentUserResponse(
                 id,
                 "Test User",
                 email,
                 role,
                 null,
-                UserStatus.ACTIVE,
+                User.Status.ACTIVE,
                 null
         );
     }
@@ -806,7 +800,7 @@ class SecurityConfigurationTest {
                 "worker@example.test",
                 new DepartmentSummary(3L, "Housekeeping"),
                 "Room Attendant",
-                EmployeeStatus.ACTIVE,
+                Employee.Status.ACTIVE,
                 LocalDateTime.of(2026, 10, 3, 9, 0),
                 LocalDateTime.of(2026, 10, 3, 9, 0)
         );
@@ -829,7 +823,7 @@ class SecurityConfigurationTest {
                 12L,
                 "218",
                 "STANDARD",
-                RoomStatus.DIRTY,
+                Room.Status.DIRTY,
                 2,
                 LocalDateTime.of(2030, 10, 3, 15, 0),
                 true,
@@ -866,8 +860,8 @@ class SecurityConfigurationTest {
                 41L,
                 "Inspect room",
                 "Check readiness.",
-                TaskStatus.ASSIGNED,
-                TaskPriority.HIGH,
+                Task.Status.ASSIGNED,
+                Task.Priority.HIGH,
                 new DepartmentSummary(3L, "Housekeeping"),
                 null,
                 null,

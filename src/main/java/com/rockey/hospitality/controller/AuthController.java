@@ -1,49 +1,65 @@
 package com.rockey.hospitality.controller;
 
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
-import com.rockey.hospitality.exception.ApiError;
-
 import com.rockey.hospitality.configuration.SecurityProperties;
-import com.rockey.hospitality.dto.auth.AuthResponse;
-import com.rockey.hospitality.dto.auth.CurrentUserResponse;
-import com.rockey.hospitality.dto.auth.LoginRequest;
-import com.rockey.hospitality.dto.auth.RegisterUserRequest;
-import com.rockey.hospitality.exception.ForbiddenException;
+import com.rockey.hospitality.dto.AuthDtos.AuthResponse;
+import com.rockey.hospitality.dto.AuthDtos.CurrentUserResponse;
+import com.rockey.hospitality.dto.AuthDtos.LoginRequest;
+import com.rockey.hospitality.dto.AuthDtos.RegisterUserRequest;
+import com.rockey.hospitality.dto.CommonDtos.ApiError;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
 import com.rockey.hospitality.security.RockeyUserPrincipal;
 import com.rockey.hospitality.service.AuthService;
-import com.rockey.hospitality.service.AuthSession;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.time.Duration;
+import java.util.Collections;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.Duration;
-import java.util.Collections;
-
 /**
- * Binds Auth HTTP requests and delegates business operations to its service layer.
- * Response DTOs and HTTP statuses are kept separate from JPA entities.
+ * STUDY NOTE: A Controller is the API entry point for HTTP requests from React or another client.
+ * Here, @RestController returns response data, normally JSON; @RequestMapping sets the shared /api/auth URL.
+ * AuthController handles account requests and HttpOnly refresh-cookie delivery and delegates business rules
+ * to AuthService.
+ * DTOs describe input/output; Spring Security and service checks, not hidden frontend buttons, enforce
+ * permissions.
  */
-// Registers a web controller whose mapped return values are written as response bodies, normally JSON.
 @RestController
 // Groups this controller's routes under /api/auth.
 @RequestMapping("/api/auth")
 public class AuthController {
+
+    // HTTP/annotation study key:
+    // @GetMapping handles HTTP GET reads; its path is appended to the controller's base URL.
+    // @PostMapping handles HTTP POST creation/actions, such as register, login, refresh and logout.
+    // @RequestBody reads request JSON into the declared DTO.
+    // @Valid runs the DTO's Bean Validation checks before controller business delegation.
+    // @AuthenticationPrincipal supplies the identity established by Spring Security, not a client-chosen User
+    // ID.
+    // @CookieValue reads the named refresh cookie from the request without exposing it to browser JavaScript.
+    // @ResponseStatus declares the HTTP status for a successful controller return.
+    // @Operation and @ApiResponses document the operation and its outcomes; they do not authorize or validate
+    // requests.
+    // @Content/@Schema describe documented bodies/types, not runtime validation or security.
+    // An access JWT stays in frontend memory; the longer-lived refresh token stays in its HttpOnly cookie.
+    // Present browser Origin is checked on refresh; approved non-browser requests may omit Origin.
+    // Logout expires the cookie and revokes refresh state, not already-issued access JWTs.
 
     /**
      * Shared refresh-cookie name used for issuing, reading, rotating, and expiring the same browser cookie.
@@ -71,9 +87,7 @@ public class AuthController {
      * Delegates public USER registration and writes the separate refresh cookie.
      * ResponseEntity sets 201 and returns only the authentication DTO.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Register guest/event USER", description = "Access: Public, rate limited. Canonical operation: POST /api/auth/register.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Created", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ApiError.class))),
@@ -81,17 +95,14 @@ public class AuthController {
         @ApiResponse(responseCode = "429", description = "Authentication rate limited", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "500", description = "Safe unexpected error", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP POST to this /register suffix.
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(
-            // Validates the bound request DTO before the controller delegates to its service.
             @Valid
-            // Deserializes the request JSON into this writable DTO.
             @RequestBody RegisterUserRequest request,
             HttpServletRequest servletRequest,
             HttpServletResponse servletResponse
     ) {
-        AuthSession session = authService.register(
+        AuthService.AuthSession session = authService.register(
                 request.getName(),
                 request.getEmail(),
                 request.getPassword(),
@@ -104,9 +115,7 @@ public class AuthController {
     /**
      * Delegates credential validation and writes the rotated refresh cookie, returning the safe access-token/profile response.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Authenticate any active role", description = "Access: Public, rate limited. Canonical operation: POST /api/auth/login.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ApiError.class))),
@@ -114,17 +123,14 @@ public class AuthController {
         @ApiResponse(responseCode = "429", description = "Authentication rate limited", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "500", description = "Safe unexpected error", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP POST to this /login suffix.
     @PostMapping("/login")
     public AuthResponse login(
-            // Validates the bound request DTO before the controller delegates to its service.
             @Valid
-            // Deserializes the request JSON into this writable DTO.
             @RequestBody LoginRequest request,
             HttpServletRequest servletRequest,
             HttpServletResponse servletResponse
     ) {
-        AuthSession session = authService.login(
+        AuthService.AuthSession session = authService.login(
                 request.getEmail(),
                 request.getPassword(),
                 servletRequest.getRemoteAddr()
@@ -137,9 +143,7 @@ public class AuthController {
      * Checks the browser Origin before using the HttpOnly refresh cookie.
      * AuthService rotates the session and this controller replaces the cookie.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Rotate/renew access token", description = "Access: Refresh token. Canonical operation: POST /api/auth/refresh.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ApiError.class))),
@@ -148,7 +152,6 @@ public class AuthController {
         @ApiResponse(responseCode = "429", description = "Authentication rate limited", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "500", description = "Safe unexpected error", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP POST to this /refresh suffix.
     @PostMapping("/refresh")
     public AuthResponse refresh(
             // Binds the optional rockey_refresh cookie to this parameter without exposing it in response JSON.
@@ -157,7 +160,7 @@ public class AuthController {
             HttpServletResponse servletResponse
     ) {
         validateRefreshOrigin(servletRequest);
-        AuthSession session = authService.refresh(
+        AuthService.AuthSession session = authService.refresh(
                 refreshToken,
                 servletRequest.getRemoteAddr()
         );
@@ -181,19 +184,15 @@ public class AuthController {
     /**
      * Returns the authenticated principal's own current profile through AuthService.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Own profile", description = "Access: USER, STAFF, ADMIN. Canonical operation: GET /api/auth/me.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "401", description = "Authentication required or invalid token", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "404", description = "Resource not found", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "500", description = "Safe unexpected error", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP GET to this /me suffix.
     @GetMapping("/me")
     public CurrentUserResponse currentUser(
-            // Uses the identity established by backend authentication, not an ID supplied in JSON.
             @AuthenticationPrincipal RockeyUserPrincipal principal
     ) {
         return authService.getCurrentUser(principal.getId());
@@ -203,21 +202,17 @@ public class AuthController {
      * Revokes the authenticated User's refresh session and expires the same cookie path and name.
      * Returns 204 without token or password data.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Revoke current refresh session and expire refresh cookie", description = "Access: USER, STAFF, ADMIN; access token required. Canonical operation: POST /api/auth/logout.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "No Content", content = @Content),
         @ApiResponse(responseCode = "401", description = "Authentication required or invalid token", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "404", description = "Resource not found", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "500", description = "Safe unexpected error", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP POST to this /logout suffix.
     @PostMapping("/logout")
     // Sets the successful HTTP status to 204 No Content for this bodyless operation.
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void logout(
-            // Uses the identity established by backend authentication, not an ID supplied in JSON.
             @AuthenticationPrincipal RockeyUserPrincipal principal,
             HttpServletResponse servletResponse
     ) {
@@ -230,7 +225,7 @@ public class AuthController {
      */
     private void setRefreshCookie(
             HttpServletResponse servletResponse,
-            AuthSession session
+            AuthService.AuthSession session
     ) {
         setRefreshCookie(
                 servletResponse,

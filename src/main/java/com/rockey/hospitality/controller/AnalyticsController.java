@@ -1,19 +1,20 @@
 package com.rockey.hospitality.controller;
 
+import com.rockey.hospitality.dto.AnalyticsDtos.*;
+import com.rockey.hospitality.dto.CommonDtos.ApiError;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.security.RockeyUserPrincipal;
+import com.rockey.hospitality.service.AnalyticsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.Parameters;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
-import com.rockey.hospitality.exception.ApiError;
-
-import com.rockey.hospitality.dto.analytics.*;
-import com.rockey.hospitality.exception.BadRequestException;
-import com.rockey.hospitality.security.RockeyUserPrincipal;
-import com.rockey.hospitality.service.AnalyticsService;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import java.util.List;
+import java.util.Set;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,18 +22,30 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-import java.util.Set;
-
 /**
- * Binds Analytics HTTP requests and delegates business operations to its service layer.
- * Response DTOs and HTTP statuses are kept separate from JPA entities.
+ * STUDY NOTE: A Controller is the API entry point for HTTP requests from React or another client.
+ * Here, @RestController returns response data, normally JSON; @RequestMapping sets the shared /api/analytics URL.
+ * AnalyticsController handles read-only role-scoped counts and delegates business rules to
+ * AnalyticsService.
+ * DTOs describe input/output; Spring Security and service checks, not hidden frontend buttons, enforce
+ * permissions.
  */
-// Registers a web controller whose mapped return values are written as response bodies, normally JSON.
 @RestController
 // Groups this controller's routes under /api/analytics.
 @RequestMapping("/api/analytics")
 public class AnalyticsController {
+
+    // HTTP/annotation study key:
+    // @GetMapping handles HTTP GET reads; its path is appended to the controller's base URL.
+    // @RequestParam reads a query-string value; required=false makes it optional and defaultValue supplies an
+    // omitted value.
+    // @AuthenticationPrincipal supplies the identity established by Spring Security, not a client-chosen User
+    // ID.
+    // @Operation and @ApiResponses document the operation and its outcomes; they do not authorize or validate
+    // requests.
+    // @Parameters/@Parameter describe query/path inputs in OpenAPI; documentation limits are not runtime
+    // validation.
+    // @Content/@Schema describe documented bodies/types, not runtime validation or security.
     /**
      * Canonical query-parameter name shared by allowed-name checks and numeric parsing.
      */
@@ -50,9 +63,7 @@ public class AnalyticsController {
      * Role-specific dashboard.
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Role-specific dashboard", description = "Access: USER, STAFF, ADMIN. Canonical operation: GET /api/analytics/dashboard.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ApiError.class))),
@@ -60,14 +71,10 @@ public class AnalyticsController {
         @ApiResponse(responseCode = "403", description = "Role, ownership or eligibility denied", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "500", description = "Safe unexpected error", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP GET to this /dashboard suffix.
     @GetMapping("/dashboard")
     public DashboardResponse dashboard(
-            // Documents or hides an OpenAPI parameter; nested @Schema documents its type and limits without performing runtime validation.
             @Parameter(hidden = true)
-            // Binds query parameters for this controller; the service or explicit validator checks their allowed values.
             @RequestParam MultiValueMap<String, String> params,
-            // Uses the identity established by backend authentication, not an ID supplied in JSON.
             @AuthenticationPrincipal RockeyUserPrincipal principal) {
         validateParams(params, Set.of());
         return service.dashboard(principal.getId(), principal.getRole());
@@ -77,26 +84,19 @@ public class AnalyticsController {
      * Room readiness/turnover.
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Room readiness/turnover", description = "Access: ADMIN. Canonical operation: GET /api/analytics/rooms.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "401", description = "Authentication required or invalid token", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "403", description = "Role, ownership or eligibility denied", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP GET to this /rooms suffix.
     @GetMapping("/rooms")
-    // Documents or hides an OpenAPI parameter; nested @Schema documents its type and limits without performing runtime validation.
     @Parameter(name = "floor", in = ParameterIn.QUERY, description = "Optional floor, 1–99; omitted includes all floors.",
             schema = @Schema(type = "integer", format = "int32", minimum = "1", maximum = "99"))
     public RoomAnalyticsResponse rooms(
-            // Documents or hides an OpenAPI parameter; nested @Schema documents its type and limits without performing runtime validation.
             @Parameter(hidden = true)
-            // Binds query parameters for this controller; the service or explicit validator checks their allowed values.
             @RequestParam MultiValueMap<String, String> params,
-            // Uses the identity established by backend authentication, not an ID supplied in JSON.
             @AuthenticationPrincipal RockeyUserPrincipal principal) {
         validateParams(params, Set.of("floor"));
         return service.rooms(integer(params, "floor", null), principal.getRole());
@@ -106,26 +106,19 @@ public class AnalyticsController {
      * Task completion/overdue.
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Task completion/overdue", description = "Access: ADMIN. Canonical operation: GET /api/analytics/tasks.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "401", description = "Authentication required or invalid token", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "403", description = "Role, ownership or eligibility denied", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP GET to this /tasks suffix.
     @GetMapping("/tasks")
-    // Documents or hides an OpenAPI parameter; nested @Schema documents its type and limits without performing runtime validation.
     @Parameter(name = DEPARTMENT_ID, in = ParameterIn.QUERY, description = "Positive Department ID; unknown ID returns zero counts.",
             schema = @Schema(type = "integer", format = "int64", minimum = "1"))
     public TaskAnalyticsResponse tasks(
-            // Documents or hides an OpenAPI parameter; nested @Schema documents its type and limits without performing runtime validation.
             @Parameter(hidden = true)
-            // Binds query parameters for this controller; the service or explicit validator checks their allowed values.
             @RequestParam MultiValueMap<String, String> params,
-            // Uses the identity established by backend authentication, not an ID supplied in JSON.
             @AuthenticationPrincipal RockeyUserPrincipal principal) {
         validateParams(params, Set.of(DEPARTMENT_ID));
         return service.tasks(departmentId(params), principal.getRole());
@@ -135,9 +128,7 @@ public class AnalyticsController {
      * Department workload.
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Department workload", description = "Access: ADMIN. Canonical operation: GET /api/analytics/departments.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ApiError.class))),
@@ -145,7 +136,6 @@ public class AnalyticsController {
         @ApiResponse(responseCode = "403", description = "Role, ownership or eligibility denied", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "404", description = "Resource not found", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP GET to this /departments suffix.
     @GetMapping("/departments")
     // Groups documented query parameters; nested @Parameter and @Schema describe names, types, limits, and defaults.
     @Parameters({
@@ -154,11 +144,8 @@ public class AnalyticsController {
         @Parameter(name = "size", in = ParameterIn.QUERY, schema = @Schema(type = "integer", format = "int32", minimum = "1", maximum = "100", defaultValue = "20"))
     })
     public DepartmentAnalyticsResponse departments(
-            // Documents or hides an OpenAPI parameter; nested @Schema documents its type and limits without performing runtime validation.
             @Parameter(hidden = true)
-            // Binds query parameters for this controller; the service or explicit validator checks their allowed values.
             @RequestParam MultiValueMap<String, String> params,
-            // Uses the identity established by backend authentication, not an ID supplied in JSON.
             @AuthenticationPrincipal RockeyUserPrincipal principal) {
         validateParams(params, Set.of(DEPARTMENT_ID, "page", "size"));
         return service.departments(departmentId(params), integer(params, "page", 0),
@@ -169,26 +156,19 @@ public class AnalyticsController {
      * Inventory thresholds and global event registration/preparation.
      * Binds HTTP inputs and delegates the operation to the service, which enforces domain rules and record scope.
      */
-    // Documents this operation's purpose and access description in OpenAPI; it does not enforce authorization.
     @Operation(summary = "Inventory thresholds and global event registration/preparation", description = "Access: ADMIN. Canonical operation: GET /api/analytics/inventory-events.")
-    // Documents HTTP outcomes: @ApiResponse gives status codes, @Content describes bodies, and @Schema identifies DTO shapes.
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "401", description = "Authentication required or invalid token", content = @Content(schema = @Schema(implementation = ApiError.class))),
         @ApiResponse(responseCode = "403", description = "Role, ownership or eligibility denied", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    // Maps HTTP GET to this /inventory-events suffix.
     @GetMapping("/inventory-events")
-    // Documents or hides an OpenAPI parameter; nested @Schema documents its type and limits without performing runtime validation.
     @Parameter(name = DEPARTMENT_ID, in = ParameterIn.QUERY, description = "Positive Department ID filters Inventory only; Events remain global. No date filters.",
             schema = @Schema(type = "integer", format = "int64", minimum = "1"))
     public OperationsAnalyticsResponse operations(
-            // Documents or hides an OpenAPI parameter; nested @Schema documents its type and limits without performing runtime validation.
             @Parameter(hidden = true)
-            // Binds query parameters for this controller; the service or explicit validator checks their allowed values.
             @RequestParam MultiValueMap<String, String> params,
-            // Uses the identity established by backend authentication, not an ID supplied in JSON.
             @AuthenticationPrincipal RockeyUserPrincipal principal) {
         validateParams(params, Set.of(DEPARTMENT_ID));
         return service.operations(departmentId(params), principal.getRole());

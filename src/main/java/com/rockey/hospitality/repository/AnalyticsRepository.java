@@ -1,21 +1,28 @@
 package com.rockey.hospitality.repository;
 
-import com.rockey.hospitality.entity.EmployeeStatus;
-import com.rockey.hospitality.entity.TaskStatus;
+import com.rockey.hospitality.entity.Employee;
+import com.rockey.hospitality.entity.Task;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
-import org.springframework.stereotype.Repository;
-
 import java.time.LocalDateTime;
 import java.util.List;
+import org.springframework.stereotype.Repository;
 
 /**
- * Runs independent read-only JPQL aggregates, avoiding multiplied counts from unrelated collection joins.
- * Only fixed query fragments are appended; request values remain bound parameters.
+ * STUDY NOTE: A Repository is the data-access layer between services and persisted data.
+ * Here, @Repository makes this class a Spring-managed persistence component and enables persistence-exception
+ * translation.
+ * AnalyticsService uses its EntityManager (JPA's database access object) for independent read-only counts
+ * and grouped results.
+ * JPQL queries use entity/field names, fixed application-controlled fragments and named parameters, never
+ * interpolated request values.
  */
 // Registers this persistence component and enables Spring persistence-exception translation.
 @Repository
 public class AnalyticsRepository {
+
+    // Query study key: JPQL uses mapped Java entities; EntityManager executes it through Hibernate/MySQL.
+    // setParameter binds each request-derived value separately from fixed query text.
     /**
      * Named JPQL parameter used for non-terminal status lists; values remain bound rather than interpolated.
      */
@@ -23,8 +30,8 @@ public class AnalyticsRepository {
     /**
      * OPEN, ASSIGNED, and IN_PROGRESS Tasks count as active work for guards and aggregates.
      */
-    private static final List<TaskStatus> NON_TERMINAL = List.of(
-            TaskStatus.OPEN, TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS);
+    private static final List<Task.Status> NON_TERMINAL = List.of(
+            Task.Status.OPEN, Task.Status.ASSIGNED, Task.Status.IN_PROGRESS);
     /**
      * JPA query entry point for read-only aggregate counts and grouped projections.
      */
@@ -145,7 +152,7 @@ public class AnalyticsRepository {
     public long completedEventTaskCount() {
         return entityManager.createQuery(
                 "SELECT COUNT(task) FROM Task task WHERE task.event IS NOT NULL AND task.status = :status",
-                Long.class).setParameter("status", TaskStatus.COMPLETED).getSingleResult();
+                Long.class).setParameter("status", Task.Status.COMPLETED).getSingleResult();
     }
 
     /**
@@ -165,7 +172,7 @@ public class AnalyticsRepository {
                 "SELECT employee.department.id, COUNT(employee) FROM Employee employee"
                         + " WHERE employee.department.id IN :ids AND employee.status = :status"
                         + " GROUP BY employee.department.id", Object[].class)
-                .setParameter("ids", ids).setParameter("status", EmployeeStatus.ACTIVE).getResultList();
+                .setParameter("ids", ids).setParameter("status", Employee.Status.ACTIVE).getResultList();
     }
 
     /**

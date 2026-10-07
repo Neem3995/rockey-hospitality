@@ -1,20 +1,20 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.event.EventRegistrationResponse;
-import com.rockey.hospitality.dto.event.EventResponse;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.EventDtos.EventRegistrationResponse;
+import com.rockey.hospitality.dto.EventDtos.EventResponse;
 import com.rockey.hospitality.entity.Event;
-import com.rockey.hospitality.entity.EventStatus;
-import com.rockey.hospitality.entity.Role;
 import com.rockey.hospitality.entity.User;
-import com.rockey.hospitality.entity.UserStatus;
-import com.rockey.hospitality.exception.BadRequestException;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ForbiddenException;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.repository.EventRepository;
 import com.rockey.hospitality.repository.TaskRepository;
 import com.rockey.hospitality.repository.UserRepository;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,11 +24,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
@@ -61,8 +56,8 @@ class RegistrationServiceTest {
 
     @Test
     void activeUserRegistersForOpenEventWithCapacity() {
-        User user = user(31L, Role.USER, UserStatus.ACTIVE);
-        Event event = event(7L, EventStatus.OPEN, 3);
+        User user = user(31L, User.Role.USER, User.Status.ACTIVE);
+        Event event = event(7L, Event.Status.OPEN, 3);
         when(userRepository.findById(31L)).thenReturn(Optional.of(user));
         when(eventRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(event));
         when(eventRepository.countRegistrationsByEventId(7L)).thenReturn(1L);
@@ -78,8 +73,8 @@ class RegistrationServiceTest {
 
     @Test
     void duplicateRegistrationIsRejectedBeforeCapacityMutation() {
-        User user = user(31L, Role.USER, UserStatus.ACTIVE);
-        Event event = event(7L, EventStatus.OPEN, 3);
+        User user = user(31L, User.Role.USER, User.Status.ACTIVE);
+        Event event = event(7L, Event.Status.OPEN, 3);
         when(userRepository.findById(31L)).thenReturn(Optional.of(user));
         when(eventRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(event));
         when(userRepository.existsByIdAndRegisteredEventsId(31L, 7L)).thenReturn(true);
@@ -92,8 +87,8 @@ class RegistrationServiceTest {
 
     @Test
     void fullEventIsRejected() {
-        User user = user(31L, Role.USER, UserStatus.ACTIVE);
-        Event event = event(7L, EventStatus.OPEN, 2);
+        User user = user(31L, User.Role.USER, User.Status.ACTIVE);
+        Event event = event(7L, Event.Status.OPEN, 2);
         when(userRepository.findById(31L)).thenReturn(Optional.of(user));
         when(eventRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(event));
         when(eventRepository.countRegistrationsByEventId(7L)).thenReturn(2L);
@@ -105,20 +100,20 @@ class RegistrationServiceTest {
 
     @Test
     void closedCancelledAndStartedEventsRejectRegistration() {
-        User user = user(31L, Role.USER, UserStatus.ACTIVE);
+        User user = user(31L, User.Role.USER, User.Status.ACTIVE);
         when(userRepository.findById(31L)).thenReturn(Optional.of(user));
 
-        Event closed = event(7L, EventStatus.CLOSED, 10);
+        Event closed = event(7L, Event.Status.CLOSED, 10);
         when(eventRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(closed));
         assertThatThrownBy(() -> registrationService.register(7L, 31L))
                 .isInstanceOf(ConflictException.class);
 
-        Event cancelled = event(8L, EventStatus.CANCELLED, 10);
+        Event cancelled = event(8L, Event.Status.CANCELLED, 10);
         when(eventRepository.findByIdForUpdate(8L)).thenReturn(Optional.of(cancelled));
         assertThatThrownBy(() -> registrationService.register(8L, 31L))
                 .isInstanceOf(ConflictException.class);
 
-        Event started = event(9L, EventStatus.OPEN, 10);
+        Event started = event(9L, Event.Status.OPEN, 10);
         ReflectionTestUtils.setField(
                 started,
                 "eventDateTime",
@@ -131,12 +126,12 @@ class RegistrationServiceTest {
 
     @Test
     void staffAndInactiveUserCannotSelfRegister() {
-        User staff = user(21L, Role.STAFF, UserStatus.ACTIVE);
+        User staff = user(21L, User.Role.STAFF, User.Status.ACTIVE);
         when(userRepository.findById(21L)).thenReturn(Optional.of(staff));
         assertThatThrownBy(() -> registrationService.register(7L, 21L))
                 .isInstanceOf(ForbiddenException.class);
 
-        User inactive = user(31L, Role.USER, UserStatus.INACTIVE);
+        User inactive = user(31L, User.Role.USER, User.Status.INACTIVE);
         when(userRepository.findById(31L)).thenReturn(Optional.of(inactive));
         assertThatThrownBy(() -> registrationService.register(7L, 31L))
                 .isInstanceOf(ForbiddenException.class);
@@ -148,7 +143,7 @@ class RegistrationServiceTest {
         assertThatThrownBy(() -> registrationService.register(7L, 99L))
                 .isInstanceOf(ResourceNotFoundException.class);
 
-        User user = user(31L, Role.USER, UserStatus.ACTIVE);
+        User user = user(31L, User.Role.USER, User.Status.ACTIVE);
         when(userRepository.findById(31L)).thenReturn(Optional.of(user));
         when(eventRepository.findByIdForUpdate(99L)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> registrationService.register(99L, 31L))
@@ -157,8 +152,8 @@ class RegistrationServiceTest {
 
     @Test
     void userWithdrawsOwnRegistrationWhileOpenAndUpcoming() {
-        User user = user(31L, Role.USER, UserStatus.ACTIVE);
-        Event event = event(7L, EventStatus.OPEN, 10);
+        User user = user(31L, User.Role.USER, User.Status.ACTIVE);
+        Event event = event(7L, Event.Status.OPEN, 10);
         user.registerForEvent(event);
         when(userRepository.findById(31L)).thenReturn(Optional.of(user));
         when(eventRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(event));
@@ -172,14 +167,14 @@ class RegistrationServiceTest {
 
     @Test
     void withdrawalRejectsMissingRegistrationAndClosedWindow() {
-        User user = user(31L, Role.USER, UserStatus.ACTIVE);
-        Event open = event(7L, EventStatus.OPEN, 10);
+        User user = user(31L, User.Role.USER, User.Status.ACTIVE);
+        Event open = event(7L, Event.Status.OPEN, 10);
         when(userRepository.findById(31L)).thenReturn(Optional.of(user));
         when(eventRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(open));
         assertThatThrownBy(() -> registrationService.withdraw(7L, 31L))
                 .isInstanceOf(ResourceNotFoundException.class);
 
-        Event cancelled = event(8L, EventStatus.CANCELLED, 10);
+        Event cancelled = event(8L, Event.Status.CANCELLED, 10);
         when(eventRepository.findByIdForUpdate(8L)).thenReturn(Optional.of(cancelled));
         assertThatThrownBy(() -> registrationService.withdraw(8L, 31L))
                 .isInstanceOf(ConflictException.class);
@@ -187,8 +182,8 @@ class RegistrationServiceTest {
 
     @Test
     void listOwnRegistrationsIsPagedAndUsesCurrentUserOnly() {
-        User user = user(31L, Role.USER, UserStatus.ACTIVE);
-        Event event = event(7L, EventStatus.CANCELLED, 10);
+        User user = user(31L, User.Role.USER, User.Status.ACTIVE);
+        Event event = event(7L, Event.Status.CANCELLED, 10);
         PageRequest pageRequest = PageRequest.of(
                 0,
                 5,
@@ -208,13 +203,13 @@ class RegistrationServiceTest {
 
         assertThat(response.getContent()).hasSize(1);
         assertThat(response.getContent().get(0).getStatus())
-                .isEqualTo(EventStatus.CANCELLED);
+                .isEqualTo(Event.Status.CANCELLED);
         verify(eventRepository).findRegisteredEventsByUserId(31L, pageRequest);
     }
 
     @Test
     void listOwnRegistrationsRejectsInvalidPagination() {
-        User user = user(31L, Role.USER, UserStatus.ACTIVE);
+        User user = user(31L, User.Role.USER, User.Status.ACTIVE);
         when(userRepository.findById(31L)).thenReturn(Optional.of(user));
 
         assertThatThrownBy(() -> registrationService.listOwnRegistrations(
@@ -228,7 +223,7 @@ class RegistrationServiceTest {
         )).isInstanceOf(BadRequestException.class);
     }
 
-    private User user(Long id, Role role, UserStatus status) {
+    private User user(Long id, User.Role role, User.Status status) {
         User user = new User("Attendee", "attendee" + id + "@example.test", "hash");
         ReflectionTestUtils.setField(user, "id", id);
         ReflectionTestUtils.setField(user, "role", role);
@@ -236,7 +231,7 @@ class RegistrationServiceTest {
         return user;
     }
 
-    private Event event(Long id, EventStatus status, int capacity) {
+    private Event event(Long id, Event.Status status, int capacity) {
         Event event = new Event(
                 "Leadership Conference",
                 "One-day conference.",

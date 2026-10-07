@@ -1,36 +1,41 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.event.EventRegistrationResponse;
-import com.rockey.hospitality.dto.event.EventResponse;
+import com.rockey.hospitality.dto.CommonDtos.PagedResponse;
+import com.rockey.hospitality.dto.EventDtos.EventRegistrationResponse;
+import com.rockey.hospitality.dto.EventDtos.EventResponse;
 import com.rockey.hospitality.entity.Event;
-import com.rockey.hospitality.entity.EventStatus;
-import com.rockey.hospitality.entity.Role;
 import com.rockey.hospitality.entity.User;
-import com.rockey.hospitality.entity.UserStatus;
-import com.rockey.hospitality.exception.BadRequestException;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ForbiddenException;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
+import com.rockey.hospitality.exception.ApiException.BadRequestException;
+import com.rockey.hospitality.exception.ApiException.ConflictException;
+import com.rockey.hospitality.exception.ApiException.ForbiddenException;
+import com.rockey.hospitality.exception.ApiException.ResourceNotFoundException;
 import com.rockey.hospitality.repository.EventRepository;
 import com.rockey.hospitality.repository.UserRepository;
+import java.time.LocalDateTime;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Isolation;
-
-import java.time.LocalDateTime;
-import java.util.Set;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Manages an active USER's own Event registrations through the User join-table relationship.
- * Event row locking serializes capacity-sensitive changes.
+ * STUDY NOTE: A Service holds business rules and coordinates an application workflow.
+ * Here, @Service lets Spring manage and inject this component; @Transactional groups database work so unchecked
+ * failures roll back writes.
+ * RegistrationService checks active USER identity, upcoming OPEN Events, duplicates and capacity before
+ * changing the join-table membership.
+ * EventController delegates here; User and Event repositories plus EventService provide the persisted data
+ * through JPA/Hibernate.
  */
-// Registers this business/security service for constructor injection.
 @Service
 public class RegistrationService {
+
+    // Transaction study key: Spring applies @Transactional when another component calls this managed service.
+    // readOnly=true requests a read-oriented transaction; it keeps lazy reads and DTO mapping inside the
+    // persistence boundary.
+    // readOnly is not an authorization rule; repositories still run only after the service's scope checks.
 
     /**
      * Maximum of 100 rows per requested page, shared by this service's pagination checks.
@@ -77,13 +82,13 @@ public class RegistrationService {
     /**
      * Locks an upcoming OPEN Event, checks duplicate membership and remaining capacity, then adds it to the active USER's registrations.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes. READ_COMMITTED lets checks after a lock observe preceding committed changes.
+    // READ_COMMITTED lets post-lock checks observe preceding committed changes.
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public EventRegistrationResponse register(Long eventId, Long userId) {
         User user = findActiveAttendee(userId);
         // Serialize registrations on the Event so capacity and duplicate checks agree before commit.
         Event event = findEventForUpdate(eventId);
-        if (event.getStatus() != EventStatus.OPEN
+        if (event.getStatus() != Event.Status.OPEN
                 || !event.getEventDateTime().isAfter(LocalDateTime.now())) {
             throw new ConflictException("Registration is available only for upcoming OPEN events.");
         }
@@ -107,12 +112,12 @@ public class RegistrationService {
      * Locks an upcoming OPEN Event and removes the caller's existing membership.
      * Missing registration or closed eligibility is reported instead of deleting the Event.
      */
-    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes. READ_COMMITTED lets checks after a lock observe preceding committed changes.
+    // READ_COMMITTED lets post-lock checks observe preceding committed changes.
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void withdraw(Long eventId, Long userId) {
         User user = findActiveAttendee(userId);
         Event event = findEventForUpdate(eventId);
-        if (event.getStatus() != EventStatus.OPEN
+        if (event.getStatus() != Event.Status.OPEN
                 || !event.getEventDateTime().isAfter(LocalDateTime.now())) {
             throw new ConflictException(
                     "Registration withdrawal is closed for this event."
@@ -129,7 +134,6 @@ public class RegistrationService {
     /**
      * Pages only the active USER's retained Event memberships and maps them to the shared Event response shape.
      */
-    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public PagedResponse<EventResponse> listOwnRegistrations(
             Long userId,
@@ -160,7 +164,7 @@ public class RegistrationService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "User not found with id " + userId + "."
                 ));
-        if (user.getRole() != Role.USER || user.getStatus() != UserStatus.ACTIVE) {
+        if (user.getRole() != User.Role.USER || user.getStatus() != User.Status.ACTIVE) {
             throw new ForbiddenException(
                     "Event self-registration requires an active USER account."
             );
