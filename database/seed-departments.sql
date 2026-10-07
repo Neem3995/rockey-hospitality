@@ -1,4 +1,4 @@
--- Fictional Phase 2A department seed data from the approved Phase 1 seed plan.
+-- Fictional Department seed data; no login accounts or credentials.
 -- Rerunning this script preserves an existing department's active/inactive state.
 
 INSERT INTO departments (name, description)

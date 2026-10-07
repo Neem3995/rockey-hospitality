@@ -68,6 +68,7 @@ public class DepartmentService {
 
     @Transactional
     public void deactivateDepartment(Long departmentId) {
+        // Preserve history; active Employees/Inventory and non-terminal Tasks block deactivation.
         Department department = departmentRepository.findByIdForUpdate(departmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Department not found with id " + departmentId + "."

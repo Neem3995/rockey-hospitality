@@ -1,0 +1,69 @@
+-- LOCAL DEVELOPMENT / CAPSTONE DEMO ONLY. Never run automatically at startup.
+-- Register a USER through Rockey first, stop the backend, then replace the email below.
+-- Select the intended database with the MySQL client's --database option.
+-- Use batch input without --force so an SQL error stops before COMMIT.
+-- This template changes no password/hash and creates no tables or public endpoint.
+
+SET time_zone = '+00:00';
+SET @registered_user_email = LOWER(TRIM('REGISTERED_USER_EMAIL_HERE'));
+SET @bootstrap_user_id = NULL;
+
+START TRANSACTION;
+
+-- Lock the registered identity; the backend should remain stopped during this one-time step.
+SELECT id INTO @bootstrap_user_id
+FROM users
+WHERE email = @registered_user_email
+FOR UPDATE;
+
+-- Refuse another ADMIN, an inactive account/Department, or an existing Employee identity.
+-- No partial changes are made when these conditions fail.
+SET @can_bootstrap =
+    DATABASE() IN ('rockey_hospitality', 'rockey_hospitality_bootstrap_test')
+    AND EXISTS (
+        SELECT 1 FROM users
+        WHERE id = @bootstrap_user_id AND role = 'USER'
+          AND status = 'ACTIVE' AND department_id IS NULL
+    )
+    AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'ADMIN')
+    AND NOT EXISTS (
+        SELECT 1 FROM employees
+        WHERE user_id = @bootstrap_user_id OR email = @registered_user_email
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM departments WHERE name = 'Management' AND active = FALSE
+    );
+
+INSERT INTO departments (name, description)
+SELECT 'Management', 'Local management and capstone demonstration'
+WHERE @can_bootstrap
+  AND NOT EXISTS (SELECT 1 FROM departments WHERE name = 'Management');
+
+SET @management_department_id = (
+    SELECT id FROM departments WHERE name = 'Management' AND active = TRUE
+);
+
+-- Link one active profile to the same Department before promoting the registered account.
+INSERT INTO employees (user_id, name, email, department_id, job_role, status)
+SELECT id, name, email, @management_department_id, 'Local Administrator', 'ACTIVE'
+FROM users
+WHERE id = @bootstrap_user_id AND @can_bootstrap;
+
+UPDATE users AS account
+JOIN employees AS employee ON employee.user_id = account.id
+SET account.role = 'ADMIN',
+    account.department_id = employee.department_id,
+    account.refresh_token_hash = NULL,
+    account.refresh_token_expires_at = NULL
+WHERE account.id = @bootstrap_user_id AND @can_bootstrap;
+
+COMMIT;
+
+-- Only non-secret identity/linkage information is returned. Log in again after success.
+SELECT IF(@can_bootstrap, 'BOOTSTRAP_APPLIED', 'NOT_APPLIED: check account, existing ADMIN, Employee and Department') AS result;
+SELECT account.id AS user_id, account.role, employee.id AS employee_id,
+       account.department_id AS user_department_id,
+       employee.department_id AS employee_department_id
+FROM users AS account
+JOIN employees AS employee ON employee.user_id = account.id
+WHERE account.id = @bootstrap_user_id AND account.role = 'ADMIN';

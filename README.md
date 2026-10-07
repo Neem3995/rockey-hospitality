@@ -15,13 +15,17 @@ Rockey is an internal hotel operations and workflow-management application. The 
 
 ## Backend hardening gate
 
-Latest approved Sonar remediation: [review evidence and exact human UI dispositions](docs/SONAR_REMEDIATION.md). Java17/live regression is **561/561**; packaged Postman covers **51/51 operations**, **116 requests/291 assertions**, zero failures. Sonar analysis and Quality Gate pass; **1 Critical + 17 Major** remain OPEN as individually reviewed, human-approved candidates pending UI disposition. No issue status was automatically changed; Minor/Info cleanup is deferred. This is not a claim of zero open vulnerabilities or overall capstone/deployment readiness.
+The previously verified backend baseline passed **561/561** Java17/live tests and **51/51 operations**, **116 Postman requests/291 assertions**, zero failures. Final Sonar analysis and Quality Gate passed with **0 open vulnerabilities/Critical/Major findings**, **13 Accepted + 6 False Positive** human dispositions, and **89 deferred Minor/Info** findings. These are historical verified results, not a claim that every gate was rerun for the latest documentation cleanup or that the application has zero risk.
 
-See [Slice 11 evidence and reproducible checks](docs/SLICE11_HARDENING.md). The canonical business API has 51 operations, including logout; `/v3/api-docs` and `/v3/api-docs.yaml` are ADMIN-only documentation tooling, not additional business operations. A portable frozen snapshot is at [docs/rockey-openapi.json](docs/rockey-openapi.json); the parent canonical API contract remains authoritative for business rules and lifecycle semantics.
+See [Windows local setup and first ADMIN](docs/LOCAL_SETUP.md), [the backend study guide](docs/BACKEND_GUIDE.md), [security/quality safeguards](docs/SECURITY_AND_QUALITY.md), and [the retained model and frontend direction](docs/SIMPLIFICATION_OPTIONS.md). The canonical business API has 51 operations, including logout; `/v3/api-docs` and `/v3/api-docs.yaml` are ADMIN-only documentation tooling, not additional business operations. A portable frozen snapshot is at [docs/rockey-openapi.json](docs/rockey-openapi.json); the parent canonical API contract remains authoritative for business rules and lifecycle semantics.
 
-The unchanged parent `20_PHASE1_REVIEW.md` is a historical review; its "50 endpoints" wording predates the approved logout operation. Current README, frozen OpenAPI and `14_API_CONTRACT.md` govern the 51-operation contract.
+Older parent review documentation's "50 endpoints" wording predates logout. Current README, frozen OpenAPI and `14_API_CONTRACT.md` govern the 51-operation contract.
 
 `mvnw.cmd verify` targets Java 17 and enforces at least 70% overall production line coverage without exclusions (80% target). Live checks are opt-in and restricted to the disposable local `rockey_hospitality_hardening` schema; they reset its test data. They are never normal production seeds. SonarQube, repository publication/protection, frontend and deployment are separate gates, not implied by a passing backend suite.
+
+## Frontend foundations, authentication and management
+
+The React/Vite frontend is isolated in [frontend/](frontend/README.md). It provides checked JavaScript, shared Rockey light/dark themes, reusable UI, authentication, role-scoped Dashboard, ADMIN Employee/Department management and STAFF self-profile. Other business routes remain scaffolds. Management dialogs preserve opener/fallback focus during background refresh. See the frontend README for setup and boundaries.
 
 ## Authentication API
 
@@ -104,9 +108,9 @@ Event deletion always transitions to `CANCELLED`; it never removes the Event, re
 
 STAFF requires an ACTIVE Employee in an active Department and can view only that Department's active items. ADMIN can view active and inactive history across Departments. List defaults are `page=0`, `size=20` (maximum 100), `sort=name,asc`; sorting is allowlisted to name, SKU, quantity, reorder threshold, and creation time.
 
-SKU is trimmed, uppercased, globally unique (including inactive items), and cannot be changed through PUT. Quantities and reorder thresholds are non-negative; omitted creation counts default to zero. PUT `quantity` supplies the new absolute on-hand count, not a restock delta. New assignments, moves, and reactivation require an active Department; inactive history may retain its original inactive Department. Department deactivation now checks active inventory as well as active Employees and non-terminal Tasks. Writes are transactional; inventory item updates are locked and assignments share the Department lock with Department deactivation. No purchasing action, Alert, or Analytics implementation is included.
+SKU is trimmed, uppercased, globally unique (including inactive items), and cannot be changed through PUT. Quantities and reorder thresholds are non-negative; omitted creation counts default to zero. PUT `quantity` supplies the new absolute on-hand count, not a restock delta. New assignments, moves, and reactivation require an active Department; inactive history may retain its original inactive Department. Department deactivation now checks active inventory as well as active Employees and non-terminal Tasks. Writes are transactional; inventory item updates are locked and assignments share the Department lock with Department deactivation. Alert generation and Analytics use these persisted counts; no automated purchasing action exists.
 
-The Slice 8 Postman collection creates isolated fixtures and checks all five endpoints, validation/errors, role boundaries, Department guarding, and preserved inactive history. Supply runtime tokens; do not save credentials. Live DB/application/Postman verification remains environment-dependent.
+The Inventory Postman collection creates isolated fixtures and checks all five endpoints, validation/errors, role boundaries, Department guarding, and preserved inactive history. Supply runtime tokens; do not save credentials. The previously verified full backend gate included live database/API checks; a fresh checkout still requires the documented local configuration.
 
 ## Alerts and automation
 
@@ -127,7 +131,7 @@ One ordinary Spring scheduled method runs all checks transactionally, with confi
 
 Server-generated source keys are `ROOM:<id>:ARRIVAL_NOT_READY`, `TASK:<id>:OVERDUE`, `TASK:<id>:HIGH_PRIORITY`, and `INVENTORY:<id>:AT_OR_BELOW_THRESHOLD`. At most one unresolved row per type/key/recipient is retained; recipient and Alert locks protect generation/lifecycle writes. Cleared conditions and former/ineligible recipients automatically resolve existing derived alerts, preserving rows and first-read timestamps. Resolved conditions can later recur as a new row. Manual dismissal also permits a new row on a later scan if the condition still holds. SYSTEM/non-derived alerts are not automatically cleared. Severity retains the canonical INFO default; no additional severity-mapping policy was invented. Room/Inventory alerts have no Task relationship; Task alerts retain a shallow Task summary.
 
-Tests invoke services using a controllable Clock and scheduler configuration without sleeping. The Alert Postman collection needs runtime tokens, an existing own UNREAD alert, and another employee's fixture IDs; prepare source conditions through existing APIs and allow the scheduler to run before manual API verification. Live MySQL/startup/Postman and real concurrency behavior remain unverified without infrastructure. Automation never purchases inventory, changes staffing, completes Tasks, changes Room states, or sends external notifications.
+Tests invoke services using a controllable Clock and scheduler configuration without sleeping. The Alert Postman collection needs runtime tokens, an existing own UNREAD alert, and another employee's fixture IDs; prepare source conditions through existing APIs and allow the scheduler to run before manual API verification. The previously verified full backend gate included live deduplication/concurrency checks; these were not rerun during documentation cleanup. Automation never purchases inventory, changes staffing, completes Tasks, changes Room states, or sends external notifications.
 
 ## Department API authorization
 
@@ -143,37 +147,9 @@ Department deletion remains a soft deactivation. Publicly registered users canno
 
 ## Local setup
 
-1. Install or select a JDK 17 distribution.
-2. Create an empty MySQL database, for example `rockey_hospitality`.
-3. Apply [database/schema.sql](database/schema.sql), then optionally [database/seed-departments.sql](database/seed-departments.sql).
-4. Set the required environment variables for the current terminal. Do not commit their values:
+Follow [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md) for PowerShell commands, private configuration, MySQL troubleshooting, running both applications and restart verification. Normal database: `rockey_hospitality`. Hibernate uses **validate**, so apply `database/schema.sql` before startup; Department seeds are optional. Spring does not load `.env` automatically. A fresh database has no ADMIN; use the documented manual first-ADMIN procedure for local development/demo only, never a public privileged-registration endpoint.
 
-```powershell
-$env:ROCKEY_DB_URL='jdbc:mysql://localhost:3306/rockey_hospitality?serverTimezone=UTC'
-$env:ROCKEY_DB_USERNAME='your-local-user'
-$env:ROCKEY_DB_PASSWORD='your-local-password'
-
-$jwtBytes = New-Object byte[] 32
-[Security.Cryptography.RandomNumberGenerator]::Fill($jwtBytes)
-$env:ROCKEY_JWT_SECRET_BASE64 = [Convert]::ToBase64String($jwtBytes)
-```
-
-Optional local/deployment settings:
-
-```powershell
-$env:ROCKEY_CORS_ALLOWED_ORIGINS='http://localhost:5173'
-$env:ROCKEY_REFRESH_COOKIE_SECURE='false'
-$env:ROCKEY_REFRESH_COOKIE_SAME_SITE='Lax'
-```
-
-For an HTTPS deployment, set `ROCKEY_REFRESH_COOKIE_SECURE=true`. Confirm `ROCKEY_REFRESH_COOKIE_SAME_SITE` and the allowed origin against the final frontend/backend domain topology. AWS SSM Parameter Store remains the authoritative future location for deployed secrets; AWS integration is not part of this slice.
-
-The MySQL command-line client can apply the scripts from PowerShell as follows:
-
-```powershell
-Get-Content -Raw .\database\schema.sql | mysql -u your-local-user -p rockey_hospitality
-Get-Content -Raw .\database\seed-departments.sql | mysql -u your-local-user -p rockey_hospitality
-```
+Under instructor guidance, AWS is not required for this local project. Local reproduction requires no AWS, Docker or migration framework; other capstone requirements are not automatically waived.
 
 ## Build and run
 
@@ -195,13 +171,13 @@ The default base URL is `http://localhost:8080`. Import the collections from `po
 - Registration limiting is keyed by IP: 5 attempts per hour.
 - Refresh limiting is keyed by IP: 30 attempts per 15 minutes.
 - The rate limiter is intentionally in-memory for one backend instance. A distributed deployment would require a shared limiter.
-- Client IP currently comes from the servlet remote address. Trusted proxy/header handling must be verified with the eventual AWS topology.
-- CSRF is disabled for this stateless bearer-token API. The refresh cookie is HttpOnly and SameSite-configurable; final cross-site cookie and CSRF assumptions must be revalidated at deployment.
+- Client IP currently comes from the servlet remote address. Any later proxy/deployment topology requires separate verification.
+- CSRF is disabled for stateless bearer-token APIs. Cookie refresh validates browser Origin against the configured CORS allowlist; non-browser requests may omit Origin. HttpOnly, SameSite, rotation and revocation remain in force. HTTPS/cross-site-cookie assumptions require separate verification if deployed.
 - One active refresh session is supported per account. `tokenVersion` remains in the canonical User model but is not used by this approved opaque-refresh design.
-- No normal production seed user or plaintext password is supplied. Slice 11's opt-in disposable fixtures generate random test-only passwords and keep temporary exports in ignored `target/hardening/` until the runner removes them.
+- No normal production seed user or plaintext password is supplied. Opt-in disposable fixtures generate random test-only passwords and keep temporary exports in ignored `target/hardening/` until the runner removes them.
 - `FR-14` User/Employee department consistency is enforced transactionally.
 - Department deactivation rejects active Employee, non-terminal Task, and active Inventory references.
 - Employee and Room deactivation reject non-terminal assigned/referencing Tasks.
 - New Tasks reject inactive Departments, Employees, and Rooms.
-- Room-readiness, Task, and Inventory alert generation, deduplication, auto-resolution, and history-preserving lifecycle are implemented in Slice 9.
-- Analytics is implemented as a read-only aggregate layer; USER sees only its own registration count, STAFF receives eligible identity/Department-scoped metrics, and ADMIN receives approved aggregates. React, AWS, and CI/CD are not implemented.
+- Room-readiness, Task, and Inventory alert generation, deduplication, auto-resolution, and history-preserving lifecycle are implemented.
+- Analytics is implemented as a read-only aggregate layer; USER sees only its own registration count, STAFF receives eligible identity/Department-scoped metrics, and ADMIN receives approved aggregates. React authentication/dashboard/Employee/Department UI exists; other business pages remain scaffolds. AWS and CI/CD are not implemented.

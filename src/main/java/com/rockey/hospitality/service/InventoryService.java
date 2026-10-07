@@ -28,6 +28,7 @@ import java.util.Set;
 
 @Service
 public class InventoryService {
+    // Department scope protects STAFF reads; deactivation preserves stock history and its references.
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "name", "sku", "quantity", "reorderThreshold", "createdAt"

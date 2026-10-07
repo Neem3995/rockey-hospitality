@@ -1,6 +1,6 @@
 {
   "info": {
-    "name": "Rockey Slice 8 - Inventory",
+    "name": "Rockey Inventory",
     "description": "Run in order on an initialized local MySQL backend. Supply runtime ADMIN/STAFF/USER tokens without saving credentials. Creates an isolated Department and item, verifies guards, then soft-deactivates both. STAFF must belong to a different existing active department. PUT quantity is an absolute count, not a delta. Live execution is environment-dependent.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
@@ -58,7 +58,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\"name\":\"Inventory Slice8 {{$timestamp}}\",\"description\":\"Slice 8 guard verification\"}"
+          "raw": "{\"name\":\"Inventory Demo {{$timestamp}}\",\"description\":\"Inventory guard verification\"}"
         }
       },
       "event": [

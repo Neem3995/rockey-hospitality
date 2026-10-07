@@ -88,6 +88,7 @@ public class AlertService {
 
     @Transactional
     public void resolveAlert(Long id, Long userId, Role role) {
+        // Resolving records the lifecycle outcome; it does not erase the recipient's history.
         ensureViewer(role);
         Alert alert = findForUpdate(id);
         if (role == Role.STAFF) ensureOwner(alert, userId);

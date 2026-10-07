@@ -130,6 +130,7 @@ public class AuthService {
     }
 
     private AuthSession startSession(User user) {
+        // Replace the stored hash each time: rotating refresh permits only one active session.
         IssuedRefreshToken refreshToken = refreshTokenService.issueRefreshToken();
         user.replaceRefreshSession(
                 refreshToken.getHash(),

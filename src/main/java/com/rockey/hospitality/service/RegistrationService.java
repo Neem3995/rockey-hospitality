@@ -54,6 +54,7 @@ public class RegistrationService {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public EventRegistrationResponse register(Long eventId, Long userId) {
         User user = findActiveAttendee(userId);
+        // Serialize registrations on the Event so capacity and duplicate checks agree before commit.
         Event event = findEventForUpdate(eventId);
         if (event.getStatus() != EventStatus.OPEN
                 || !event.getEventDateTime().isAfter(LocalDateTime.now())) {

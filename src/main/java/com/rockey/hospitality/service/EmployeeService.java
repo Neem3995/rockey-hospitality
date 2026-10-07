@@ -102,6 +102,7 @@ public class EmployeeService {
 
     @Transactional
     public EmployeeResponse createEmployee(CreateEmployeeRequest request) {
+        // One transaction creates the optional login and profile together, never half an account.
         validateProvisioningRequest(request);
         Department department = findActiveDepartment(request.getDepartmentId());
         String employeeEmail = normalizeEmail(request.getEmail());
@@ -154,6 +155,7 @@ public class EmployeeService {
             UpdateEmployeeRequest request
     ) {
         Department department = findDepartment(request.getDepartmentId());
+        // Match Task creation's Department -> Employee lock order before changing linked records.
         Employee employee = findEmployeeForUpdate(employeeId);
         boolean departmentChanged = !employee.getDepartment().getId().equals(department.getId());
         if ((departmentChanged || request.getStatus() == EmployeeStatus.ACTIVE)
@@ -176,6 +178,7 @@ public class EmployeeService {
                 request.getJobRole().trim(),
                 request.getStatus()
         );
+        // The login's authorization Department must stay equal to the Employee's work Department.
         synchronizeLinkedUser(employee, department, request.getStatus());
         return toResponse(employeeRepository.save(employee));
     }

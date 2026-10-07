@@ -41,6 +41,7 @@ public class RoomService {
             "nextArrivalAt",
             "createdAt"
     );
+    // Turnover is a lifecycle: clients cannot skip checks by choosing an arbitrary status.
     private static final Map<RoomStatus, Set<RoomStatus>> ALLOWED_TRANSITIONS = Map.of(
             RoomStatus.READY,
             Set.of(
@@ -224,6 +225,7 @@ public class RoomService {
     }
 
     private void ensureEligibleStaff(Long userId) {
+        // Room changes require an active Employee in an active Department, not just a STAFF label.
         Employee employee = employeeRepository.findByUserId(userId)
                 .orElseThrow(() -> new ForbiddenException(
                         "STAFF must have an active operational employee profile."

@@ -38,6 +38,7 @@ public class Employee {
     private Long id;
 
     @OneToOne(fetch = FetchType.LAZY, optional = true)
+    // Employment may exist without login; a non-null User link is unique across profiles.
     @JoinColumn(name = "user_id", unique = true)
     private User user;
 

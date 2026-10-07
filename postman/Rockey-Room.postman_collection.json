@@ -1,7 +1,7 @@
 {
   "info": {
     "_postman_id": "d02ea216-31ec-49d7-a766-d20d0366b055",
-    "name": "Rockey Slice 5 - Room and Turnover",
+    "name": "Rockey Room and Turnover",
     "description": "Room CRUD, filtering, soft deactivation, and the canonical OCCUPIED to READY turnover sequence. Use an ADMIN JWT for the full collection; STAFF may run reads and status transitions when linked to an active Employee and active Department.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },

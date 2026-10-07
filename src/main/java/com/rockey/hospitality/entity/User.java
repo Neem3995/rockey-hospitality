@@ -73,6 +73,7 @@ public class User {
     private UserStatus status = UserStatus.ACTIVE;
 
     @ManyToMany(fetch = FetchType.LAZY)
+    // Each membership is a User/Event pair in event_registrations, not a separate account type.
     @JoinTable(
             name = "event_registrations",
             joinColumns = @JoinColumn(name = "user_id"),

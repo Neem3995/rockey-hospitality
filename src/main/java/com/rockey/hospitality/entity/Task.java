@@ -62,6 +62,7 @@ public class Task {
     private TaskPriority priority = TaskPriority.MEDIUM;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    // Department is required; assignee, Room and Event are optional work context below.
     @JoinColumn(name = "department_id", nullable = false)
     private Department department;
 

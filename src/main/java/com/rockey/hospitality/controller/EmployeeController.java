@@ -91,6 +91,7 @@ public class EmployeeController {
             @PathVariable Long employeeId,
             @AuthenticationPrincipal RockeyUserPrincipal principal
     ) {
+        // Pass the authenticated identity to the service; a requested employee ID is not authority.
         return employeeService.getEmployee(
                 employeeId,
                 principal.getId(),

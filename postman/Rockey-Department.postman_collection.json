@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "d10d9a06-4726-4b0f-8265-3c35ea28976c",
-    "name": "Rockey Phase 2A - Department",
-    "description": "Department vertical-slice checks. Run against a local database initialized with database/schema.sql and database/seed-departments.sql. Set accessToken to a STAFF token for reads or an ADMIN token for the complete collection.",
+    "name": "Rockey Department",
+    "description": "Department API checks. Run against a local database initialized with database/schema.sql and database/seed-departments.sql. Set accessToken to a STAFF token for reads or an ADMIN token for the complete collection.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -103,7 +103,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"name\": \"{{departmentName}}\",\n  \"description\": \"Created by the Phase 2A Postman collection\"\n}"
+          "raw": "{\n  \"name\": \"{{departmentName}}\",\n  \"description\": \"Created by the Department Postman collection\"\n}"
         },
         "url": "{{baseUrl}}/api/departments"
       }
@@ -138,7 +138,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"name\": \"{{departmentName}} Updated\",\n  \"description\": \"Updated by the Phase 2A Postman collection\"\n}"
+          "raw": "{\n  \"name\": \"{{departmentName}} Updated\",\n  \"description\": \"Updated by the Department Postman collection\"\n}"
         },
         "url": "{{baseUrl}}/api/departments/{{departmentId}}"
       },

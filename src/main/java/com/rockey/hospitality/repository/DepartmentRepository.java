@@ -13,6 +13,7 @@ import java.util.Optional;
 public interface DepartmentRepository extends JpaRepository<Department, Long> {
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    // Creation/transfer and deactivation share this lock to keep active-reference checks valid.
     @Query("SELECT department FROM Department department WHERE department.id = :id")
     Optional<Department> findByIdForUpdate(@Param("id") Long id);
 

@@ -155,6 +155,7 @@ public class EventService {
 
     @Transactional
     public EventResponse cancelEvent(Long eventId) {
+        // Cancellation keeps registration and preparation-Task history instead of deleting rows.
         Event event = findEventForUpdate(eventId);
         ensureNotTerminal(event);
         ensureTransitionAllowed(event.getStatus(), EventStatus.CANCELLED);

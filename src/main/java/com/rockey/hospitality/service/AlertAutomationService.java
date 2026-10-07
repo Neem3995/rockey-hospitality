@@ -59,6 +59,7 @@ public class AlertAutomationService {
 
     @Transactional
     public void runChecks() {
+        // One transaction reconciles source conditions; a failed scan must not leave half its alerts.
         LocalDateTime now = LocalDateTime.now(clock);
         scanRooms(now);
         scanTasks(now);

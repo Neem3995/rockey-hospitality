@@ -54,6 +54,7 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
               )
             """)
     Page<Task> search(
+            // Criteria values bind as parameters; overdue uses the same server time for the page.
             @Param("criteria") TaskSearchCriteria criteria,
             @Param("now") LocalDateTime now,
             @Param("terminalStatuses") Collection<TaskStatus> terminalStatuses,

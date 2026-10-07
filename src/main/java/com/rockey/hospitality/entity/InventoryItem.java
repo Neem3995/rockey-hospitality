@@ -59,6 +59,7 @@ public class InventoryItem {
     private Integer reorderThreshold = 0;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    // The Department locates stock; services enforce which STAFF can view that stock.
     @JoinColumn(name = "department_id", nullable = false)
     private Department department;
 

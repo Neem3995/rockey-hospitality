@@ -53,6 +53,7 @@ public class Alert {
     private AlertStatus status = AlertStatus.UNREAD;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    // An Employee owns the notice; sourceKey correlates generated Room/Task/Inventory conditions.
     @JoinColumn(name = "employee_id", nullable = false)
     private Employee employee;
 

@@ -1,6 +1,6 @@
 {
   "info": {
-    "name": "Rockey Slice 10 — Dashboard and Analytics",
+    "name": "Rockey Dashboard and Analytics",
     "description": "Read-only approved analytics contract. Obtain USER/STAFF/ADMIN tokens at runtime; never save credentials/tokens. Use a stable seeded MySQL backend, an eligible STAFF Employee/Department, an existing departmentId, and a genuinely nonexistent positive missingDepartmentId. Run global Inventory/Events before filtered comparison; prevent fixture/scheduler changes during that comparison. For STAFF eligibility failure, manually test dashboard with an otherwise authenticated account whose Employee/Department is missing/inactive (expect 403); do not alter lifecycle guards to fabricate it. Existing domain collections cover lifecycle fixture setup and history retention. Live execution has not been claimed.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },

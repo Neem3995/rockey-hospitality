@@ -1,7 +1,7 @@
 {
   "info": {
     "_postman_id": "72ff82cd-1632-45df-bfbe-c3a01b89851a",
-    "name": "Rockey Slice 4 - Employee",
+    "name": "Rockey Employee",
     "description": "Employee management checks. Set accessToken to an ADMIN JWT and departmentId to an active Department. This collection creates an Employee without login access, so no password value is stored in the collection.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },

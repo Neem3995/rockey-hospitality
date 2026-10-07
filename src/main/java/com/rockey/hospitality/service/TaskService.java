@@ -111,6 +111,7 @@ public class TaskService {
 
     @Transactional
     public TaskResponse createTask(CreateTaskRequest request) {
+        // Locked reference checks prevent deactivation racing the creation of new work.
         LocalDateTime now = LocalDateTime.now();
         validateNewDueAt(request.getDueAt(), now);
         Department department = findActiveDepartment(request.getDepartmentId());
@@ -255,6 +256,7 @@ public class TaskService {
     }
 
     private void ensureTaskAccess(Task task, Long requesterUserId, Role requesterRole) {
+        // STAFF may read only their own assignment; sharing a Department is not ownership.
         if (requesterRole == Role.ADMIN) {
             return;
         }
@@ -423,6 +425,7 @@ public class TaskService {
     }
 
     private TaskResponse toResponse(Task task) {
+        // Return shallow DTOs rather than exposing entity relationships or login credentials to React.
         Department department = task.getDepartment();
         Employee employee = task.getAssignedEmployee();
         Room room = task.getRoom();

@@ -177,6 +177,7 @@ public class AuthController {
             Duration maxAge
     ) {
         ResponseCookie cookie = ResponseCookie
+                // The browser sends this HttpOnly secret; React receives only the access-token JSON.
                 .from(REFRESH_COOKIE_NAME, value)
                 .httpOnly(true)
                 .secure(securityProperties.isRefreshCookieSecure())

@@ -40,6 +40,7 @@ public class AnalyticsService {
     }
 
     public DashboardResponse dashboard(Long userId, Role role) {
+        // Aggregate only the permitted role/identity scope; React must never hide leaked global data.
         if (role == null || userId == null || userId <= 0) {
             throw new ForbiddenException("Dashboard requires an authenticated identity.");
         }

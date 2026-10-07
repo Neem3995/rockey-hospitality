@@ -21,6 +21,7 @@ import java.time.LocalDateTime;
         uniqueConstraints = @UniqueConstraint(name = "uk_departments_name", columnNames = "name")
 )
 public class Department {
+    // Employees, Tasks and Inventory reference this row; deactivation must preserve their history.
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

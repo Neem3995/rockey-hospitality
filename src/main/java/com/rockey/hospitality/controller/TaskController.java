@@ -176,6 +176,7 @@ public class TaskController {
             @RequestParam(defaultValue = "createdAt,desc") String sort,
             @AuthenticationPrincipal RockeyUserPrincipal principal
     ) {
+        // The service compares this path ID with the authenticated STAFF's actual Employee.
         return taskService.listAssignedTasks(employeeId, status, priority, overdue, new PageCriteria(page, size, sort), principal.getId(), principal.getRole());
     }
 }

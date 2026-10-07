@@ -1,6 +1,6 @@
 {
   "info": {
-    "name": "Rockey Slice 9 - Alerts and Automation",
+    "name": "Rockey Alerts and Automation",
     "description": "Live execution requires an initialized backend and runtime STAFF/ADMIN/USER tokens. Prepare source conditions through existing APIs: active non-READY Room with arrival now..now+2h and active Housekeeping recipients; assigned non-terminal overdue or HIGH/URGENT Task; active Inventory at/below threshold with Purchasing or active ADMIN fallback. The five-minute scheduler generates alerts; no manual creation/scan API exists. Start with at least one unresolved UNREAD alert owned by STAFF. Keep that source condition true during API checks. Capture another employee alert id manually for ownership checks. Tokens must not be saved.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },

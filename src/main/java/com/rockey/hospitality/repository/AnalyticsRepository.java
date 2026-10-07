@@ -20,6 +20,7 @@ public class AnalyticsRepository {
     public AnalyticsRepository(EntityManager entityManager) { this.entityManager = entityManager; }
 
     public long countRegistrations(Long userId) {
+        // Only fixed query fragments are appended; user values are bound, never interpolated.
         TypedQuery<Long> query = entityManager.createQuery(
                 "SELECT COUNT(event) FROM User user JOIN user.registeredEvents event"
                         + (userId == null ? "" : " WHERE user.id = :userId"), Long.class);

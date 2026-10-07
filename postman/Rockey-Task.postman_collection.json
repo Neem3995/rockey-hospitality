@@ -1,7 +1,7 @@
 {
   "info": {
     "_postman_id": "589163a0-56ec-48aa-8db2-6b56e63064f0",
-    "name": "Rockey Slice 6 - Task Management",
+    "name": "Rockey Task Management",
     "description": "Task CRUD/lifecycle, assignment, assigned-employee work, completion, pagination, overdue filtering, and optional Event references. Set active Department, Employee, Room, and non-cancelled Event IDs.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },

@@ -1,7 +1,7 @@
 {
   "info": {
     "_postman_id": "c8166636-dbb5-49df-8390-6a5e30f6c879",
-    "name": "Rockey Phase 2B - Authentication",
+    "name": "Rockey Authentication",
     "description": "Registration, login, refresh rotation, current-user, and authenticated logout checks. Postman's cookie jar must be enabled so the HttpOnly rockey_refresh cookie can be sent to refresh and expired by logout.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
@@ -16,7 +16,7 @@
     },
     {
       "key": "testPassword",
-      "value": "RockeyTest9!"
+      "value": ""
     },
     {
       "key": "accessToken",
@@ -31,7 +31,8 @@
           "listen": "prerequest",
           "script": {
             "exec": [
-              "pm.collectionVariables.set('testEmail', 'phase2b.' + Date.now() + '@example.test');"
+              "pm.collectionVariables.set('testEmail', 'phase2b.' + Date.now() + '@example.test');",
+              "pm.variables.set('testPassword', pm.variables.replaceIn('{{$randomUUID}}') + 'Aa1!');"
             ]
           }
         },
@@ -62,7 +63,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"name\": \"Phase 2B User\",\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+          "raw": "{\n  \"name\": \"Postman Demo User\",\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
         },
         "url": "{{baseUrl}}/api/auth/register"
       }

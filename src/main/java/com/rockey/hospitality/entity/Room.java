@@ -36,6 +36,7 @@ import java.time.LocalDateTime;
         )
 )
 public class Room {
+    // Tasks reference this Room; soft deactivation preserves their hotel context.
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -1,7 +1,7 @@
 {
   "info": {
     "_postman_id": "9713263e-2324-4c44-9a5b-23690427255b",
-    "name": "Rockey Slice 7 - Event and Registration",
+    "name": "Rockey Event and Registration",
     "description": "Event lifecycle, USER registration ownership/capacity rules, Task Event linkage/filtering, preparation counts, and cancellation history preservation.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
@@ -65,7 +65,7 @@
         "header": [{"key": "Content-Type", "value": "application/json"}],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"title\": \"Postman Leadership Conference\",\n  \"description\": \"Slice 7 verification event.\",\n  \"eventDateTime\": \"{{eventDateTime}}\",\n  \"location\": \"Ballroom A\",\n  \"capacity\": 2,\n  \"initialStatus\": \"DRAFT\"\n}"
+          "raw": "{\n  \"title\": \"Postman Leadership Conference\",\n  \"description\": \"Postman verification event.\",\n  \"eventDateTime\": \"{{eventDateTime}}\",\n  \"location\": \"Ballroom A\",\n  \"capacity\": 2,\n  \"initialStatus\": \"DRAFT\"\n}"
         },
         "url": "{{baseUrl}}/api/events"
       }

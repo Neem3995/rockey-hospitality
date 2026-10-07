@@ -1,4 +1,4 @@
--- Rockey Hospitality through Slice 9
+-- Rockey Hospitality table definitions and constraints.
 -- Run this script against an existing MySQL database selected for Rockey.
 
 CREATE TABLE IF NOT EXISTS departments (

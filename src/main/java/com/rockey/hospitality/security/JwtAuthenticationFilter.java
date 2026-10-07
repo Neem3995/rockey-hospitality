@@ -51,12 +51,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         try {
+            // Verify the signature/expiry before treating claims as an identity.
             AccessTokenClaims claims = jwtService.parseAccessToken(
                     authorization.substring(BEARER_PREFIX.length())
             );
             RockeyUserPrincipal principal = (RockeyUserPrincipal) userDetailsService
                     .loadUserByUsername(claims.getEmail());
 
+            // The database is authoritative: reject the token if the account is now disabled or its id/role changed.
             if (!principal.isEnabled()
                     || !principal.getId().equals(claims.getUserId())
                     || principal.getRole() != claims.getRole()) {

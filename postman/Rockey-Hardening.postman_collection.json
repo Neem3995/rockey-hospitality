@@ -1,6 +1,6 @@
 {
   "info": {
-    "name": "Rockey Slice 11 — disposable live hardening",
+    "name": "Rockey disposable live hardening",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "description": "Run only against the authorized disposable schema. Test secrets supplied at runtime, not exported. All 51 canonical operations plus negative/security/history checks."
   },
