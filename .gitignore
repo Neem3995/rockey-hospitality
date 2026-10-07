@@ -23,3 +23,7 @@ Thumbs.db
 *.pfx
 credentials*
 token*
+
+# Local-only verification notes and implementation logs.
+CLAUDE_VERIFY_*.md
+*_IMPLEMENTATION_LOG.md
