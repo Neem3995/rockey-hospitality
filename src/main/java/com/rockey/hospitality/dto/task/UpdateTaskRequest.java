@@ -9,34 +9,75 @@ import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
 
+/**
+ * Writable update task JSON DTO, separate from the entity and returned fields.
+ * Validation checks input shape; the service checks relationships, lifecycle, and permissions.
+ */
 public class UpdateTaskRequest {
 
+    /**
+     * Human-readable work or Event title.
+     */
+    // Requires non-null text containing at least one non-whitespace character.
     @NotBlank(message = "Title is required.")
+    // Checks supplied text length from 3 to 120 characters; required text is checked separately.
     @Size(min = 3, max = 120, message = "Title must be between 3 and 120 characters.")
     private String title;
 
+    /**
+     * Optional descriptive text; services normalize blank values where required.
+     */
+    // Checks supplied text length up to 1000 characters; required text is checked separately.
     @Size(max = 1000, message = "Description must not exceed 1000 characters.")
     private String description;
 
+    /**
+     * Department identifier used for an explicit relationship or optional query scope.
+     */
+    // Requires a value; further shape or range checks are separate.
     @NotNull(message = "Department is required.")
+    // Requires a supplied number to be greater than zero; null is handled separately.
     @Positive(message = "Department must be positive.")
     private Long departmentId;
 
+    /**
+     * Optional assignee filter or reference; service checks enforce eligibility and ownership.
+     */
+    // Requires a supplied number to be greater than zero; null is handled separately.
     @Positive(message = "Assigned employee must be positive.")
     private Long assignedEmployeeId;
 
+    /**
+     * Optional Room context identifier or search filter.
+     */
+    // Requires a supplied number to be greater than zero; null is handled separately.
     @Positive(message = "Room must be positive.")
     private Long roomId;
 
+    /**
+     * Optional Event preparation identifier or search filter.
+     */
+    // Requires a supplied number to be greater than zero; null is handled separately.
     @Positive(message = "Event must be positive.")
     private Long eventId;
 
+    /**
+     * Task urgency enum; the service/entity defaults omitted creation priority to MEDIUM, while updates require a value.
+     */
+    // Requires a value; further shape or range checks are separate.
     @NotNull(message = "Priority is required.")
     private TaskPriority priority;
 
+    /**
+     * Lifecycle enum value interpreted by this resource's service and transition rules.
+     */
+    // Requires a value; further shape or range checks are separate.
     @NotNull(message = "Status is required.")
     private TaskStatus status;
 
+    /**
+     * Optional server-local due time; only non-terminal work strictly before now is overdue.
+     */
     private LocalDateTime dueAt;
 
     public String getTitle() {

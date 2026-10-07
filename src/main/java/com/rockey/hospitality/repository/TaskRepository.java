@@ -14,17 +14,34 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 
+/**
+ * Spring Data JPA supplies standard persistence operations for Task entities through JpaRepository.
+ * Domain services use the methods below for filtered reads, eligibility checks, and locked writes where declared.
+ */
 public interface TaskRepository extends JpaRepository<Task, Long> {
 
+    /**
+     * Finds assigned non-terminal Tasks that are overdue or match selected priorities.
+     */
+    // Executes this fixed JPQL query; supplied filter values are bound parameters rather than query text.
     @Query("""
             SELECT task FROM Task task
             WHERE task.assignedEmployee IS NOT NULL AND task.status NOT IN :terminalStatuses
               AND (task.dueAt < :now OR task.priority IN :priorities)
             """)
-    List<Task> findTaskAlertSources(@Param("now") LocalDateTime now,
+    List<Task> findTaskAlertSources(
+            // Binds this argument as the named now query parameter, not interpolated query text.
+            @Param("now") LocalDateTime now,
+                                    // Binds this argument as the named terminalStatuses query parameter, not interpolated query text.
                                     @Param("terminalStatuses") Collection<TaskStatus> terminalStatuses,
+                                    // Binds this argument as the named priorities query parameter, not interpolated query text.
                                     @Param("priorities") Collection<TaskPriority> priorities);
 
+    /**
+     * Pages criteria with bound values and one supplied time snapshot.
+     * overdue=false includes null/future due dates and terminal Tasks; an omitted overdue filter imposes no due condition.
+     */
+    // Executes this fixed JPQL query; supplied filter values are bound parameters rather than query text.
     @Query("""
             SELECT task
             FROM Task task
@@ -55,28 +72,46 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
             """)
     Page<Task> search(
             // Criteria values bind as parameters; overdue uses the same server time for the page.
+            // Binds this argument as the named criteria query parameter, not interpolated query text.
             @Param("criteria") TaskSearchCriteria criteria,
+            // Binds this argument as the named now query parameter, not interpolated query text.
             @Param("now") LocalDateTime now,
+            // Binds this argument as the named terminalStatuses query parameter, not interpolated query text.
             @Param("terminalStatuses") Collection<TaskStatus> terminalStatuses,
             Pageable pageable
     );
 
+    /**
+     * Checks active assignment statuses before Employee deactivation.
+     */
     boolean existsByAssignedEmployeeIdAndStatusIn(
             Long employeeId,
             Collection<TaskStatus> statuses
     );
 
+    /**
+     * Checks non-terminal Department work before Department deactivation.
+     */
     boolean existsByDepartmentIdAndStatusIn(
             Long departmentId,
             Collection<TaskStatus> statuses
     );
 
+    /**
+     * Checks active Room work before Room deactivation.
+     */
     boolean existsByRoomIdAndStatusIn(
             Long roomId,
             Collection<TaskStatus> statuses
     );
 
+    /**
+     * Counts every retained preparation Task linked to an Event.
+     */
     long countByEventId(Long eventId);
 
+    /**
+     * Counts Event-linked Tasks of a selected status, including completion counts.
+     */
     long countByEventIdAndStatus(Long eventId, TaskStatus status);
 }

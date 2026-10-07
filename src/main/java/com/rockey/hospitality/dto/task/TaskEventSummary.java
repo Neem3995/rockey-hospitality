@@ -4,13 +4,31 @@ import com.rockey.hospitality.entity.EventStatus;
 
 import java.time.LocalDateTime;
 
+/**
+ * Shallow task event response DTO exposing only the listed fields, not a complete JPA relationship graph.
+ */
 public class TaskEventSummary {
 
+    /**
+     * Database identifier used to refer to this resource in requests and relationships.
+     */
     private final Long id;
+    /**
+     * Human-readable work or Event title.
+     */
     private final String title;
+    /**
+     * Server-local Event schedule used by registration and lifecycle eligibility.
+     */
     private final LocalDateTime eventDateTime;
+    /**
+     * Lifecycle enum value interpreted by this resource's service and transition rules.
+     */
     private final EventStatus status;
 
+    /**
+     * Packages the listed response fields supplied by the service without serializing a persistence entity.
+     */
     public TaskEventSummary(
             Long id,
             String title,

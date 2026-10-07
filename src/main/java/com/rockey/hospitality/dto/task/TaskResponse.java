@@ -6,22 +6,67 @@ import com.rockey.hospitality.entity.TaskStatus;
 
 import java.time.LocalDateTime;
 
+/**
+ * Safe task response DTO built from validated service results instead of serializing the entity.
+ */
 public class TaskResponse {
 
+    /**
+     * Database identifier used to refer to this resource in requests and relationships.
+     */
     private final Long id;
+    /**
+     * Human-readable work or Event title.
+     */
     private final String title;
+    /**
+     * Optional descriptive text; services normalize blank values where required.
+     */
     private final String description;
+    /**
+     * Lifecycle enum value interpreted by this resource's service and transition rules.
+     */
     private final TaskStatus status;
+    /**
+     * Task urgency enum; the service/entity defaults omitted creation priority to MEDIUM, while updates require a value.
+     */
     private final TaskPriority priority;
+    /**
+     * Shallow related Department in DTOs, or the owning Department association in entities.
+     */
     private final DepartmentSummary department;
+    /**
+     * Optional shallow Task assignee summary.
+     */
     private final TaskEmployeeSummary assignedEmployee;
+    /**
+     * Optional shallow Room context without a persistence graph.
+     */
     private final TaskRoomSummary room;
+    /**
+     * Optional shallow Event context or registered Event summary.
+     */
     private final TaskEventSummary event;
+    /**
+     * Server-local creation timestamp retained for history.
+     */
     private final LocalDateTime createdAt;
+    /**
+     * Optional server-local due time; only non-terminal work strictly before now is overdue.
+     */
     private final LocalDateTime dueAt;
+    /**
+     * Completion timestamp for COMPLETED work, distinct from cancellation.
+     */
     private final LocalDateTime completedAt;
+    /**
+     * Server-local timestamp of the latest persisted entity update.
+     */
     private final LocalDateTime updatedAt;
 
+    /**
+     * Packages the listed response fields supplied by the service without serializing a persistence entity.
+     */
     public TaskResponse(
             Long id,
             String title,
@@ -52,6 +97,9 @@ public class TaskResponse {
         this.updatedAt = updatedAt;
     }
 
+    /**
+     * Delegates to the full response constructor with omitted optional context set to null.
+     */
     public TaskResponse(
             Long id,
             String title,

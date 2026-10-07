@@ -10,15 +10,29 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.time.LocalDateTime;
 
+/**
+ * Serializes security-filter failures using the same safe ApiError shape as controller exceptions.
+ */
+// Registers this class as a Spring-managed component discovered during startup.
 @Component
 public class SecurityErrorWriter {
 
+    /**
+     * Spring's configured JSON mapper, keeping security errors consistent with application serialization.
+     */
     private final ObjectMapper objectMapper;
 
+    /**
+     * Receives the collaborating components through constructor injection, making dependencies explicit and replaceable in tests.
+     */
     public SecurityErrorWriter(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * Sets the requested HTTP status and serializes ApiError as JSON.
+     * It omits stack traces, passwords, and token details.
+     */
     public void write(
             HttpServletResponse response,
             HttpStatus status,

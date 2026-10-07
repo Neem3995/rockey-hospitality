@@ -29,20 +29,45 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Set;
 
+/**
+ * Handles alert reads and lifecycle changes with recipient ownership checks.
+ * Resolving an alert preserves its row and history.
+ */
+// Registers this business/security service for constructor injection.
 @Service
 public class AlertService {
 
+    /**
+     * Allowlist of sortable persisted fields, rejecting arbitrary property paths from request input.
+     */
     private static final Set<String> SORT_FIELDS = Set.of("type", "severity", "status", "createdAt", "readAt", "resolvedAt");
+    /**
+     * Injected AlertRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final AlertRepository alertRepository;
+    /**
+     * Injected EmployeeRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final EmployeeRepository employeeRepository;
+    /**
+     * Injected Clock adapted to the server zone for read/resolution timestamps.
+     */
     private final Clock clock;
 
+    /**
+     * Receives the collaborating components through constructor injection, making dependencies explicit and replaceable in tests.
+     */
     public AlertService(AlertRepository alertRepository, EmployeeRepository employeeRepository, Clock clock) {
         this.alertRepository = alertRepository;
         this.employeeRepository = employeeRepository;
         this.clock = clock.withZone(ZoneId.systemDefault());
     }
 
+    /**
+     * Applies optional filters and pagination, restricting STAFF to its eligible Employee identity.
+     * With no status filter, the repository excludes resolved history.
+     */
+    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public PagedResponse<AlertResponse> listAlerts(AlertSearchCriteria criteria, PageCriteria pagination,
                                                  Long userId, Role role) {
@@ -65,6 +90,10 @@ public class AlertService {
                 alerts.getNumber(), alerts.getSize(), alerts.getTotalElements(), alerts.getTotalPages(), alerts.isLast());
     }
 
+    /**
+     * Returns a safe alert DTO after role checks and, for STAFF, recipient ownership.
+     */
+    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public AlertResponse getAlert(Long id, Long userId, Role role) {
         ensureViewer(role);
@@ -73,6 +102,11 @@ public class AlertService {
         return toResponse(alert);
     }
 
+    /**
+     * Locks an UNREAD alert and permits only its eligible owner to mark it READ, including an ADMIN's own alert.
+     * Other statuses conflict instead of silently changing history.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public AlertResponse markRead(Long id, Long userId, Role role) {
         ensureViewer(role);
@@ -86,6 +120,11 @@ public class AlertService {
         return toResponse(alertRepository.save(alert));
     }
 
+    /**
+     * Locks and resolves an unresolved alert without deleting it.
+     * STAFF must own it; ADMIN may resolve alerts for oversight.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public void resolveAlert(Long id, Long userId, Role role) {
         // Resolving records the lifecycle outcome; it does not erase the recipient's history.
@@ -99,10 +138,16 @@ public class AlertService {
         alertRepository.save(alert);
     }
 
+    /**
+     * Rejects roles other than STAFF and ADMIN before alert access.
+     */
     private void ensureViewer(Role role) {
         if (role != Role.STAFF && role != Role.ADMIN) throw new ForbiddenException("Alert access is forbidden.");
     }
 
+    /**
+     * Requires a linked active Employee in an active Department before recipient-owned operations.
+     */
     private Employee findActiveEmployee(Long userId) {
         Employee employee = employeeRepository.findByUserId(userId)
                 .orElseThrow(() -> new ForbiddenException("An active employee profile is required."));
@@ -112,20 +157,33 @@ public class AlertService {
         return employee;
     }
 
+    /**
+     * Compares the eligible caller's Employee ID with the alert recipient; sharing a Department is not ownership.
+     */
     private void ensureOwner(Alert alert, Long userId) {
         if (!findActiveEmployee(userId).getId().equals(alert.getEmployee().getId())) {
             throw new ForbiddenException("This alert belongs to another employee.");
         }
     }
 
+    /**
+     * Loads an alert with the repository's write lock or raises the canonical 404 error.
+     */
     private Alert findForUpdate(Long id) {
         return alertRepository.findByIdForUpdate(id).orElseThrow(() -> notFound(id));
     }
 
+    /**
+     * Builds the common missing-alert exception for repository lookup failures.
+     */
     private ResourceNotFoundException notFound(Long id) {
         return new ResourceNotFoundException("Alert not found with id " + id + ".");
     }
 
+    /**
+     * Validates zero-based page, size 1–100, and an allowlisted sort field and direction.
+     * Omitted sorting uses createdAt descending, preventing arbitrary property paths.
+     */
     private PageRequest pageRequest(int page, int size, String sort) {
         if (page < 0 || size < 1 || size > 100) throw new BadRequestException("Invalid page or size; maximum size is 100.");
         String[] parts = sort == null || sort.isBlank() ? new String[]{"createdAt", "desc"} : sort.split(",", -1);
@@ -137,6 +195,9 @@ public class AlertService {
         }
     }
 
+    /**
+     * Maps recipient and optional Task to shallow summaries while returning alert lifecycle and source-key fields, not a JPA relationship graph.
+     */
     private AlertResponse toResponse(Alert alert) {
         return new AlertResponse(alert.getId(), alert.getType(), alert.getMessage(), alert.getSeverity(),
                 alert.getStatus(), new AlertEmployeeSummary(alert.getEmployee().getId(), alert.getEmployee().getName()),

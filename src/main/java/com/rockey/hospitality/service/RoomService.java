@@ -29,10 +29,21 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Manages Room details, soft lifecycle, and permitted turnover transitions.
+ * Service checks enforce STAFF eligibility and prevent deactivation while active Tasks reference the Room.
+ */
+// Registers this business/security service for constructor injection.
 @Service
 public class RoomService {
 
+    /**
+     * Maximum of 100 rows per requested page, shared by this service's pagination checks.
+     */
     private static final int MAX_PAGE_SIZE = 100;
+    /**
+     * Allowlist of sortable persisted fields, rejecting arbitrary property paths from request input.
+     */
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "roomNumber",
             "roomType",
@@ -42,6 +53,9 @@ public class RoomService {
             "createdAt"
     );
     // Turnover is a lifecycle: clients cannot skip checks by choosing an arbitrary status.
+    /**
+     * Explicit allowed next-status map used to reject skipped or terminal lifecycle changes.
+     */
     private static final Map<RoomStatus, Set<RoomStatus>> ALLOWED_TRANSITIONS = Map.of(
             RoomStatus.READY,
             Set.of(
@@ -81,10 +95,22 @@ public class RoomService {
             Set.of(RoomStatus.MAINTENANCE, RoomStatus.INSPECTION)
     );
 
+    /**
+     * Injected RoomRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final RoomRepository roomRepository;
+    /**
+     * Injected EmployeeRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final EmployeeRepository employeeRepository;
+    /**
+     * Injected TaskRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final TaskRepository taskRepository;
 
+    /**
+     * Receives the collaborating components through constructor injection, making dependencies explicit and replaceable in tests.
+     */
     public RoomService(
             RoomRepository roomRepository,
             EmployeeRepository employeeRepository,
@@ -95,6 +121,11 @@ public class RoomService {
         this.taskRepository = taskRepository;
     }
 
+    /**
+     * Validates filters and pages Room DTOs.
+     * STAFF is forced to active Rooms and cannot request inactive history.
+     */
+    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public PagedResponse<RoomResponse> listRooms(RoomSearchCriteria criteria, PageCriteria pagination, Role requesterRole) {
         RoomStatus status = criteria.status();
@@ -131,6 +162,10 @@ public class RoomService {
         );
     }
 
+    /**
+     * Checks readiness time and normalized Room-number uniqueness before saving Room details with its initial lifecycle status.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public RoomResponse createRoom(CreateRoomRequest request) {
         validateNextArrival(request.getNextArrivalAt());
@@ -149,6 +184,10 @@ public class RoomService {
         return toResponse(roomRepository.save(room));
     }
 
+    /**
+     * Returns one Room DTO to STAFF or ADMIN, blocking STAFF access to inactive Rooms.
+     */
+    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public RoomResponse getRoom(Long roomId, Role requesterRole) {
         ensureRoomViewer(requesterRole);
@@ -159,6 +198,11 @@ public class RoomService {
         return toResponse(room);
     }
 
+    /**
+     * Locks the Room, checks its arrival time, and blocks deactivation if non-terminal Tasks reference it.
+     * Status transitions use their separate operation.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public RoomResponse updateRoom(Long roomId, UpdateRoomRequest request) {
         validateNextArrival(request.getNextArrivalAt());
@@ -175,6 +219,10 @@ public class RoomService {
         return toResponse(roomRepository.save(room));
     }
 
+    /**
+     * Locks the Room and checks active work before setting active=false, preserving the row and references.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public void deactivateRoom(Long roomId) {
         Room room = findRoomForUpdate(roomId);
@@ -183,6 +231,9 @@ public class RoomService {
         roomRepository.save(room);
     }
 
+    /**
+     * Blocks Room deactivation while OPEN, ASSIGNED, or IN_PROGRESS Tasks reference it.
+     */
     private void ensureNoActiveTasks(Long roomId) {
         if (taskRepository.existsByRoomIdAndStatusIn(
                 roomId,
@@ -194,6 +245,11 @@ public class RoomService {
         }
     }
 
+    /**
+     * Requires an active Room and an allowed turnover transition.
+     * STAFF also needs an active Employee in an active Department.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public RoomResponse updateStatus(
             Long roomId,
@@ -224,6 +280,9 @@ public class RoomService {
         return toResponse(roomRepository.save(room));
     }
 
+    /**
+     * Requires a linked active operational Employee and active Department rather than trusting the STAFF role alone.
+     */
     private void ensureEligibleStaff(Long userId) {
         // Room changes require an active Employee in an active Department, not just a STAFF label.
         Employee employee = employeeRepository.findByUserId(userId)
@@ -238,12 +297,18 @@ public class RoomService {
         }
     }
 
+    /**
+     * Rejects Room reads by roles other than STAFF and ADMIN.
+     */
     private void ensureRoomViewer(Role requesterRole) {
         if (requesterRole != Role.STAFF && requesterRole != Role.ADMIN) {
             throw new ForbiddenException("Room access is forbidden.");
         }
     }
 
+    /**
+     * Loads a Room by ID or raises the common missing-resource error.
+     */
     private Room findRoom(Long roomId) {
         return roomRepository.findById(roomId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -251,6 +316,9 @@ public class RoomService {
                 ));
     }
 
+    /**
+     * Acquires the Room write lock used by deactivation and new Task reference checks.
+     */
     private Room findRoomForUpdate(Long roomId) {
         return roomRepository.findByIdForUpdate(roomId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -258,6 +326,10 @@ public class RoomService {
                 ));
     }
 
+    /**
+     * Validates zero-based page, size 1–100, and an allowlisted sort field and direction.
+     * Omitted sorting uses roomNumber ascending, preventing arbitrary property paths.
+     */
     private PageRequest pageRequest(int page, int size, String sortValue) {
         if (page < 0) {
             throw new BadRequestException("Page must be zero or greater.");
@@ -282,12 +354,19 @@ public class RoomService {
         return PageRequest.of(page, size, Sort.by(direction, sortParts[0]));
     }
 
+    /**
+     * Allows no arrival value or a current/future server-local timestamp.
+     * This is readiness data, not a booking record.
+     */
     private void validateNextArrival(LocalDateTime nextArrivalAt) {
         if (nextArrivalAt != null && nextArrivalAt.isBefore(LocalDateTime.now())) {
             throw new BadRequestException("Next arrival time must be current or future.");
         }
     }
 
+    /**
+     * Trims and uppercases Room numbers, allowing 1–10 letters, digits, or hyphens.
+     */
     private String normalizeRoomNumber(String roomNumber) {
         String normalized = roomNumber.trim().toUpperCase(Locale.ROOT);
         if (!normalized.matches("[A-Z0-9-]{1,10}")) {
@@ -298,6 +377,9 @@ public class RoomService {
         return normalized;
     }
 
+    /**
+     * Preserves an omitted type filter or trims and validates its 2–50 character value.
+     */
     private String normalizeOptionalRoomType(String roomType) {
         if (roomType == null) {
             return null;
@@ -309,6 +391,9 @@ public class RoomService {
         return normalized;
     }
 
+    /**
+     * Maps Room fields to the public DTO without exposing JPA persistence details.
+     */
     private RoomResponse toResponse(Room room) {
         return new RoomResponse(
                 room.getId(),

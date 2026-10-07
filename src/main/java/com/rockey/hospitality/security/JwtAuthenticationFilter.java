@@ -15,15 +15,35 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
+/**
+ * Authenticates Bearer requests before protected controllers run.
+ * A valid JWT alone is insufficient when the database account is disabled or its identity or role no longer matches.
+ */
+// Registers this class as a Spring-managed component discovered during startup.
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    /**
+     * Required Authorization header prefix checked before JWT parsing.
+     */
     private static final String BEARER_PREFIX = "Bearer ";
 
+    /**
+     * Injected JwtService collaborator; this layer delegates the operation rather than duplicating its rules.
+     */
     private final JwtService jwtService;
+    /**
+     * Injected RockeyUserDetailsService collaborator; this layer delegates the operation rather than duplicating its rules.
+     */
     private final RockeyUserDetailsService userDetailsService;
+    /**
+     * Shared 401 writer for missing or invalid authentication.
+     */
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
 
+    /**
+     * Receives the collaborating components through constructor injection, making dependencies explicit and replaceable in tests.
+     */
     public JwtAuthenticationFilter(
             JwtService jwtService,
             RockeyUserDetailsService userDetailsService,
@@ -34,6 +54,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         this.authenticationEntryPoint = authenticationEntryPoint;
     }
 
+    /**
+     * Verifies a supplied Bearer JWT, reloads its User, and installs the current principal in the security context.
+     * Missing headers continue to route authorization; invalid headers or mismatched accounts return 401.
+     */
+    // Implements the inherited Java/Spring contract rather than defining a separate callback.
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
@@ -85,6 +110,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
     }
 
+    /**
+     * Delegates invalid-access-token responses to the common authentication entry point without exposing token contents.
+     */
     private void reject(
             HttpServletRequest request,
             HttpServletResponse response

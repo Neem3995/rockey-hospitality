@@ -24,10 +24,21 @@ import org.springframework.transaction.annotation.Isolation;
 import java.time.LocalDateTime;
 import java.util.Set;
 
+/**
+ * Manages an active USER's own Event registrations through the User join-table relationship.
+ * Event row locking serializes capacity-sensitive changes.
+ */
+// Registers this business/security service for constructor injection.
 @Service
 public class RegistrationService {
 
+    /**
+     * Maximum of 100 rows per requested page, shared by this service's pagination checks.
+     */
     private static final int MAX_PAGE_SIZE = 100;
+    /**
+     * Allowlist of sortable persisted fields, rejecting arbitrary property paths from request input.
+     */
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "title",
             "eventDateTime",
@@ -35,10 +46,22 @@ public class RegistrationService {
             "status"
     );
 
+    /**
+     * Injected UserRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final UserRepository userRepository;
+    /**
+     * Injected EventRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final EventRepository eventRepository;
+    /**
+     * Injected EventService collaborator; this layer delegates the operation rather than duplicating its rules.
+     */
     private final EventService eventService;
 
+    /**
+     * Receives the collaborating components through constructor injection, making dependencies explicit and replaceable in tests.
+     */
     public RegistrationService(
             UserRepository userRepository,
             EventRepository eventRepository,
@@ -51,6 +74,10 @@ public class RegistrationService {
 
     // Capacity/duplicate reads after the Event lock must see the preceding commit,
     // not an InnoDB REPEATABLE READ snapshot established by the attendee lookup.
+    /**
+     * Locks an upcoming OPEN Event, checks duplicate membership and remaining capacity, then adds it to the active USER's registrations.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes. READ_COMMITTED lets checks after a lock observe preceding committed changes.
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public EventRegistrationResponse register(Long eventId, Long userId) {
         User user = findActiveAttendee(userId);
@@ -76,6 +103,11 @@ public class RegistrationService {
         );
     }
 
+    /**
+     * Locks an upcoming OPEN Event and removes the caller's existing membership.
+     * Missing registration or closed eligibility is reported instead of deleting the Event.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes. READ_COMMITTED lets checks after a lock observe preceding committed changes.
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void withdraw(Long eventId, Long userId) {
         User user = findActiveAttendee(userId);
@@ -94,6 +126,10 @@ public class RegistrationService {
         userRepository.save(user);
     }
 
+    /**
+     * Pages only the active USER's retained Event memberships and maps them to the shared Event response shape.
+     */
+    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public PagedResponse<EventResponse> listOwnRegistrations(
             Long userId,
@@ -116,6 +152,9 @@ public class RegistrationService {
         );
     }
 
+    /**
+     * Requires an existing active USER account for self-registration; STAFF and ADMIN cannot use this attendee flow.
+     */
     private User findActiveAttendee(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -129,6 +168,9 @@ public class RegistrationService {
         return user;
     }
 
+    /**
+     * Acquires the Event write lock used to serialize registration, capacity, and lifecycle changes.
+     */
     private Event findEventForUpdate(Long eventId) {
         return eventRepository.findByIdForUpdate(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -136,6 +178,10 @@ public class RegistrationService {
                 ));
     }
 
+    /**
+     * Validates zero-based page, size 1–100, and an allowlisted sort field and direction.
+     * Omitted sorting uses eventDateTime ascending, preventing arbitrary property paths.
+     */
     private PageRequest pageRequest(int page, int size, String sortValue) {
         if (page < 0) {
             throw new BadRequestException("Page must be zero or greater.");

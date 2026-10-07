@@ -41,19 +41,36 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+/**
+ * Coordinates Task lifecycle and optional Employee, Room, and Event references.
+ * Reference locks and service authorization keep new work eligible and existing history intact.
+ */
+// Registers this business/security service for constructor injection.
 @Service
 public class TaskService {
 
+    /**
+     * OPEN, ASSIGNED, and IN_PROGRESS Tasks count as active work for guards and aggregates.
+     */
     public static final Set<TaskStatus> NON_TERMINAL_STATUSES = Set.of(
             TaskStatus.OPEN,
             TaskStatus.ASSIGNED,
             TaskStatus.IN_PROGRESS
     );
+    /**
+     * COMPLETED and CANCELLED Task states are terminal and excluded from active-work conditions.
+     */
     public static final Set<TaskStatus> TERMINAL_STATUSES = Set.of(
             TaskStatus.COMPLETED,
             TaskStatus.CANCELLED
     );
+    /**
+     * Maximum of 100 rows per requested page, shared by this service's pagination checks.
+     */
     private static final int MAX_PAGE_SIZE = 100;
+    /**
+     * Allowlist of sortable persisted fields, rejecting arbitrary property paths from request input.
+     */
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "title",
             "status",
@@ -62,6 +79,9 @@ public class TaskService {
             "createdAt",
             "updatedAt"
     );
+    /**
+     * Explicit allowed next-status map used to reject skipped or terminal lifecycle changes.
+     */
     private static final Map<TaskStatus, Set<TaskStatus>> ALLOWED_TRANSITIONS = Map.of(
             TaskStatus.OPEN,
             Set.of(TaskStatus.ASSIGNED, TaskStatus.CANCELLED),
@@ -80,12 +100,30 @@ public class TaskService {
             Set.of()
     );
 
+    /**
+     * Injected TaskRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final TaskRepository taskRepository;
+    /**
+     * Injected DepartmentRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final DepartmentRepository departmentRepository;
+    /**
+     * Injected EmployeeRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final EmployeeRepository employeeRepository;
+    /**
+     * Injected RoomRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final RoomRepository roomRepository;
+    /**
+     * Injected EventRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final EventRepository eventRepository;
 
+    /**
+     * Receives the collaborating components through constructor injection, making dependencies explicit and replaceable in tests.
+     */
     public TaskService(
             TaskRepository taskRepository,
             DepartmentRepository departmentRepository,
@@ -100,6 +138,10 @@ public class TaskService {
         this.eventRepository = eventRepository;
     }
 
+    /**
+     * Validates optional reference IDs and delegates filter and page execution to the shared search helper.
+     */
+    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public PagedResponse<TaskResponse> listTasks(TaskSearchCriteria criteria, PageCriteria pagination) {
         validateOptionalPositiveId(criteria.departmentId(), "Department filter");
@@ -109,6 +151,11 @@ public class TaskService {
         return search(criteria, pagination);
     }
 
+    /**
+     * Checks due time and locks eligible Department, Employee, and Room references before saving new work.
+     * The optional Event must exist and cannot be cancelled.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public TaskResponse createTask(CreateTaskRequest request) {
         // Locked reference checks prevent deactivation racing the creation of new work.
@@ -132,6 +179,10 @@ public class TaskService {
         return toResponse(taskRepository.save(task));
     }
 
+    /**
+     * Loads a Task and allows ADMIN oversight or the linked STAFF assignee's own read.
+     */
+    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public TaskResponse getTask(Long taskId, Long requesterUserId, Role requesterRole) {
         Task task = findTask(taskId);
@@ -139,6 +190,11 @@ public class TaskService {
         return toResponse(task);
     }
 
+    /**
+     * Validates references and lifecycle transitions before replacing non-terminal Task details.
+     * Terminal transitions preserve assignee history and set completion time only for COMPLETED.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public TaskResponse updateTask(Long taskId, UpdateTaskRequest request) {
         Task task = findTask(taskId);
@@ -175,6 +231,10 @@ public class TaskService {
         return toResponse(taskRepository.save(task));
     }
 
+    /**
+     * Transitions eligible work to CANCELLED without deleting its relationship history.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public TaskResponse cancelTask(Long taskId) {
         Task task = findTask(taskId);
@@ -184,6 +244,10 @@ public class TaskService {
         return toResponse(taskRepository.save(task));
     }
 
+    /**
+     * Checks access, allowed transition, and an existing assignee before storing COMPLETED with the current server time.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public TaskResponse completeTask(
             Long taskId,
@@ -200,6 +264,11 @@ public class TaskService {
         return toResponse(taskRepository.save(task));
     }
 
+    /**
+     * Assigns an eligible active Employee or removes an assignment on non-terminal work.
+     * IN_PROGRESS Tasks cannot be unassigned.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public TaskResponse assignTask(Long taskId, Long employeeId) {
         Task task = findTask(taskId);
@@ -216,6 +285,10 @@ public class TaskService {
         return toResponse(taskRepository.save(task));
     }
 
+    /**
+     * Pages one Employee's tasks for ADMIN or that Employee's linked STAFF User only.
+     */
+    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public PagedResponse<TaskResponse> listAssignedTasks(
             Long employeeId,
@@ -238,6 +311,9 @@ public class TaskService {
         return search(new TaskSearchCriteria(null, status, priority, employeeId, null, null, overdue), pagination);
     }
 
+    /**
+     * Uses one current time for overdue filtering and maps the selected page to safe Task DTOs.
+     */
     private PagedResponse<TaskResponse> search(TaskSearchCriteria criteria, PageCriteria pagination) {
         Page<Task> tasks = taskRepository.search(
                 criteria,
@@ -255,6 +331,9 @@ public class TaskService {
         );
     }
 
+    /**
+     * Allows ADMIN or the Task's linked STAFF assignee, not every employee in the same Department.
+     */
     private void ensureTaskAccess(Task task, Long requesterUserId, Role requesterRole) {
         // STAFF may read only their own assignment; sharing a Department is not ownership.
         if (requesterRole == Role.ADMIN) {
@@ -269,6 +348,9 @@ public class TaskService {
         }
     }
 
+    /**
+     * Requires an assignee for ASSIGNED, IN_PROGRESS, and COMPLETED work, and no assignee for OPEN work.
+     */
     private void validateStatusAndAssignee(TaskStatus status, Employee employee) {
         if ((status == TaskStatus.ASSIGNED
                 || status == TaskStatus.IN_PROGRESS
@@ -281,6 +363,9 @@ public class TaskService {
         }
     }
 
+    /**
+     * Prevents removing or replacing an existing assignee while completing or cancelling a Task.
+     */
     private void ensureTerminalTransitionPreservesAssignee(
             Task task,
             TaskStatus requestedStatus,
@@ -298,6 +383,9 @@ public class TaskService {
         }
     }
 
+    /**
+     * Rejects status changes not present in the Task lifecycle transition map.
+     */
     private void ensureTransitionAllowed(TaskStatus current, TaskStatus requested) {
         if (!ALLOWED_TRANSITIONS.getOrDefault(current, Set.of()).contains(requested)) {
             throw new ConflictException(
@@ -306,12 +394,18 @@ public class TaskService {
         }
     }
 
+    /**
+     * Prevents further edits or reassignment of completed or cancelled work.
+     */
     private void ensureNotTerminal(Task task) {
         if (TERMINAL_STATUSES.contains(task.getStatus())) {
             throw new ConflictException("Completed or cancelled tasks are terminal.");
         }
     }
 
+    /**
+     * Centralizes Task lookup and its 404 error.
+     */
     private Task findTask(Long taskId) {
         return taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -319,6 +413,9 @@ public class TaskService {
                 ));
     }
 
+    /**
+     * Write-locks the required Department and rejects inactive destinations for Task creation or editing.
+     */
     private Department findActiveDepartment(Long departmentId) {
         Department department = departmentRepository.findByIdForUpdate(departmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -330,10 +427,16 @@ public class TaskService {
         return department;
     }
 
+    /**
+     * Preserves a null assignment or delegates to the locked eligibility check.
+     */
     private Employee findOptionalActiveEmployee(Long employeeId) {
         return employeeId == null ? null : findActiveEmployee(employeeId);
     }
 
+    /**
+     * Write-locks the Employee and requires both it and its Department to be active before assignment.
+     */
     private Employee findActiveEmployee(Long employeeId) {
         Employee employee = employeeRepository.findByIdForUpdate(employeeId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -346,6 +449,9 @@ public class TaskService {
         return employee;
     }
 
+    /**
+     * Loads the Employee used for assigned-task listing or returns the canonical 404 error.
+     */
     private Employee findEmployee(Long employeeId) {
         return employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -353,6 +459,9 @@ public class TaskService {
                 ));
     }
 
+    /**
+     * Preserves an omitted Room or write-locks an active Room so new work cannot race deactivation.
+     */
     private Room findOptionalActiveRoom(Long roomId) {
         if (roomId == null) {
             return null;
@@ -367,6 +476,9 @@ public class TaskService {
         return room;
     }
 
+    /**
+     * Preserves an omitted Event; otherwise requires an existing, non-cancelled Event reference.
+     */
     private Event findOptionalEligibleEvent(Long eventId) {
         if (eventId == null) {
             return null;
@@ -381,18 +493,28 @@ public class TaskService {
         return event;
     }
 
+    /**
+     * Allows no due time or a current/future time when a Task's due date is created or changed.
+     */
     private void validateNewDueAt(LocalDateTime dueAt, LocalDateTime now) {
         if (dueAt != null && dueAt.isBefore(now)) {
             throw new BadRequestException("Due time must be current or future.");
         }
     }
 
+    /**
+     * Rejects zero or negative IDs only when an optional filter was supplied.
+     */
     private void validateOptionalPositiveId(Long id, String label) {
         if (id != null && id <= 0) {
             throw new BadRequestException(label + " must be positive.");
         }
     }
 
+    /**
+     * Validates zero-based page, size 1–100, and an allowlisted sort field and direction.
+     * Omitted sorting uses createdAt descending, preventing arbitrary property paths.
+     */
     private PageRequest pageRequest(int page, int size, String sortValue) {
         if (page < 0) {
             throw new BadRequestException("Page must be zero or greater.");
@@ -417,6 +539,9 @@ public class TaskService {
         return PageRequest.of(page, size, Sort.by(direction, sortParts[0]));
     }
 
+    /**
+     * Converts blank descriptions to null and trims meaningful text.
+     */
     private String normalizeDescription(String description) {
         if (description == null || description.isBlank()) {
             return null;
@@ -424,6 +549,10 @@ public class TaskService {
         return description.trim();
     }
 
+    /**
+     * Maps optional relationships to shallow summaries and retains Task lifecycle timestamps.
+     * No User credentials or entity graph are returned.
+     */
     private TaskResponse toResponse(Task task) {
         // Return shallow DTOs rather than exposing entity relationships or login credentials to React.
         Department department = task.getDepartment();

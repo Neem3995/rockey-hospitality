@@ -24,10 +24,21 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+/**
+ * Manages Event lifecycle and returns registration and preparation-task counts.
+ * Cancellation preserves Event, registration, and Task history.
+ */
+// Registers this business/security service for constructor injection.
 @Service
 public class EventService {
 
+    /**
+     * Maximum of 100 rows per requested page, shared by this service's pagination checks.
+     */
     private static final int MAX_PAGE_SIZE = 100;
+    /**
+     * Allowlist of sortable persisted fields, rejecting arbitrary property paths from request input.
+     */
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "title",
             "eventDateTime",
@@ -37,10 +48,16 @@ public class EventService {
             "createdAt",
             "updatedAt"
     );
+    /**
+     * COMPLETED and CANCELLED Event states are terminal and cannot be edited.
+     */
     private static final Set<EventStatus> TERMINAL_STATUSES = Set.of(
             EventStatus.COMPLETED,
             EventStatus.CANCELLED
     );
+    /**
+     * Explicit allowed next-status map used to reject skipped or terminal lifecycle changes.
+     */
     private static final Map<EventStatus, Set<EventStatus>> ALLOWED_TRANSITIONS = Map.of(
             EventStatus.DRAFT,
             Set.of(EventStatus.OPEN, EventStatus.CANCELLED),
@@ -56,14 +73,28 @@ public class EventService {
             Set.of()
     );
 
+    /**
+     * Injected EventRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final EventRepository eventRepository;
+    /**
+     * Injected TaskRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final TaskRepository taskRepository;
 
+    /**
+     * Receives the collaborating components through constructor injection, making dependencies explicit and replaceable in tests.
+     */
     public EventService(EventRepository eventRepository, TaskRepository taskRepository) {
         this.eventRepository = eventRepository;
         this.taskRepository = taskRepository;
     }
 
+    /**
+     * Validates the date range and pages Events using optional status and inclusive date bounds.
+     * Each response includes persisted registration and preparation counts.
+     */
+    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public PagedResponse<EventResponse> listEvents(
             EventStatus status,
@@ -92,6 +123,10 @@ public class EventService {
         );
     }
 
+    /**
+     * Requires a future date and an initial DRAFT or OPEN status before saving the normalized Event.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public EventResponse createEvent(CreateEventRequest request) {
         validateFutureEventDate(request.getEventDateTime(), LocalDateTime.now());
@@ -112,11 +147,19 @@ public class EventService {
         return toResponse(eventRepository.save(event));
     }
 
+    /**
+     * Loads one Event and assembles its safe details and aggregate counts.
+     */
+    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public EventResponse getEvent(Long eventId) {
         return toResponse(findEvent(eventId));
     }
 
+    /**
+     * Locks a non-terminal Event, protects registered capacity, and validates changed dates and status transitions before updating details.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public EventResponse updateEvent(Long eventId, UpdateEventRequest request) {
         Event event = findEventForUpdate(eventId);
@@ -153,6 +196,11 @@ public class EventService {
         return toResponse(eventRepository.save(event));
     }
 
+    /**
+     * Locks an eligible Event and transitions it to CANCELLED.
+     * Registrations, linked Tasks, and the Event row remain intact.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public EventResponse cancelEvent(Long eventId) {
         // Cancellation keeps registration and preparation-Task history instead of deleting rows.
@@ -163,6 +211,9 @@ public class EventService {
         return toResponse(eventRepository.save(event));
     }
 
+    /**
+     * Builds Event details with retained registration count, nonnegative remaining capacity, total preparation Tasks, and completed preparation Tasks.
+     */
     EventResponse toResponse(Event event) {
         long registeredCount = eventRepository.countRegistrationsByEventId(event.getId());
         long taskCount = taskRepository.countByEventId(event.getId());
@@ -187,6 +238,9 @@ public class EventService {
         );
     }
 
+    /**
+     * Builds a compact registration response using a supplied registration count to calculate remaining capacity.
+     */
     EventSummary toSummary(Event event, long registeredCount) {
         return new EventSummary(
                 event.getId(),
@@ -198,6 +252,9 @@ public class EventService {
         );
     }
 
+    /**
+     * Centralizes Event lookup and its missing-resource error.
+     */
     private Event findEvent(Long eventId) {
         return eventRepository.findById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -205,6 +262,9 @@ public class EventService {
                 ));
     }
 
+    /**
+     * Loads an Event with a write lock shared by lifecycle and capacity-sensitive registration operations.
+     */
     private Event findEventForUpdate(Long eventId) {
         return eventRepository.findByIdForUpdate(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -212,12 +272,18 @@ public class EventService {
                 ));
     }
 
+    /**
+     * Prevents editing or cancelling an already completed or cancelled Event.
+     */
     private void ensureNotTerminal(Event event) {
         if (TERMINAL_STATUSES.contains(event.getStatus())) {
             throw new ConflictException("Completed or cancelled events are terminal.");
         }
     }
 
+    /**
+     * Checks the explicit Event transition map rather than accepting arbitrary status changes.
+     */
     private void ensureTransitionAllowed(EventStatus current, EventStatus requested) {
         if (!ALLOWED_TRANSITIONS.getOrDefault(current, Set.of()).contains(requested)) {
             throw new ConflictException(
@@ -227,12 +293,19 @@ public class EventService {
         }
     }
 
+    /**
+     * Requires an Event timestamp strictly after the supplied current server time.
+     */
     private void validateFutureEventDate(LocalDateTime eventDateTime, LocalDateTime now) {
         if (eventDateTime == null || !eventDateTime.isAfter(now)) {
             throw new BadRequestException("Event date and time must be in the future.");
         }
     }
 
+    /**
+     * Validates zero-based page, size 1–100, and an allowlisted sort field and direction.
+     * Omitted sorting uses eventDateTime ascending, preventing arbitrary property paths.
+     */
     private PageRequest pageRequest(int page, int size, String sortValue) {
         if (page < 0) {
             throw new BadRequestException("Page must be zero or greater.");
@@ -257,6 +330,9 @@ public class EventService {
         return PageRequest.of(page, size, Sort.by(direction, sortParts[0]));
     }
 
+    /**
+     * Stores blank descriptions as null and trims nonblank text.
+     */
     private String normalizeDescription(String description) {
         if (description == null || description.isBlank()) {
             return null;

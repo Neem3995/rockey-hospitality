@@ -30,11 +30,25 @@ import org.springframework.transaction.annotation.Isolation;
 import java.util.Locale;
 import java.util.Set;
 
+/**
+ * Manages employee profiles and optional internal login provisioning.
+ * Profile and linked User changes share a transaction so department and account status stay consistent.
+ */
+// Registers this business/security service for constructor injection.
 @Service
 public class EmployeeService {
+    /**
+     * Shared prefix keeping profile lookup errors consistent.
+     */
     private static final String EMPLOYEE_NOT_FOUND_PREFIX = "Employee not found with id ";
 
+    /**
+     * Maximum of 100 rows per requested page, shared by this service's pagination checks.
+     */
     private static final int MAX_PAGE_SIZE = 100;
+    /**
+     * Allowlist of sortable persisted fields, rejecting arbitrary property paths from request input.
+     */
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "name",
             "email",
@@ -43,12 +57,30 @@ public class EmployeeService {
             "createdAt"
     );
 
+    /**
+     * Injected EmployeeRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final EmployeeRepository employeeRepository;
+    /**
+     * Injected UserRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final UserRepository userRepository;
+    /**
+     * Injected DepartmentRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final DepartmentRepository departmentRepository;
+    /**
+     * Shared BCrypt encoder for password creation and credential matching.
+     */
     private final PasswordEncoder passwordEncoder;
+    /**
+     * Injected TaskRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final TaskRepository taskRepository;
 
+    /**
+     * Receives the collaborating components through constructor injection, making dependencies explicit and replaceable in tests.
+     */
     public EmployeeService(
             EmployeeRepository employeeRepository,
             UserRepository userRepository,
@@ -63,6 +95,10 @@ public class EmployeeService {
         this.taskRepository = taskRepository;
     }
 
+    /**
+     * Chooses the repository query matching optional Department and status filters, then returns a validated page of safe profile DTOs.
+     */
+    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public PagedResponse<EmployeeResponse> listEmployees(
             Long departmentId,
@@ -100,6 +136,11 @@ public class EmployeeService {
         );
     }
 
+    /**
+     * Creates an active profile in a locked active Department and optionally provisions one new STAFF/ADMIN User with a BCrypt hash.
+     * Without login provisioning the User link remains null.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public EmployeeResponse createEmployee(CreateEmployeeRequest request) {
         // One transaction creates the optional login and profile together, never half an account.
@@ -131,6 +172,11 @@ public class EmployeeService {
         return toResponse(employeeRepository.save(employee));
     }
 
+    /**
+     * Returns the requested profile to ADMIN or to the linked STAFF account itself.
+     * An unrelated account cannot read the record.
+     */
+    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public EmployeeResponse getEmployee(
             Long employeeId,
@@ -149,6 +195,11 @@ public class EmployeeService {
         return toResponse(employee);
     }
 
+    /**
+     * Locks Department then Employee, validates reassignment and deactivation, and updates the profile.
+     * Linked User Department and status are synchronized in the same transaction.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public EmployeeResponse updateEmployee(
             Long employeeId,
@@ -185,6 +236,11 @@ public class EmployeeService {
 
     // The Department-ID routing lookup occurs before locking; guard reads must
     // see Task commits made while this transaction waited for that lock.
+    /**
+     * Locks Department then Employee and rejects concurrent Department changes or active Task assignments.
+     * Soft deactivation also disables a linked User and clears its refresh session.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes. READ_COMMITTED lets checks after a lock observe preceding committed changes.
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deactivateEmployee(Long employeeId) {
         // Match Task's Department -> Employee lock order; avoid a foreign-key
@@ -204,6 +260,9 @@ public class EmployeeService {
         employeeRepository.save(employee);
     }
 
+    /**
+     * Blocks Employee deactivation while any assigned Task is OPEN, ASSIGNED, or IN_PROGRESS.
+     */
     private void ensureNoActiveTasks(Long employeeId) {
         if (taskRepository.existsByAssignedEmployeeIdAndStatusIn(
                 employeeId,
@@ -215,6 +274,10 @@ public class EmployeeService {
         }
     }
 
+    /**
+     * Keeps an optional linked User's Department and status equal to its Employee profile.
+     * No User is created for a profile that has no login.
+     */
     private void synchronizeLinkedUser(
             Employee employee,
             Department department,
@@ -233,6 +296,9 @@ public class EmployeeService {
         userRepository.save(user);
     }
 
+    /**
+     * Loads a profile by ID or raises the common Employee 404 error.
+     */
     private Employee findEmployee(Long employeeId) {
         return employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -240,6 +306,9 @@ public class EmployeeService {
                 ));
     }
 
+    /**
+     * Loads and write-locks a profile for lifecycle or relationship changes.
+     */
     private Employee findEmployeeForUpdate(Long employeeId) {
         return employeeRepository.findByIdForUpdate(employeeId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -247,6 +316,9 @@ public class EmployeeService {
                 ));
     }
 
+    /**
+     * Loads and write-locks the Department shared with Task assignment and Department deactivation checks.
+     */
     private Department findDepartment(Long departmentId) {
         return departmentRepository.findByIdForUpdate(departmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -254,6 +326,9 @@ public class EmployeeService {
                 ));
     }
 
+    /**
+     * Uses the locked Department lookup and rejects inactive destinations for new profiles.
+     */
     private Department findActiveDepartment(Long departmentId) {
         Department department = findDepartment(departmentId);
         if (!Boolean.TRUE.equals(department.getActive())) {
@@ -262,18 +337,28 @@ public class EmployeeService {
         return department;
     }
 
+    /**
+     * Rejects a duplicate employee-profile email, independently of login-account email.
+     */
     private void ensureEmployeeEmailAvailable(String email) {
         if (employeeRepository.existsByEmailIgnoreCase(email)) {
             throw new ConflictException("Employee email is already registered.");
         }
     }
 
+    /**
+     * Rejects a login email already used by another User.
+     */
     private void ensureUserEmailAvailable(String email) {
         if (userRepository.existsByEmailIgnoreCase(email)) {
             throw new ConflictException("Login email is already registered.");
         }
     }
 
+    /**
+     * Requires createLogin and validates the matching set of login fields.
+     * Only STAFF or ADMIN can be provisioned here; false forbids login fields rather than creating a placeholder account.
+     */
     private void validateProvisioningRequest(CreateEmployeeRequest request) {
         if (request.getCreateLogin() == null) {
             throw new BadRequestException("createLogin is required.");
@@ -302,6 +387,10 @@ public class EmployeeService {
         }
     }
 
+    /**
+     * Validates zero-based page, size 1–100, and an allowlisted sort field and direction.
+     * Omitted sorting uses name ascending, preventing arbitrary property paths.
+     */
     private PageRequest pageRequest(int page, int size, String sortValue) {
         if (page < 0) {
             throw new BadRequestException("Page must be zero or greater.");
@@ -327,6 +416,10 @@ public class EmployeeService {
         return PageRequest.of(page, size, Sort.by(direction, sortParts[0]));
     }
 
+    /**
+     * Maps the profile, nullable User ID, and Department summary into a DTO.
+     * Login credentials and token state are not returned.
+     */
     private EmployeeResponse toResponse(Employee employee) {
         User user = employee.getUser();
         Department department = employee.getDepartment();
@@ -343,6 +436,9 @@ public class EmployeeService {
         );
     }
 
+    /**
+     * Trims and lowercases profile or login emails with Locale.ROOT before uniqueness checks.
+     */
     private String normalizeEmail(String email) {
         return email.trim().toLowerCase(Locale.ROOT);
     }

@@ -24,16 +24,42 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Locale;
 
+/**
+ * Coordinates registration, BCrypt login, refresh rotation, profile reads, and logout.
+ * Only a hash and expiration are persisted for the single active refresh session.
+ */
+// Registers this business/security service for constructor injection.
 @Service
 public class AuthService {
 
+    /**
+     * Injected UserRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final UserRepository userRepository;
+    /**
+     * Injected EmployeeRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final EmployeeRepository employeeRepository;
+    /**
+     * Shared BCrypt encoder for password creation and credential matching.
+     */
     private final PasswordEncoder passwordEncoder;
+    /**
+     * Injected JwtService collaborator; this layer delegates the operation rather than duplicating its rules.
+     */
     private final JwtService jwtService;
+    /**
+     * Injected RefreshTokenService collaborator; this layer delegates the operation rather than duplicating its rules.
+     */
     private final RefreshTokenService refreshTokenService;
+    /**
+     * Injected process-local attempt limiter for login, registration, and refresh abuse prevention.
+     */
     private final AuthenticationRateLimiter rateLimiter;
 
+    /**
+     * Receives the collaborating components through constructor injection, making dependencies explicit and replaceable in tests.
+     */
     public AuthService(
             UserRepository userRepository,
             EmployeeRepository employeeRepository,
@@ -50,6 +76,11 @@ public class AuthService {
         this.rateLimiter = rateLimiter;
     }
 
+    /**
+     * Limits registration attempts, normalizes email, and rejects duplicates before storing a BCrypt hash.
+     * The new User keeps its default USER role and starts a refresh session.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public AuthSession register(
             String name,
@@ -72,6 +103,11 @@ public class AuthService {
         return startSession(user);
     }
 
+    /**
+     * Checks the IP/email failure limit and verifies an active User through BCrypt matching.
+     * Successful login resets failures and rotates the refresh session.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public AuthSession login(String email, String password, String clientIp) {
         String normalizedEmail = normalizeEmail(email);
@@ -89,6 +125,11 @@ public class AuthService {
         return startSession(user);
     }
 
+    /**
+     * Limits refresh attempts and looks up the hash of the cookie token.
+     * Only an active account with an unexpired stored session can rotate into new access and refresh tokens.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public AuthSession refresh(String rawRefreshToken, String clientIp) {
         rateLimiter.consumeRefreshAttempt(clientIp);
@@ -111,6 +152,10 @@ public class AuthService {
         return startSession(user);
     }
 
+    /**
+     * Loads the current active account and returns its safe profile DTO; inactive or missing accounts do not receive profile data.
+     */
+    // Runs this service operation in a read-only transaction, keeping lazy reads and DTO mapping inside the persistence boundary.
     @Transactional(readOnly = true)
     public CurrentUserResponse getCurrentUser(Long userId) {
         User user = userRepository.findById(userId)
@@ -121,6 +166,11 @@ public class AuthService {
         return toCurrentUserResponse(user);
     }
 
+    /**
+     * Clears the stored refresh hash and expiration even when they are already empty.
+     * It revokes refresh capability, not an already issued access JWT.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public void logout(Long userId) {
         User user = userRepository.findById(userId)
@@ -129,6 +179,10 @@ public class AuthService {
         userRepository.save(user);
     }
 
+    /**
+     * Replaces the one stored refresh session and issues a short-lived access JWT.
+     * The raw refresh token stays separate from the JSON response for cookie delivery.
+     */
     private AuthSession startSession(User user) {
         // Replace the stored hash each time: rotating refresh permits only one active session.
         IssuedRefreshToken refreshToken = refreshTokenService.issueRefreshToken();
@@ -149,6 +203,9 @@ public class AuthService {
         return new AuthSession(response, refreshToken.getRawValue());
     }
 
+    /**
+     * Maps safe account fields and optional Department/Employee references without returning password or refresh-token hashes.
+     */
     private CurrentUserResponse toCurrentUserResponse(User user) {
         Department department = user.getDepartment();
         DepartmentSummary departmentSummary = department == null
@@ -171,6 +228,9 @@ public class AuthService {
         );
     }
 
+    /**
+     * Trims and lowercases email with Locale.ROOT for consistent account lookup and uniqueness checks.
+     */
     private String normalizeEmail(String email) {
         return email.trim().toLowerCase(Locale.ROOT);
     }

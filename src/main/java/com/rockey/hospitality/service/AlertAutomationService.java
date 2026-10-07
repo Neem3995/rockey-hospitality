@@ -32,19 +32,54 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
+/**
+ * Reconciles Room, Task, and Inventory conditions with recipients' unresolved alerts.
+ * Cleared conditions resolve old rows; recurring conditions can create new rows without erasing history.
+ */
+// Registers this business/security service for constructor injection.
 @Service
 public class AlertAutomationService {
 
+    /**
+     * UNREAD and READ states both remain unresolved for alert reconciliation.
+     */
     public static final List<AlertStatus> UNRESOLVED = List.of(AlertStatus.UNREAD, AlertStatus.READ);
+    /**
+     * COMPLETED and CANCELLED Task states are terminal and excluded from active-work conditions.
+     */
     private static final List<TaskStatus> TERMINAL = List.of(TaskStatus.COMPLETED, TaskStatus.CANCELLED);
+    /**
+     * HIGH and URGENT Task priorities produce priority-alert conditions.
+     */
     private static final List<TaskPriority> HIGH_PRIORITIES = List.of(TaskPriority.HIGH, TaskPriority.URGENT);
+    /**
+     * Injected AlertRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final AlertRepository alertRepository;
+    /**
+     * Injected EmployeeRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final EmployeeRepository employeeRepository;
+    /**
+     * Injected RoomRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final RoomRepository roomRepository;
+    /**
+     * Injected TaskRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final TaskRepository taskRepository;
+    /**
+     * Injected InventoryItemRepository for database lookup and persistence, keeping SQL access out of controller code.
+     */
     private final InventoryItemRepository inventoryRepository;
+    /**
+     * Injected Clock adapted to the server zone used by existing operational LocalDateTime values.
+     */
     private final Clock clock;
 
+    /**
+     * Receives the collaborating components through constructor injection, making dependencies explicit and replaceable in tests.
+     */
     public AlertAutomationService(AlertRepository alertRepository, EmployeeRepository employeeRepository,
                                   RoomRepository roomRepository, TaskRepository taskRepository,
                                   InventoryItemRepository inventoryRepository, Clock clock) {
@@ -57,6 +92,11 @@ public class AlertAutomationService {
         this.clock = clock.withZone(ZoneId.systemDefault());
     }
 
+    /**
+     * Uses one server-local time snapshot to scan Room, Task, and Inventory sources.
+     * A runtime failure rolls back this transaction rather than retaining a partial scan.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public void runChecks() {
         // One transaction reconciles source conditions; a failed scan must not leave half its alerts.
@@ -66,15 +106,31 @@ public class AlertAutomationService {
         scanInventory(now);
     }
 
+    /**
+     * Reconciles only Room readiness alerts using the current server-local time.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public void checkRoomReadiness() { scanRooms(LocalDateTime.now(clock)); }
 
+    /**
+     * Reconciles only assigned Task overdue and high-priority alerts.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public void checkTasks() { scanTasks(LocalDateTime.now(clock)); }
 
+    /**
+     * Reconciles only active Inventory threshold alerts.
+     */
+    // Starts or joins a transaction for calls through Spring; unchecked failures roll back its writes.
     @Transactional
     public void checkInventory() { scanInventory(LocalDateTime.now(clock)); }
 
+    /**
+     * Finds active, non-READY Rooms with arrivals between now and two hours ahead, including both boundaries.
+     * Expected alerts are addressed to active Housekeeping employees.
+     */
     private void scanRooms(LocalDateTime now) {
         Map<Long, List<Condition>> expected = new TreeMap<>();
         List<Long> recipients = employeeRepository.findActiveRecipientIdsByDepartment("Housekeeping", EmployeeStatus.ACTIVE);
@@ -89,6 +145,10 @@ public class AlertAutomationService {
         reconcile(AlertType.ROOM, expected, now);
     }
 
+    /**
+     * Builds separate overdue and HIGH/URGENT conditions for assigned, non-terminal Tasks.
+     * Due time must be strictly before now to count as overdue.
+     */
     private void scanTasks(LocalDateTime now) {
         Map<Long, List<Condition>> expected = new TreeMap<>();
         for (Task task : taskRepository.findTaskAlertSources(now, TERMINAL, HIGH_PRIORITIES)) {
@@ -106,6 +166,10 @@ public class AlertAutomationService {
         reconcile(AlertType.TASK, expected, now);
     }
 
+    /**
+     * Creates conditions for active stock at or below its threshold.
+     * Active Purchasing recipients are preferred; eligible ADMIN employees are the fallback.
+     */
     private void scanInventory(LocalDateTime now) {
         Map<Long, List<Condition>> expected = new TreeMap<>();
         List<Long> recipients = employeeRepository.findActiveRecipientIdsByDepartment("Purchasing", EmployeeStatus.ACTIVE);
@@ -121,10 +185,17 @@ public class AlertAutomationService {
         reconcile(AlertType.INVENTORY, expected, now);
     }
 
+    /**
+     * Groups a source condition under its intended employee recipient for reconciliation.
+     */
     private void add(Map<Long, List<Condition>> expected, Long id, Condition condition) {
         expected.computeIfAbsent(id, ignored -> new ArrayList<>()).add(condition);
     }
 
+    /**
+     * Visits both currently expected recipients and recipients with older unresolved source alerts.
+     * This allows disappeared conditions to resolve as well as new ones to generate.
+     */
     private void reconcile(AlertType type, Map<Long, List<Condition>> expected, LocalDateTime now) {
         Set<Long> recipientIds = new TreeSet<>(expected.keySet());
         recipientIds.addAll(alertRepository.findUnresolvedRecipientIds(type, UNRESOLVED));
@@ -133,6 +204,10 @@ public class AlertAutomationService {
         }
     }
 
+    /**
+     * Locks the Employee and unresolved alerts before retaining one row per desired source key.
+     * Ineligible recipients, cleared conditions, and old duplicates resolve; missing desired conditions create new rows.
+     */
     private void reconcileRecipient(Long id, AlertType type, List<Condition> expected, LocalDateTime now) {
         // Serialize generation for each recipient before reading its unresolved alerts, within the caller's transaction.
         Employee employee = employeeRepository.findByIdForUpdate(id).orElse(null);
@@ -156,5 +231,20 @@ public class AlertAutomationService {
         }
     }
 
-    private record Condition(String key, String message, Task task) { }
+    /**
+     * Describes one expected automated alert: a stable source key, safe message, and optional related Task.
+     */
+    private record Condition(
+            /**
+             * Stable source-condition identity used to reconcile unresolved alerts.
+             */
+            String key,
+            /**
+             * Safe client-facing explanatory text without private authentication or database details.
+             */
+            String message,
+            /**
+             * Optional Task summary or association providing alert/work context.
+             */
+            Task task) { }
 }

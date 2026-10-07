@@ -17,14 +17,34 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+/**
+ * Defines authentication, route-level role gates, and browser CORS policy.
+ * Services still enforce record ownership and operational eligibility.
+ */
+// Marks this class as Spring configuration supplying application beans.
 @Configuration
 public class SecurityConfiguration {
 
+    /**
+     * JWT filter placed before protected route authorization.
+     */
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    /**
+     * Shared 401 writer for missing or invalid authentication.
+     */
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
+    /**
+     * Shared 403 writer for authenticated callers lacking permission.
+     */
     private final RestAccessDeniedHandler accessDeniedHandler;
+    /**
+     * Validated external security configuration shared with token and cookie handling.
+     */
     private final SecurityProperties securityProperties;
 
+    /**
+     * Receives the collaborating components through constructor injection, making dependencies explicit and replaceable in tests.
+     */
     public SecurityConfiguration(
             JwtAuthenticationFilter jwtAuthenticationFilter,
             RestAuthenticationEntryPoint authenticationEntryPoint,
@@ -37,42 +57,59 @@ public class SecurityConfiguration {
         this.securityProperties = securityProperties;
     }
 
+    /**
+     * Builds the stateless security chain in matcher order and runs JWT authentication before the username/password filter.
+     * Route gates establish roles; service methods enforce ownership.
+     */
+    // Registers this method's returned object as a shared Spring-managed dependency.
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         // Backend role gates protect routes; services still enforce ownership and eligibility.
         http
+                // Bearer APIs do not use CSRF tokens; AuthController separately validates a present refresh Origin against the CORS allowlist.
                 .csrf(csrf -> csrf.disable())
+                // Browser origin restrictions and credential support come from the same explicit security configuration.
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                // Do not create an HTTP login session; Bearer authentication is rebuilt for each request.
                 .sessionManagement(session -> session.sessionCreationPolicy(
                         SessionCreationPolicy.STATELESS
                 ))
+                // Use safe JSON 401/403 handlers instead of login redirects or HTML errors.
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler)
                 )
+                // The first matching rule wins; specific read/action routes must precede broader management rules.
                 .authorizeHttpRequests(authorize -> authorize
+                        // Only ADMIN can read the published JSON/YAML contract; other documentation paths below are denied.
                         .requestMatchers(HttpMethod.GET, "/v3/api-docs", "/v3/api-docs.yaml").hasRole(Role.ADMIN.name())
                         .requestMatchers("/v3/api-docs/**").denyAll()
+                        // Registration and login are public; refresh uses its cookie and Origin checks instead of a Bearer token.
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/auth/register",
                                 "/api/auth/login",
                                 "/api/auth/refresh"
                         ).permitAll()
+                        // Profile and logout require the identity established by the access JWT.
                         .requestMatchers(HttpMethod.GET, "/api/auth/me").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/auth/logout").authenticated()
+                        // ADMIN manages Employee lists and writes; STAFF detail reads still require its own linked profile in the service.
                         .requestMatchers(HttpMethod.GET, "/api/employees").hasRole(Role.ADMIN.name())
                         .requestMatchers(HttpMethod.GET, "/api/employees/*")
                         .hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
                         .requestMatchers("/api/employees/**").hasRole(Role.ADMIN.name())
+                        // Operational roles may read Departments; only ADMIN can change them.
                         .requestMatchers(HttpMethod.GET, "/api/departments/**")
                         .hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
                         .requestMatchers("/api/departments/**").hasRole(Role.ADMIN.name())
+                        // STAFF can read active Rooms and request eligible status transitions; Room management writes remain ADMIN-only.
                         .requestMatchers(HttpMethod.GET, "/api/rooms/**")
                         .hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
                         .requestMatchers(HttpMethod.PATCH, "/api/rooms/*/status")
                         .hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
                         .requestMatchers("/api/rooms/**").hasRole(Role.ADMIN.name())
+                        // ADMIN searches/manages Tasks; specific STAFF read/completion routes remain subject to assignee ownership.
                         .requestMatchers(HttpMethod.GET, "/api/tasks").hasRole(Role.ADMIN.name())
                         .requestMatchers(HttpMethod.GET, "/api/tasks/assigned/*")
                         .hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
@@ -81,6 +118,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.PATCH, "/api/tasks/*/complete")
                         .hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
                         .requestMatchers("/api/tasks/**").hasRole(Role.ADMIN.name())
+                        // Self-registration routes are USER-only and precede general Event reads. Event management writes remain ADMIN-only.
                         .requestMatchers(HttpMethod.GET, "/api/events/registrations/me")
                         .hasRole("USER")
                         .requestMatchers(HttpMethod.POST, "/api/events/*/registrations")
@@ -90,20 +128,25 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/events/**")
                         .hasAnyRole("USER", Role.STAFF.name(), Role.ADMIN.name())
                         .requestMatchers("/api/events/**").hasRole(Role.ADMIN.name())
+                        // STAFF reads are additionally limited by InventoryService to active stock in its own Department; writes require ADMIN.
                         .requestMatchers(HttpMethod.GET, "/api/inventory/**")
                         .hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
                         .requestMatchers("/api/inventory/**").hasRole(Role.ADMIN.name())
+                        // Only the defined alert read/read-mark/resolve operations are allowed; services check ownership, and other alert routes are denied.
                         .requestMatchers(HttpMethod.GET, "/api/alerts/**").hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
                         .requestMatchers(HttpMethod.PUT, "/api/alerts/*/read").hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
                         .requestMatchers(HttpMethod.DELETE, "/api/alerts/*").hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
                         .requestMatchers("/api/alerts/**").denyAll()
+                        // The service returns only the caller's permitted dashboard section; the four broader aggregate endpoints require ADMIN.
                         .requestMatchers(HttpMethod.GET, "/api/analytics/dashboard")
                         .hasAnyRole("USER", Role.STAFF.name(), Role.ADMIN.name())
                         .requestMatchers(HttpMethod.GET, "/api/analytics/rooms", "/api/analytics/tasks",
                                 "/api/analytics/departments", "/api/analytics/inventory-events").hasRole(Role.ADMIN.name())
                         .requestMatchers("/api/analytics/**").denyAll()
+                        // Unmatched routes still require authentication; this fallback does not grant domain permissions.
                         .anyRequest().authenticated()
                 )
+                // Authenticate Bearer identities before route authorization examines their role authorities.
                 .addFilterBefore(
                         jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class
@@ -112,6 +155,11 @@ public class SecurityConfiguration {
         return http.build();
     }
 
+    /**
+     * Allows only configured browser origins, supported methods, and Authorization/Content-Type headers.
+     * Credentialed requests permit the refresh cookie without allowing arbitrary origins.
+     */
+    // Registers this method's returned object as a shared Spring-managed dependency.
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();

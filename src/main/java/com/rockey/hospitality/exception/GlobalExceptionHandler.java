@@ -17,11 +17,23 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Translates controller/service exceptions into canonical HTTP statuses and ApiError responses.
+ * Unexpected and persistence failures use safe generic messages.
+ */
+// Applies these exception mappings across REST controllers.
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    /**
+     * Class logger used for safe diagnostics without credential or token values.
+     */
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    /**
+     * Maps a missing resource or registration to a safe 404 response.
+     */
+    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(
             ResourceNotFoundException exception,
@@ -30,6 +42,10 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.NOT_FOUND, exception.getMessage(), request, null);
     }
 
+    /**
+     * Maps uniqueness or lifecycle conflicts to a safe 409 response.
+     */
+    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ApiError> handleConflict(
             ConflictException exception,
@@ -38,6 +54,10 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.CONFLICT, exception.getMessage(), request, null);
     }
 
+    /**
+     * Maps service input validation failures to a 400 response.
+     */
+    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ApiError> handleBadRequest(
             BadRequestException exception,
@@ -46,6 +66,10 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.BAD_REQUEST, exception.getMessage(), request, null);
     }
 
+    /**
+     * Maps role, ownership, or eligibility failures to a 403 response.
+     */
+    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<ApiError> handleForbidden(
             ForbiddenException exception,
@@ -54,6 +78,10 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.FORBIDDEN, exception.getMessage(), request, null);
     }
 
+    /**
+     * Maps invalid credentials and refresh sessions to generic 401 responses.
+     */
+    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler({
             InvalidCredentialsException.class,
             InvalidRefreshTokenException.class
@@ -65,6 +93,10 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.UNAUTHORIZED, exception.getMessage(), request, null);
     }
 
+    /**
+     * Maps exhausted authentication-attempt windows to a 429 response.
+     */
+    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<ApiError> handleRateLimit(
             RateLimitExceededException exception,
@@ -73,6 +105,10 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage(), request, null);
     }
 
+    /**
+     * Collects the first validation message per field and returns a 400 error with fieldErrors.
+     */
+    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiError> handleValidation(
             MethodArgumentNotValidException exception,
@@ -91,6 +127,10 @@ public class GlobalExceptionHandler {
         );
     }
 
+    /**
+     * Returns 400 for unreadable JSON or mismatched request types without exposing parsing internals.
+     */
+    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler({
             HttpMessageNotReadableException.class,
             MethodArgumentTypeMismatchException.class
@@ -102,6 +142,10 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.BAD_REQUEST, "Request could not be read.", request, null);
     }
 
+    /**
+     * Returns a generic 409 for persistence integrity conflicts and logs only the request path, not SQL or private values.
+     */
+    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiError> handleDataConflict(
             DataIntegrityViolationException exception,
@@ -116,6 +160,10 @@ public class GlobalExceptionHandler {
         );
     }
 
+    /**
+     * Returns a generic 500 and logs only exception type and request path, keeping internal details out of the response.
+     */
+    // Routes the listed exception types to this shared controller-error mapping.
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnexpected(
             Exception exception,
@@ -134,6 +182,9 @@ public class GlobalExceptionHandler {
         );
     }
 
+    /**
+     * Builds the shared error DTO and a ResponseEntity with the same HTTP status.
+     */
     private ResponseEntity<ApiError> response(
             HttpStatus status,
             String message,
