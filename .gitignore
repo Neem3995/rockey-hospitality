@@ -35,7 +35,7 @@ token*.txt
 
 # Temporary verification reports (not project documentation).
 CLAUDE_VERIFY_*.md
-PHASE*_IMPLEMENTATION_LOG.md
+*_IMPLEMENTATION_LOG.md
 FE*_IMPLEMENTATION.md
 docs/SLICE*_HARDENING.md
 docs/SONAR_REMEDIATION.md
