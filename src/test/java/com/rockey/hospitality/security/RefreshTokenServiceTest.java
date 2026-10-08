@@ -1,12 +1,11 @@
 package com.rockey.hospitality.security;
 
 import com.rockey.hospitality.configuration.SecurityProperties;
-import org.junit.jupiter.api.Test;
-
+import com.rockey.hospitality.security.RefreshTokenService;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-
+import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class RefreshTokenServiceTest {
@@ -21,7 +20,7 @@ class RefreshTokenServiceTest {
                 Clock.fixed(now, ZoneOffset.UTC)
         );
 
-        IssuedRefreshToken token = service.issueRefreshToken();
+        RefreshTokenService.IssuedRefreshToken token = service.issueRefreshToken();
 
         assertThat(token.getRawValue()).isNotBlank();
         assertThat(token.getRawValue()).doesNotContain(".");

@@ -1,323 +1,139 @@
 package com.rockey.hospitality.service;
 
-import com.rockey.hospitality.dto.common.PagedResponse;
-import com.rockey.hospitality.dto.common.PageCriteria;
-import com.rockey.hospitality.dto.room.RoomSearchCriteria;
-import com.rockey.hospitality.dto.room.CreateRoomRequest;
-import com.rockey.hospitality.dto.room.RoomResponse;
-import com.rockey.hospitality.dto.room.UpdateRoomRequest;
-import com.rockey.hospitality.entity.Employee;
-import com.rockey.hospitality.entity.EmployeeStatus;
-import com.rockey.hospitality.entity.Role;
-import com.rockey.hospitality.entity.Room;
-import com.rockey.hospitality.entity.RoomStatus;
-import com.rockey.hospitality.exception.BadRequestException;
-import com.rockey.hospitality.exception.ConflictException;
-import com.rockey.hospitality.exception.ForbiddenException;
-import com.rockey.hospitality.exception.ResourceNotFoundException;
-import com.rockey.hospitality.repository.EmployeeRepository;
-import com.rockey.hospitality.repository.RoomRepository;
-import com.rockey.hospitality.repository.TaskRepository;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
+import com.rockey.hospitality.dto.RoomDtos.*;
+import com.rockey.hospitality.entity.*;
+import com.rockey.hospitality.exception.ApiException.*;
+import com.rockey.hospitality.repository.*;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-
+/**
+ * STUDY NOTE: @Service holds room/readiness rules, including the small inspection use case.
+ * @Transactional makes inspection history and PASS/FAIL room changes succeed or roll back together.
+ * Controllers pass authenticated identity; locked room rows serialize competing work and inspection changes.
+ * DTOs expose safe fields while repositories reach the four-table MySQL schema.
+ */
 @Service
 public class RoomService {
-
-    private static final int MAX_PAGE_SIZE = 100;
-    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
-            "roomNumber",
-            "roomType",
-            "floor",
-            "status",
-            "nextArrivalAt",
-            "createdAt"
-    );
-    private static final Map<RoomStatus, Set<RoomStatus>> ALLOWED_TRANSITIONS = Map.of(
-            RoomStatus.READY,
-            Set.of(
-                    RoomStatus.OCCUPIED,
-                    RoomStatus.DIRTY,
-                    RoomStatus.MAINTENANCE,
-                    RoomStatus.OUT_OF_SERVICE
-            ),
-            RoomStatus.OCCUPIED,
-            Set.of(
-                    RoomStatus.DIRTY,
-                    RoomStatus.MAINTENANCE,
-                    RoomStatus.OUT_OF_SERVICE
-            ),
-            RoomStatus.DIRTY,
-            Set.of(
-                    RoomStatus.CLEANING,
-                    RoomStatus.MAINTENANCE,
-                    RoomStatus.OUT_OF_SERVICE
-            ),
-            RoomStatus.CLEANING,
-            Set.of(
-                    RoomStatus.INSPECTION,
-                    RoomStatus.MAINTENANCE,
-                    RoomStatus.OUT_OF_SERVICE
-            ),
-            RoomStatus.INSPECTION,
-            Set.of(
-                    RoomStatus.READY,
-                    RoomStatus.CLEANING,
-                    RoomStatus.MAINTENANCE,
-                    RoomStatus.OUT_OF_SERVICE
-            ),
-            RoomStatus.MAINTENANCE,
-            Set.of(RoomStatus.INSPECTION, RoomStatus.OUT_OF_SERVICE),
-            RoomStatus.OUT_OF_SERVICE,
-            Set.of(RoomStatus.MAINTENANCE, RoomStatus.INSPECTION)
-    );
-
-    private final RoomRepository roomRepository;
-    private final EmployeeRepository employeeRepository;
-    private final TaskRepository taskRepository;
-
-    public RoomService(
-            RoomRepository roomRepository,
-            EmployeeRepository employeeRepository,
-            TaskRepository taskRepository
-    ) {
-        this.roomRepository = roomRepository;
-        this.employeeRepository = employeeRepository;
-        this.taskRepository = taskRepository;
+    private final RoomRepository rooms;
+    private final TaskRepository tasks;
+    private final InspectionRepository inspections;
+    private final UserService users;
+    private final Clock clock;
+    public RoomService(RoomRepository rooms, TaskRepository tasks, InspectionRepository inspections,
+                       UserService users, Clock clock) {
+        this.rooms = rooms; this.tasks = tasks; this.inspections = inspections; this.users = users; this.clock = clock;
     }
 
     @Transactional(readOnly = true)
-    public PagedResponse<RoomResponse> listRooms(RoomSearchCriteria criteria, PageCriteria pagination, Role requesterRole) {
-        RoomStatus status = criteria.status();
-        Integer floor = criteria.floor();
-        String roomType = criteria.roomType();
-        Boolean active = criteria.active();
-        ensureRoomViewer(requesterRole);
-        if (floor != null && (floor < 1 || floor > 99)) {
-            throw new BadRequestException("Floor filter must be between 1 and 99.");
-        }
-        String normalizedType = normalizeOptionalRoomType(roomType);
-        Boolean effectiveActive = active;
-        if (requesterRole == Role.STAFF) {
-            if (Boolean.FALSE.equals(active)) {
-                throw new ForbiddenException("STAFF may view only active rooms.");
-            }
-            effectiveActive = true;
-        }
-
-        Page<Room> rooms = roomRepository.search(
-                status,
-                floor,
-                normalizedType,
-                effectiveActive,
-                pageRequest(pagination.page(), pagination.size(), pagination.sort())
-        );
-        return new PagedResponse<>(
-                rooms.getContent().stream().map(this::toResponse).toList(),
-                rooms.getNumber(),
-                rooms.getSize(),
-                rooms.getTotalElements(),
-                rooms.getTotalPages(),
-                rooms.isLast()
-        );
+    public List<RoomResponse> list(Long actorId) {
+        users.requireSupervisor(actorId);
+        return rooms.findAllByOrderByRoomNumberAsc().stream().map(RoomService::response).toList();
     }
-
-    @Transactional
-    public RoomResponse createRoom(CreateRoomRequest request) {
-        validateNextArrival(request.getNextArrivalAt());
-        String roomNumber = normalizeRoomNumber(request.getRoomNumber());
-        if (roomRepository.existsByRoomNumberIgnoreCase(roomNumber)) {
-            throw new ConflictException("Room number is already registered.");
-        }
-
-        Room room = new Room(
-                roomNumber,
-                request.getRoomType().trim(),
-                request.getFloor(),
-                request.getInitialStatus(),
-                request.getNextArrivalAt()
-        );
-        return toResponse(roomRepository.save(room));
-    }
-
     @Transactional(readOnly = true)
-    public RoomResponse getRoom(Long roomId, Role requesterRole) {
-        ensureRoomViewer(requesterRole);
-        Room room = findRoom(roomId);
-        if (requesterRole == Role.STAFF && !Boolean.TRUE.equals(room.getActive())) {
-            throw new ForbiddenException("STAFF may view only active rooms.");
+    public RoomResponse get(Long actorId, Long id) { users.requireSupervisor(actorId); return response(room(id)); }
+
+    @Transactional
+    public RoomResponse create(Long actorId, RoomRequest request) {
+        users.requireSupervisor(actorId);
+        String number = request.getRoomNumber().trim();
+        if (rooms.existsByRoomNumberIgnoreCase(number)) throw new ConflictException("Room number already exists.");
+        Room.Status status = request.getStatus() == null ? Room.Status.READY : request.getStatus();
+        if (status == Room.Status.CLEANING || status == Room.Status.INSPECTION) {
+            throw new ConflictException("Cleaning and inspection states require completed workflow steps.");
         }
-        return toResponse(room);
+        Room room = new Room(number, request.getFloor(), status);
+        if (Boolean.FALSE.equals(request.getActive())) room.deactivate();
+        return response(rooms.save(room));
     }
 
     @Transactional
-    public RoomResponse updateRoom(Long roomId, UpdateRoomRequest request) {
-        validateNextArrival(request.getNextArrivalAt());
-        Room room = findRoomForUpdate(roomId);
-        if (Boolean.FALSE.equals(request.getActive())) {
-            ensureNoActiveTasks(roomId);
+    public RoomResponse update(Long actorId, Long id, RoomRequest request) {
+        users.requireSupervisor(actorId);
+        Room room = lockedRoom(id);
+        if (!room.getRoomNumber().equals(request.getRoomNumber().trim())) throw new ConflictException("Room number cannot change.");
+        if (request.getStatus() != null && request.getStatus() != room.getStatus()) {
+            throw new ConflictException("Use the status operation for lifecycle changes.");
         }
-        room.updateDetails(
-                request.getRoomType().trim(),
-                request.getFloor(),
-                request.getNextArrivalAt(),
-                request.getActive()
-        );
-        return toResponse(roomRepository.save(room));
+        boolean active = request.getActive() == null ? room.isActive() : request.getActive();
+        if (!active) guardWork(room);
+        room.update(request.getFloor(), active);
+        return response(rooms.save(room));
     }
 
     @Transactional
-    public void deactivateRoom(Long roomId) {
-        Room room = findRoomForUpdate(roomId);
-        ensureNoActiveTasks(roomId);
+    public RoomResponse status(Long actorId, Long id, Room.Status next) {
+        users.requireSupervisor(actorId);
+        Room room = lockedRoom(id);
+        requireActive(room);
+        if (room.getStatus() == next) return response(room);
+        guardWork(room);
+        boolean allowed = room.getStatus() == Room.Status.READY
+                && (next == Room.Status.DIRTY || next == Room.Status.OUT_OF_SERVICE)
+                || room.getStatus() == Room.Status.DIRTY && next == Room.Status.OUT_OF_SERVICE
+                || room.getStatus() == Room.Status.OUT_OF_SERVICE && next == Room.Status.DIRTY;
+        if (!allowed) throw new ConflictException("Room transition is not allowed; readiness requires a passing inspection.");
+        room.updateStatus(next);
+        return response(rooms.save(room));
+    }
+
+    @Transactional
+    public void deactivate(Long actorId, Long id) {
+        users.requireSupervisor(actorId);
+        Room room = lockedRoom(id);
+        guardWork(room);
         room.deactivate();
-        roomRepository.save(room);
+        rooms.save(room);
     }
 
-    private void ensureNoActiveTasks(Long roomId) {
-        if (taskRepository.existsByRoomIdAndStatusIn(
-                roomId,
-                TaskService.NON_TERMINAL_STATUSES
-        )) {
-            throw new ConflictException(
-                    "Room cannot be deactivated while active tasks reference it."
-            );
-        }
+    @Transactional(readOnly = true)
+    public List<InspectionResponse> inspectionHistory(Long actorId, Long roomId) {
+        users.requireSupervisor(actorId);
+        room(roomId);
+        return inspections.findByRoomIdOrderByIdDesc(roomId).stream().map(this::inspectionResponse).toList();
     }
 
     @Transactional
-    public RoomResponse updateStatus(
-            Long roomId,
-            RoomStatus requestedStatus,
-            Long requesterUserId,
-            Role requesterRole
-    ) {
-        if (requesterRole != Role.STAFF && requesterRole != Role.ADMIN) {
-            throw new ForbiddenException("Room status access is forbidden.");
+    public InspectionResponse inspect(Long actorId, Long roomId, InspectionRequest request) {
+        User supervisor = users.requireSupervisor(actorId);
+        Room room = lockedRoom(roomId);
+        requireActive(room);
+        Task task = tasks.findById(request.getTaskId())
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found."));
+        if (!task.getRoom().getId().equals(roomId) || task.getStatus() != Task.Status.COMPLETED
+                || room.getStatus() != Room.Status.INSPECTION) {
+            throw new ConflictException("Inspection requires this room's completed cleaning task and pending inspection.");
         }
-        Room room = findRoom(roomId);
-        if (!Boolean.TRUE.equals(room.getActive())) {
-            throw new ConflictException("Inactive rooms cannot change status.");
-        }
-        if (requesterRole == Role.STAFF) {
-            ensureEligibleStaff(requesterUserId);
-        }
-        if (!ALLOWED_TRANSITIONS
-                .getOrDefault(room.getStatus(), Set.of())
-                .contains(requestedStatus)) {
-            throw new ConflictException(
-                    "Room transition from " + room.getStatus()
-                            + " to " + requestedStatus + " is not allowed."
-            );
-        }
-
-        room.updateStatus(requestedStatus);
-        return toResponse(roomRepository.save(room));
+        Task latest = tasks.findFirstByRoomIdAndStatusOrderByIdDesc(roomId, Task.Status.COMPLETED)
+                .orElseThrow(() -> new ConflictException("No completed cleaning task exists."));
+        if (!latest.getId().equals(task.getId())) throw new ConflictException("Inspect the latest completed cleaning task.");
+        Inspection inspection = new Inspection(room, task, supervisor, request.getResult(), request.getNotes(),
+                LocalDateTime.now(clock.withZone(ZoneId.systemDefault())));
+        inspections.save(inspection);
+        room.updateStatus(request.getResult() == Inspection.Result.PASS ? Room.Status.READY : Room.Status.DIRTY);
+        rooms.save(room);
+        return inspectionResponse(inspection);
     }
 
-    private void ensureEligibleStaff(Long userId) {
-        Employee employee = employeeRepository.findByUserId(userId)
-                .orElseThrow(() -> new ForbiddenException(
-                        "STAFF must have an active operational employee profile."
-                ));
-        if (employee.getStatus() != EmployeeStatus.ACTIVE
-                || !Boolean.TRUE.equals(employee.getDepartment().getActive())) {
-            throw new ForbiddenException(
-                    "STAFF must have an active operational employee profile."
-            );
+    private Room room(Long id) { return rooms.findById(id).orElseThrow(() -> new ResourceNotFoundException("Room not found.")); }
+    private Room lockedRoom(Long id) { return rooms.findForUpdate(id).orElseThrow(() -> new ResourceNotFoundException("Room not found.")); }
+    private void requireActive(Room room) { if (!room.isActive()) throw new ConflictException("Room is inactive."); }
+    private void guardWork(Room room) {
+        if (room.getStatus() == Room.Status.INSPECTION
+                || !tasks.findByRoomIdAndStatusIn(room.getId(), List.of(Task.Status.ASSIGNED, Task.Status.IN_PROGRESS)).isEmpty()) {
+            throw new ConflictException("Finish or cancel active work and record pending inspections first.");
         }
     }
-
-    private void ensureRoomViewer(Role requesterRole) {
-        if (requesterRole != Role.STAFF && requesterRole != Role.ADMIN) {
-            throw new ForbiddenException("Room access is forbidden.");
-        }
+    public static RoomResponse response(Room room) {
+        return new RoomResponse(room.getId(), room.getRoomNumber(), room.getFloor(), room.getStatus(),
+                room.isActive(), room.getCreatedAt(), room.getUpdatedAt());
     }
-
-    private Room findRoom(Long roomId) {
-        return roomRepository.findById(roomId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Room not found with id " + roomId + "."
-                ));
-    }
-
-    private Room findRoomForUpdate(Long roomId) {
-        return roomRepository.findByIdForUpdate(roomId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Room not found with id " + roomId + "."
-                ));
-    }
-
-    private PageRequest pageRequest(int page, int size, String sortValue) {
-        if (page < 0) {
-            throw new BadRequestException("Page must be zero or greater.");
-        }
-        if (size < 1 || size > MAX_PAGE_SIZE) {
-            throw new BadRequestException("Page size must be between 1 and 100.");
-        }
-        String[] sortParts = sortValue == null || sortValue.isBlank()
-                ? new String[]{"roomNumber", "asc"}
-                : sortValue.split(",", -1);
-        if (sortParts.length > 2 || !ALLOWED_SORT_FIELDS.contains(sortParts[0])) {
-            throw new BadRequestException("Room sort is invalid.");
-        }
-        Sort.Direction direction;
-        try {
-            direction = sortParts.length == 1
-                    ? Sort.Direction.ASC
-                    : Sort.Direction.fromString(sortParts[1]);
-        } catch (IllegalArgumentException exception) {
-            throw new BadRequestException("Room sort direction is invalid.");
-        }
-        return PageRequest.of(page, size, Sort.by(direction, sortParts[0]));
-    }
-
-    private void validateNextArrival(LocalDateTime nextArrivalAt) {
-        if (nextArrivalAt != null && nextArrivalAt.isBefore(LocalDateTime.now())) {
-            throw new BadRequestException("Next arrival time must be current or future.");
-        }
-    }
-
-    private String normalizeRoomNumber(String roomNumber) {
-        String normalized = roomNumber.trim().toUpperCase(Locale.ROOT);
-        if (!normalized.matches("[A-Z0-9-]{1,10}")) {
-            throw new BadRequestException(
-                    "Room number must contain 1-10 letters, numbers, or hyphens."
-            );
-        }
-        return normalized;
-    }
-
-    private String normalizeOptionalRoomType(String roomType) {
-        if (roomType == null) {
-            return null;
-        }
-        String normalized = roomType.trim();
-        if (normalized.length() < 2 || normalized.length() > 50) {
-            throw new BadRequestException("Room type filter must be between 2 and 50 characters.");
-        }
-        return normalized;
-    }
-
-    private RoomResponse toResponse(Room room) {
-        return new RoomResponse(
-                room.getId(),
-                room.getRoomNumber(),
-                room.getRoomType(),
-                room.getStatus(),
-                room.getFloor(),
-                room.getNextArrivalAt(),
-                room.getActive(),
-                room.getCreatedAt(),
-                room.getUpdatedAt()
-        );
+    private InspectionResponse inspectionResponse(Inspection inspection) {
+        return new InspectionResponse(inspection.getId(), inspection.getRoom().getId(), inspection.getTask().getId(),
+                UserService.summary(inspection.getInspectedBy()), inspection.getResult(), inspection.getNotes(), inspection.getInspectedAt());
     }
 }

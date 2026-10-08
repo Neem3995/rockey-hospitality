@@ -1,4 +1,7 @@
 target/
+node_modules/
+dist/
+coverage/
 
 .idea/
 .vscode/
@@ -8,6 +11,7 @@ target/
 .env.*
 !.env.example
 application-local.properties
+/database/bootstrap-admin.sql
 
 logs/
 *.log
@@ -21,9 +25,17 @@ Thumbs.db
 *.pem
 *.p12
 *.pfx
-credentials*
-token*
+# Actual local secrets use .env files or generated target/ artifacts, already ignored.
+# Do not ignore legitimate source filenames based on "token" or "credentials" prefixes.
+# Narrow secret-file shapes only (never .java/.js/.md source names).
+credentials*.json
+*.credentials
+*.token
+token*.txt
 
-# Local-only verification notes and implementation logs.
+# Temporary verification reports (not project documentation).
 CLAUDE_VERIFY_*.md
 *_IMPLEMENTATION_LOG.md
+FE*_IMPLEMENTATION.md
+docs/SLICE*_HARDENING.md
+docs/SONAR_REMEDIATION.md

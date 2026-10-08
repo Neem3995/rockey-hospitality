@@ -1,0 +1,15 @@
+-- Local first-ADMIN setup only. Register a USER, then STOP the backend.
+-- Select your intended database explicitly. Replace this placeholder locally.
+-- This changes no password, creates no account and never runs at application startup.
+SET @registered_user_email = LOWER(TRIM('REGISTERED_USER_EMAIL_HERE'));
+START TRANSACTION;
+SET @bootstrap_user_id = NULL;
+SELECT id INTO @bootstrap_user_id FROM users
+WHERE email = @registered_user_email AND role = 'USER' AND active = TRUE FOR UPDATE;
+SET @can_bootstrap = @bootstrap_user_id IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'ADMIN');
+UPDATE users SET role = 'ADMIN', refresh_token_hash = NULL, refresh_token_expires_at = NULL,
+    updated_at = CURRENT_TIMESTAMP(6)
+WHERE id = @bootstrap_user_id AND @can_bootstrap;
+COMMIT;
+SELECT IF(@can_bootstrap, 'BOOTSTRAP_APPLIED', 'NOT_APPLIED: verify active USER and absence of ADMIN') AS result;

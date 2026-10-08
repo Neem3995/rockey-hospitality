@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Rockey Hospitality API",
-    "description": "Frozen 51-operation business contract. Documentation requires ADMIN. USER: own registrations; STAFF: authorized identity/Department scope; ADMIN: operational oversight. See the canonical API contract for lifecycle, validation and scope rules.",
+    "description": "Housekeeping-only API. USER: housekeeper; MANAGER: supervisor; ADMIN: account oversight.",
     "version": "1.0"
   },
   "servers": [
@@ -17,17 +17,111 @@
     }
   ],
   "paths": {
-    "/api/tasks/{taskId}": {
+    "/api/users/{id}": {
+      "get": {
+        "tags": [
+          "user-controller"
+        ],
+        "description": "MANAGER: USER accounts only. ADMIN: any account.",
+        "operationId": "get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "user-controller"
+        ],
+        "description": "ADMIN: update non-ADMIN accounts only.",
+        "operationId": "update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "user-controller"
+        ],
+        "description": "ADMIN: soft-deactivate non-ADMIN accounts only.",
+        "operationId": "deactivate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}": {
       "get": {
         "tags": [
           "task-controller"
         ],
-        "summary": "Task detail",
-        "description": "Access: Assigned STAFF, ADMIN. Canonical operation: GET /api/tasks/{taskId}.",
-        "operationId": "getTask",
+        "description": "USER: own assigned task only. MANAGER/ADMIN: any task.",
+        "operationId": "get_1",
         "parameters": [
           {
-            "name": "taskId",
+            "name": "id",
             "in": "path",
             "required": true,
             "schema": {
@@ -46,36 +140,6 @@
                 }
               }
             }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
           }
         }
       },
@@ -83,12 +147,11 @@
         "tags": [
           "task-controller"
         ],
-        "summary": "Update task",
-        "description": "Access: ADMIN. Canonical operation: PUT /api/tasks/{taskId}.",
-        "operationId": "updateTask",
+        "description": "MANAGER/ADMIN: edit or reassign non-terminal tasks.",
+        "operationId": "update_1",
         "parameters": [
           {
-            "name": "taskId",
+            "name": "id",
             "in": "path",
             "required": true,
             "schema": {
@@ -101,7 +164,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateTaskRequest"
+                "$ref": "#/components/schemas/TaskRequest"
               }
             }
           },
@@ -117,46 +180,6 @@
                 }
               }
             }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
           }
         }
       },
@@ -164,12 +187,11 @@
         "tags": [
           "task-controller"
         ],
-        "summary": "Cancel eligible task",
-        "description": "Access: ADMIN. Canonical operation: DELETE /api/tasks/{taskId}.",
-        "operationId": "cancelTask",
+        "description": "MANAGER/ADMIN: cancel non-terminal tasks while retaining history.",
+        "operationId": "cancel",
         "parameters": [
           {
-            "name": "taskId",
+            "name": "id",
             "in": "path",
             "required": true,
             "schema": {
@@ -178,6 +200,41 @@
             }
           }
         ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}/status": {
+      "put": {
+        "tags": [
+          "task-controller"
+        ],
+        "description": "USER: start own ASSIGNED task or complete own IN_PROGRESS task. MANAGER/ADMIN: cancel only.",
+        "operationId": "status",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "OK",
@@ -188,51 +245,20 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
           }
         }
       }
     },
-    "/api/rooms/{roomId}": {
+    "/api/rooms/{id}": {
       "get": {
         "tags": [
           "room-controller"
         ],
-        "summary": "Room detail",
-        "description": "Access: STAFF, ADMIN. Canonical operation: GET /api/rooms/{roomId}.",
-        "operationId": "getRoom",
+        "description": "MANAGER/ADMIN: view a room.",
+        "operationId": "get_2",
         "parameters": [
           {
-            "name": "roomId",
+            "name": "id",
             "in": "path",
             "required": true,
             "schema": {
@@ -251,36 +277,6 @@
                 }
               }
             }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
           }
         }
       },
@@ -288,12 +284,11 @@
         "tags": [
           "room-controller"
         ],
-        "summary": "Update room details/arrival time",
-        "description": "Access: ADMIN. Canonical operation: PUT /api/rooms/{roomId}.",
-        "operationId": "updateRoom",
+        "description": "MANAGER/ADMIN: edit rooms.",
+        "operationId": "update_2",
         "parameters": [
           {
-            "name": "roomId",
+            "name": "id",
             "in": "path",
             "required": true,
             "schema": {
@@ -306,7 +301,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateRoomRequest"
+                "$ref": "#/components/schemas/RoomRequest"
               }
             }
           },
@@ -322,46 +317,6 @@
                 }
               }
             }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
           }
         }
       },
@@ -369,12 +324,11 @@
         "tags": [
           "room-controller"
         ],
-        "summary": "Deactivate eligible room",
-        "description": "Access: ADMIN. Canonical operation: DELETE /api/rooms/{roomId}.",
-        "operationId": "deactivateRoom",
+        "description": "MANAGER/ADMIN: soft-deactivate rooms without active work or pending inspection.",
+        "operationId": "deactivate_1",
         "parameters": [
           {
-            "name": "roomId",
+            "name": "id",
             "in": "path",
             "required": true,
             "schema": {
@@ -386,112 +340,20 @@
         "responses": {
           "204": {
             "description": "No Content"
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
           }
         }
       }
     },
-    "/api/inventory/{itemId}": {
-      "get": {
-        "tags": [
-          "inventory-controller"
-        ],
-        "summary": "Inventory detail",
-        "description": "Access: STAFF scoped, ADMIN. Canonical operation: GET /api/inventory/{itemId}.",
-        "operationId": "getInventoryItem",
-        "parameters": [
-          {
-            "name": "itemId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InventoryItemResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
+    "/api/rooms/{id}/status": {
       "put": {
         "tags": [
-          "inventory-controller"
+          "room-controller"
         ],
-        "summary": "Update/restock item",
-        "description": "Access: ADMIN. Canonical operation: PUT /api/inventory/{itemId}.",
-        "operationId": "updateInventoryItem",
+        "description": "MANAGER/ADMIN: manage permitted room status transitions.",
+        "operationId": "status_1",
         "parameters": [
           {
-            "name": "itemId",
+            "name": "id",
             "in": "path",
             "required": true,
             "schema": {
@@ -504,7 +366,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateInventoryItemRequest"
+                "$ref": "#/components/schemas/RoomStatusRequest"
               }
             }
           },
@@ -516,101 +378,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InventoryItemResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "inventory-controller"
-        ],
-        "summary": "Deactivate inventory item",
-        "description": "Access: ADMIN. Canonical operation: DELETE /api/inventory/{itemId}.",
-        "operationId": "deactivateInventoryItem",
-        "parameters": [
-          {
-            "name": "itemId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
+                  "$ref": "#/components/schemas/RoomResponse"
                 }
               }
             }
@@ -618,653 +386,52 @@
         }
       }
     },
-    "/api/events/{eventId}": {
+    "/api/users": {
       "get": {
         "tags": [
-          "event-controller"
+          "user-controller"
         ],
-        "summary": "Event detail/capacity/preparation",
-        "description": "Access: USER, STAFF, ADMIN. Canonical operation: GET /api/events/{eventId}.",
-        "operationId": "getEvent",
-        "parameters": [
-          {
-            "name": "eventId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
+        "description": "MANAGER: USER accounts only. ADMIN: all accounts.",
+        "operationId": "list",
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EventResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserResponse"
+                  }
                 }
               }
             }
           }
         }
       },
-      "put": {
+      "post": {
         "tags": [
-          "event-controller"
+          "user-controller"
         ],
-        "summary": "Update event",
-        "description": "Access: ADMIN. Canonical operation: PUT /api/events/{eventId}.",
-        "operationId": "updateEvent",
-        "parameters": [
-          {
-            "name": "eventId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
+        "description": "MANAGER: create USER accounts. ADMIN: create USER or MANAGER accounts.",
+        "operationId": "create",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateEventRequest"
+                "$ref": "#/components/schemas/CreateUserRequest"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK",
+          "201": {
+            "description": "Created",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EventResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "event-controller"
-        ],
-        "summary": "Cancel eligible event without hard deletion",
-        "description": "Access: ADMIN. Canonical operation: DELETE /api/events/{eventId}.",
-        "operationId": "cancelEvent",
-        "parameters": [
-          {
-            "name": "eventId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EventResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/employees/{employeeId}": {
-      "get": {
-        "tags": [
-          "employee-controller"
-        ],
-        "summary": "Employee detail",
-        "description": "Access: ADMIN; self STAFF. Canonical operation: GET /api/employees/{employeeId}.",
-        "operationId": "getEmployee",
-        "parameters": [
-          {
-            "name": "employeeId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EmployeeResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "employee-controller"
-        ],
-        "summary": "Update profile/department/job/status",
-        "description": "Access: ADMIN. Canonical operation: PUT /api/employees/{employeeId}.",
-        "operationId": "updateEmployee",
-        "parameters": [
-          {
-            "name": "employeeId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateEmployeeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EmployeeResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "employee-controller"
-        ],
-        "summary": "Deactivate employee/account",
-        "description": "Access: ADMIN. Canonical operation: DELETE /api/employees/{employeeId}.",
-        "operationId": "deactivateEmployee",
-        "parameters": [
-          {
-            "name": "employeeId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/departments/{departmentId}": {
-      "get": {
-        "tags": [
-          "department-controller"
-        ],
-        "summary": "Department detail",
-        "description": "Access: STAFF, ADMIN. Canonical operation: GET /api/departments/{departmentId}.",
-        "operationId": "getDepartment",
-        "parameters": [
-          {
-            "name": "departmentId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DepartmentResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "department-controller"
-        ],
-        "summary": "Update department",
-        "description": "Access: ADMIN. Canonical operation: PUT /api/departments/{departmentId}.",
-        "operationId": "updateDepartment",
-        "parameters": [
-          {
-            "name": "departmentId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateDepartmentRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DepartmentResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "department-controller"
-        ],
-        "summary": "Deactivate eligible department",
-        "description": "Access: ADMIN. Canonical operation: DELETE /api/departments/{departmentId}.",
-        "operationId": "deactivateDepartment",
-        "parameters": [
-          {
-            "name": "departmentId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/alerts/{alertId}/read": {
-      "put": {
-        "tags": [
-          "alert-controller"
-        ],
-        "summary": "Mark own alert READ",
-        "description": "Access: Recipient STAFF; ADMIN for own alert. Canonical operation: PUT /api/alerts/{alertId}/read.",
-        "operationId": "markRead",
-        "parameters": [
-          {
-            "name": "alertId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlertResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
+                  "$ref": "#/components/schemas/UserResponse"
                 }
               }
             }
@@ -1277,150 +444,18 @@
         "tags": [
           "task-controller"
         ],
-        "summary": "Search operational tasks",
-        "description": "Access: ADMIN. Canonical operation: GET /api/tasks.",
-        "operationId": "listTasks",
-        "parameters": [
-          {
-            "name": "departmentId",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "OPEN",
-                "ASSIGNED",
-                "IN_PROGRESS",
-                "COMPLETED",
-                "CANCELLED"
-              ]
-            }
-          },
-          {
-            "name": "priority",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "LOW",
-                "MEDIUM",
-                "HIGH",
-                "URGENT"
-              ]
-            }
-          },
-          {
-            "name": "assignedEmployeeId",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          },
-          {
-            "name": "roomId",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          },
-          {
-            "name": "eventId",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          },
-          {
-            "name": "overdue",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 0
-            }
-          },
-          {
-            "name": "size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 20
-            }
-          },
-          {
-            "name": "sort",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "createdAt,desc"
-            }
-          }
-        ],
+        "description": "USER: own assigned tasks only. MANAGER/ADMIN: all tasks.",
+        "operationId": "list_1",
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PagedResponseTaskResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TaskResponse"
+                  }
                 }
               }
             }
@@ -1431,14 +466,13 @@
         "tags": [
           "task-controller"
         ],
-        "summary": "Create task",
-        "description": "Access: ADMIN. Canonical operation: POST /api/tasks.",
-        "operationId": "createTask",
+        "description": "MANAGER/ADMIN: create and assign tasks to active USER housekeepers.",
+        "operationId": "create_1",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateTaskRequest"
+                "$ref": "#/components/schemas/TaskRequest"
               }
             }
           },
@@ -1454,46 +488,6 @@
                 }
               }
             }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
           }
         }
       }
@@ -1503,119 +497,18 @@
         "tags": [
           "room-controller"
         ],
-        "summary": "Paginated/filter rooms",
-        "description": "Access: STAFF, ADMIN. Canonical operation: GET /api/rooms.",
-        "operationId": "listRooms",
-        "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "READY",
-                "OCCUPIED",
-                "DIRTY",
-                "CLEANING",
-                "INSPECTION",
-                "MAINTENANCE",
-                "OUT_OF_SERVICE"
-              ]
-            }
-          },
-          {
-            "name": "floor",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          {
-            "name": "type",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "active",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 0
-            }
-          },
-          {
-            "name": "size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 20
-            }
-          },
-          {
-            "name": "sort",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "roomNumber,asc"
-            }
-          }
-        ],
+        "description": "MANAGER/ADMIN: list rooms.",
+        "operationId": "list_2",
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PagedResponseRoomResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoomResponse"
+                  }
                 }
               }
             }
@@ -1626,14 +519,13 @@
         "tags": [
           "room-controller"
         ],
-        "summary": "Create room",
-        "description": "Access: ADMIN. Canonical operation: POST /api/rooms.",
-        "operationId": "createRoom",
+        "description": "MANAGER/ADMIN: create rooms.",
+        "operationId": "create_2",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateRoomRequest"
+                "$ref": "#/components/schemas/RoomRequest"
               }
             }
           },
@@ -1649,649 +541,25 @@
                 }
               }
             }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
           }
         }
       }
     },
-    "/api/inventory": {
+    "/api/rooms/{id}/inspections": {
       "get": {
         "tags": [
-          "inventory-controller"
+          "room-controller"
         ],
-        "summary": "Department-scoped/all inventory",
-        "description": "Access: STAFF scoped, ADMIN. Canonical operation: GET /api/inventory.",
-        "operationId": "listInventory",
+        "description": "MANAGER/ADMIN: read retained room inspection history.",
+        "operationId": "inspections",
         "parameters": [
           {
-            "name": "departmentId",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          },
-          {
-            "name": "active",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 0
-            }
-          },
-          {
-            "name": "size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 20
-            }
-          },
-          {
-            "name": "sort",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "name,asc"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PagedResponseInventoryItemResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "inventory-controller"
-        ],
-        "summary": "Create inventory item",
-        "description": "Access: ADMIN. Canonical operation: POST /api/inventory.",
-        "operationId": "createInventoryItem",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateInventoryItemRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InventoryItemResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/events": {
-      "get": {
-        "tags": [
-          "event-controller"
-        ],
-        "summary": "List eligible events",
-        "description": "Access: USER, STAFF, ADMIN. Canonical operation: GET /api/events.",
-        "operationId": "listEvents",
-        "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "DRAFT",
-                "OPEN",
-                "CLOSED",
-                "IN_PROGRESS",
-                "COMPLETED",
-                "CANCELLED"
-              ]
-            }
-          },
-          {
-            "name": "dateFrom",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "format": "date-time"
-            }
-          },
-          {
-            "name": "dateTo",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "format": "date-time"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 0
-            }
-          },
-          {
-            "name": "size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 20
-            }
-          },
-          {
-            "name": "sort",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "eventDateTime,asc"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PagedResponseEventResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "event-controller"
-        ],
-        "summary": "Create event",
-        "description": "Access: ADMIN. Canonical operation: POST /api/events.",
-        "operationId": "createEvent",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateEventRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EventResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/events/{eventId}/registrations": {
-      "post": {
-        "tags": [
-          "event-controller"
-        ],
-        "summary": "Register current USER",
-        "description": "Access: USER. Canonical operation: POST /api/events/{eventId}/registrations.",
-        "operationId": "register",
-        "parameters": [
-          {
-            "name": "eventId",
+            "name": "id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
               "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EventRegistrationResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/employees": {
-      "get": {
-        "tags": [
-          "employee-controller"
-        ],
-        "summary": "Paginated employee list",
-        "description": "Access: ADMIN. Canonical operation: GET /api/employees.",
-        "operationId": "listEmployees",
-        "parameters": [
-          {
-            "name": "departmentId",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "ACTIVE",
-                "INACTIVE"
-              ]
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 0
-            }
-          },
-          {
-            "name": "size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 20
-            }
-          },
-          {
-            "name": "sort",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "name,asc"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PagedResponseEmployeeResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Safe unexpected error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "employee-controller"
-        ],
-        "summary": "Create employee and optional linked login",
-        "description": "Access: ADMIN. Canonical operation: POST /api/employees.",
-        "operationId": "createEmployee",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateEmployeeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EmployeeResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/departments": {
-      "get": {
-        "tags": [
-          "department-controller"
-        ],
-        "summary": "List departments",
-        "description": "Access: STAFF, ADMIN. Canonical operation: GET /api/departments.",
-        "operationId": "listDepartments",
-        "parameters": [
-          {
-            "name": "active",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean"
             }
           }
         ],
@@ -2303,28 +571,8 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/DepartmentResponse"
+                    "$ref": "#/components/schemas/InspectionResponse"
                   }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -2333,16 +581,26 @@
       },
       "post": {
         "tags": [
-          "department-controller"
+          "room-controller"
         ],
-        "summary": "Create department",
-        "description": "Access: ADMIN. Canonical operation: POST /api/departments.",
-        "operationId": "createDepartment",
+        "description": "MANAGER/ADMIN: inspect completed cleaning work; PASS makes READY, FAIL makes DIRTY.",
+        "operationId": "inspect",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateDepartmentRequest"
+                "$ref": "#/components/schemas/InspectionRequest"
               }
             }
           },
@@ -2354,37 +612,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DepartmentResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
+                  "$ref": "#/components/schemas/InspectionResponse"
                 }
               }
             }
@@ -2397,9 +625,9 @@
         "tags": [
           "auth-controller"
         ],
-        "summary": "Register guest/event USER",
+        "summary": "Register housekeeping USER",
         "description": "Access: Public, rate limited. Canonical operation: POST /api/auth/register.",
-        "operationId": "register_1",
+        "operationId": "register",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2558,7 +786,7 @@
           "auth-controller"
         ],
         "summary": "Revoke current refresh session and expire refresh cookie",
-        "description": "Access: USER, STAFF, ADMIN; access token required. Canonical operation: POST /api/auth/logout.",
+        "description": "Access: USER, MANAGER, ADMIN; access token required. Canonical operation: POST /api/auth/logout.",
         "operationId": "logout",
         "responses": {
           "204": {
@@ -2670,474 +898,13 @@
         "security": []
       }
     },
-    "/api/tasks/{taskId}/complete": {
-      "patch": {
-        "tags": [
-          "task-controller"
-        ],
-        "summary": "Complete assigned task",
-        "description": "Access: Assigned STAFF, ADMIN. Canonical operation: PATCH /api/tasks/{taskId}/complete.",
-        "operationId": "completeTask",
-        "parameters": [
-          {
-            "name": "taskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaskResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/tasks/{taskId}/assigned-employee": {
-      "patch": {
-        "tags": [
-          "task-controller"
-        ],
-        "summary": "Assign/unassign employee",
-        "description": "Access: ADMIN. Canonical operation: PATCH /api/tasks/{taskId}/assigned-employee.",
-        "operationId": "assignTask",
-        "parameters": [
-          {
-            "name": "taskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AssignTaskRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaskResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/rooms/{roomId}/status": {
-      "patch": {
-        "tags": [
-          "room-controller"
-        ],
-        "summary": "Apply room transition",
-        "description": "Access: STAFF, ADMIN. Canonical operation: PATCH /api/rooms/{roomId}/status.",
-        "operationId": "updateStatus",
-        "parameters": [
-          {
-            "name": "roomId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateRoomStatusRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RoomResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/tasks/assigned/{employeeId}": {
-      "get": {
-        "tags": [
-          "task-controller"
-        ],
-        "summary": "Assigned employee tasks",
-        "description": "Access: Self STAFF, ADMIN. Canonical operation: GET /api/tasks/assigned/{employeeId}.",
-        "operationId": "listAssignedTasks",
-        "parameters": [
-          {
-            "name": "employeeId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "OPEN",
-                "ASSIGNED",
-                "IN_PROGRESS",
-                "COMPLETED",
-                "CANCELLED"
-              ]
-            }
-          },
-          {
-            "name": "priority",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "LOW",
-                "MEDIUM",
-                "HIGH",
-                "URGENT"
-              ]
-            }
-          },
-          {
-            "name": "overdue",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 0
-            }
-          },
-          {
-            "name": "size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 20
-            }
-          },
-          {
-            "name": "sort",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "createdAt,desc"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PagedResponseTaskResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/events/registrations/me": {
-      "get": {
-        "tags": [
-          "event-controller"
-        ],
-        "summary": "List own registrations",
-        "description": "Access: USER. Canonical operation: GET /api/events/registrations/me.",
-        "operationId": "listOwnRegistrations",
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 0
-            }
-          },
-          {
-            "name": "size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 20
-            }
-          },
-          {
-            "name": "sort",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "eventDateTime,asc"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PagedResponseEventResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/auth/me": {
       "get": {
         "tags": [
           "auth-controller"
         ],
         "summary": "Own profile",
-        "description": "Access: USER, STAFF, ADMIN. Canonical operation: GET /api/auth/me.",
+        "description": "Access: USER, MANAGER, ADMIN. Canonical operation: GET /api/auth/me.",
         "operationId": "currentUser",
         "responses": {
           "200": {
@@ -3182,701 +949,81 @@
           }
         }
       }
-    },
-    "/api/analytics/tasks": {
-      "get": {
-        "tags": [
-          "analytics-controller"
-        ],
-        "summary": "Task completion/overdue",
-        "description": "Access: ADMIN. Canonical operation: GET /api/analytics/tasks.",
-        "operationId": "tasks",
-        "parameters": [
-          {
-            "name": "departmentId",
-            "in": "query",
-            "description": "Positive Department ID; unknown ID returns zero counts.",
-            "schema": {
-              "type": "integer",
-              "format": "int64",
-              "minimum": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaskAnalyticsResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/analytics/rooms": {
-      "get": {
-        "tags": [
-          "analytics-controller"
-        ],
-        "summary": "Room readiness/turnover",
-        "description": "Access: ADMIN. Canonical operation: GET /api/analytics/rooms.",
-        "operationId": "rooms",
-        "parameters": [
-          {
-            "name": "floor",
-            "in": "query",
-            "description": "Optional floor, 1–99; omitted includes all floors.",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "maximum": 99,
-              "minimum": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RoomAnalyticsResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/analytics/inventory-events": {
-      "get": {
-        "tags": [
-          "analytics-controller"
-        ],
-        "summary": "Inventory thresholds and global event registration/preparation",
-        "description": "Access: ADMIN. Canonical operation: GET /api/analytics/inventory-events.",
-        "operationId": "operations",
-        "parameters": [
-          {
-            "name": "departmentId",
-            "in": "query",
-            "description": "Positive Department ID filters Inventory only; Events remain global. No date filters.",
-            "schema": {
-              "type": "integer",
-              "format": "int64",
-              "minimum": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OperationsAnalyticsResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/analytics/departments": {
-      "get": {
-        "tags": [
-          "analytics-controller"
-        ],
-        "summary": "Department workload",
-        "description": "Access: ADMIN. Canonical operation: GET /api/analytics/departments.",
-        "operationId": "departments",
-        "parameters": [
-          {
-            "name": "departmentId",
-            "in": "query",
-            "description": "Optional positive Department ID; unknown ID returns 404.",
-            "schema": {
-              "type": "integer",
-              "format": "int64",
-              "minimum": 1
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "description": "Zero-based page; fixed Department ID ascending order.",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 0,
-              "minimum": 0
-            }
-          },
-          {
-            "name": "size",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 20,
-              "maximum": 100,
-              "minimum": 1
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DepartmentAnalyticsResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/analytics/dashboard": {
-      "get": {
-        "tags": [
-          "analytics-controller"
-        ],
-        "summary": "Role-specific dashboard",
-        "description": "Access: USER, STAFF, ADMIN. Canonical operation: GET /api/analytics/dashboard.",
-        "operationId": "dashboard",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DashboardResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Safe unexpected error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/alerts": {
-      "get": {
-        "tags": [
-          "alert-controller"
-        ],
-        "summary": "Own alerts or ADMIN oversight",
-        "description": "Access: STAFF own, ADMIN. Canonical operation: GET /api/alerts.",
-        "operationId": "listAlerts",
-        "parameters": [
-          {
-            "name": "employeeId",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          },
-          {
-            "name": "type",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "ROOM",
-                "TASK",
-                "INVENTORY",
-                "SYSTEM"
-              ]
-            }
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "UNREAD",
-                "READ",
-                "RESOLVED"
-              ]
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 0
-            }
-          },
-          {
-            "name": "size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 20
-            }
-          },
-          {
-            "name": "sort",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "createdAt,desc"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PagedResponseAlertResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/alerts/{alertId}": {
-      "get": {
-        "tags": [
-          "alert-controller"
-        ],
-        "summary": "Alert detail",
-        "description": "Access: Recipient STAFF, ADMIN. Canonical operation: GET /api/alerts/{alertId}.",
-        "operationId": "getAlert",
-        "parameters": [
-          {
-            "name": "alertId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlertResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "alert-controller"
-        ],
-        "summary": "Resolve/dismiss alert without physical deletion",
-        "description": "Access: Recipient STAFF, ADMIN. Canonical operation: DELETE /api/alerts/{alertId}.",
-        "operationId": "resolveAlert",
-        "parameters": [
-          {
-            "name": "alertId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/events/{eventId}/registrations/me": {
-      "delete": {
-        "tags": [
-          "event-controller"
-        ],
-        "summary": "Withdraw current USER",
-        "description": "Access: USER. Canonical operation: DELETE /api/events/{eventId}/registrations/me.",
-        "operationId": "withdraw",
-        "parameters": [
-          {
-            "name": "eventId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "401": {
-            "description": "Authentication required or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Role, ownership or eligibility denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Business or lifecycle conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
     }
   },
   "components": {
     "schemas": {
-      "UpdateTaskRequest": {
+      "UpdateUserRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 2
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 120,
+            "minLength": 0
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "MANAGER",
+              "ADMIN"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "active",
+          "email",
+          "name",
+          "role"
+        ]
+      },
+      "UserResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "MANAGER",
+              "ADMIN"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TaskRequest": {
         "type": "object",
         "properties": {
           "title": {
             "type": "string",
-            "maxLength": 120,
-            "minLength": 3
+            "maxLength": 150,
+            "minLength": 2
           },
           "description": {
             "type": "string",
             "maxLength": 1000,
             "minLength": 0
-          },
-          "departmentId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "assignedEmployeeId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "roomId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "eventId": {
-            "type": "integer",
-            "format": "int64"
           },
           "priority": {
             "type": "string",
@@ -3887,15 +1034,13 @@
               "URGENT"
             ]
           },
-          "status": {
-            "type": "string",
-            "enum": [
-              "OPEN",
-              "ASSIGNED",
-              "IN_PROGRESS",
-              "COMPLETED",
-              "CANCELLED"
-            ]
+          "assignedUserId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "roomId": {
+            "type": "integer",
+            "format": "int64"
           },
           "dueAt": {
             "type": "string",
@@ -3903,10 +1048,302 @@
           }
         },
         "required": [
-          "departmentId",
+          "assignedUserId",
           "priority",
-          "status",
+          "roomId",
           "title"
+        ]
+      },
+      "RoomResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "roomNumber": {
+            "type": "string"
+          },
+          "floor": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "READY",
+              "DIRTY",
+              "CLEANING",
+              "INSPECTION",
+              "OUT_OF_SERVICE"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TaskResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ASSIGNED",
+              "IN_PROGRESS",
+              "COMPLETED",
+              "CANCELLED"
+            ]
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "URGENT"
+            ]
+          },
+          "assignedUser": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "room": {
+            "$ref": "#/components/schemas/RoomResponse"
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UserSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "TaskStatusRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ASSIGNED",
+              "IN_PROGRESS",
+              "COMPLETED",
+              "CANCELLED"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "RoomRequest": {
+        "type": "object",
+        "properties": {
+          "roomNumber": {
+            "type": "string",
+            "maxLength": 10,
+            "minLength": 0
+          },
+          "floor": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 99,
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "READY",
+              "DIRTY",
+              "CLEANING",
+              "INSPECTION",
+              "OUT_OF_SERVICE"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "floor",
+          "roomNumber"
+        ]
+      },
+      "RoomStatusRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "READY",
+              "DIRTY",
+              "CLEANING",
+              "INSPECTION",
+              "OUT_OF_SERVICE"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 2
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 120,
+            "minLength": 0
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 72,
+            "minLength": 8
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "MANAGER",
+              "ADMIN"
+            ]
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "password",
+          "role"
+        ]
+      },
+      "InspectionRequest": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "PASS",
+              "FAIL"
+            ]
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 0
+          }
+        },
+        "required": [
+          "result",
+          "taskId"
+        ]
+      },
+      "InspectionResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "roomId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "taskId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "inspectedBy": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "PASS",
+              "FAIL"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          },
+          "inspectedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RegisterUserRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 2
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 120,
+            "minLength": 0
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 72,
+            "minLength": 8
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "password"
         ]
       },
       "ApiError": {
@@ -3936,909 +1373,6 @@
             }
           }
         }
-      },
-      "DepartmentSummary": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "name": {
-            "type": "string"
-          }
-        }
-      },
-      "TaskEmployeeSummary": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "name": {
-            "type": "string"
-          }
-        }
-      },
-      "TaskEventSummary": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "title": {
-            "type": "string"
-          },
-          "eventDateTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "DRAFT",
-              "OPEN",
-              "CLOSED",
-              "IN_PROGRESS",
-              "COMPLETED",
-              "CANCELLED"
-            ]
-          }
-        }
-      },
-      "TaskResponse": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "OPEN",
-              "ASSIGNED",
-              "IN_PROGRESS",
-              "COMPLETED",
-              "CANCELLED"
-            ]
-          },
-          "priority": {
-            "type": "string",
-            "enum": [
-              "LOW",
-              "MEDIUM",
-              "HIGH",
-              "URGENT"
-            ]
-          },
-          "department": {
-            "$ref": "#/components/schemas/DepartmentSummary"
-          },
-          "assignedEmployee": {
-            "$ref": "#/components/schemas/TaskEmployeeSummary"
-          },
-          "room": {
-            "$ref": "#/components/schemas/TaskRoomSummary"
-          },
-          "event": {
-            "$ref": "#/components/schemas/TaskEventSummary"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "dueAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "completedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "TaskRoomSummary": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "roomNumber": {
-            "type": "string"
-          }
-        }
-      },
-      "UpdateRoomRequest": {
-        "type": "object",
-        "properties": {
-          "roomType": {
-            "type": "string",
-            "maxLength": 50,
-            "minLength": 2
-          },
-          "floor": {
-            "type": "integer",
-            "format": "int32",
-            "maximum": 99,
-            "minimum": 1
-          },
-          "nextArrivalAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "active": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "active",
-          "floor",
-          "roomType"
-        ]
-      },
-      "RoomResponse": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "roomNumber": {
-            "type": "string"
-          },
-          "roomType": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "READY",
-              "OCCUPIED",
-              "DIRTY",
-              "CLEANING",
-              "INSPECTION",
-              "MAINTENANCE",
-              "OUT_OF_SERVICE"
-            ]
-          },
-          "floor": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "nextArrivalAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "active": {
-            "type": "boolean"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "UpdateInventoryItemRequest": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 120,
-            "minLength": 2
-          },
-          "quantity": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "reorderThreshold": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "departmentId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "active": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "active",
-          "departmentId",
-          "name",
-          "quantity",
-          "reorderThreshold"
-        ]
-      },
-      "InventoryItemResponse": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "name": {
-            "type": "string"
-          },
-          "sku": {
-            "type": "string"
-          },
-          "quantity": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "reorderThreshold": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "department": {
-            "$ref": "#/components/schemas/DepartmentSummary"
-          },
-          "active": {
-            "type": "boolean"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "UpdateEventRequest": {
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string",
-            "maxLength": 120,
-            "minLength": 3
-          },
-          "description": {
-            "type": "string",
-            "maxLength": 1000,
-            "minLength": 0
-          },
-          "eventDateTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "location": {
-            "type": "string",
-            "maxLength": 120,
-            "minLength": 2
-          },
-          "capacity": {
-            "type": "integer",
-            "format": "int32",
-            "maximum": 10000,
-            "minimum": 1
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "DRAFT",
-              "OPEN",
-              "CLOSED",
-              "IN_PROGRESS",
-              "COMPLETED",
-              "CANCELLED"
-            ]
-          }
-        },
-        "required": [
-          "capacity",
-          "eventDateTime",
-          "location",
-          "status",
-          "title"
-        ]
-      },
-      "EventResponse": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "eventDateTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "location": {
-            "type": "string"
-          },
-          "capacity": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "DRAFT",
-              "OPEN",
-              "CLOSED",
-              "IN_PROGRESS",
-              "COMPLETED",
-              "CANCELLED"
-            ]
-          },
-          "registeredCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "remainingCapacity": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "taskCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "completedTaskCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "UpdateEmployeeRequest": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 100,
-            "minLength": 2
-          },
-          "email": {
-            "type": "string",
-            "format": "email",
-            "maxLength": 120,
-            "minLength": 0
-          },
-          "departmentId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "jobRole": {
-            "type": "string",
-            "maxLength": 80,
-            "minLength": 2
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "ACTIVE",
-              "INACTIVE"
-            ]
-          }
-        },
-        "required": [
-          "departmentId",
-          "email",
-          "jobRole",
-          "name",
-          "status"
-        ]
-      },
-      "EmployeeResponse": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "userId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "name": {
-            "type": "string"
-          },
-          "email": {
-            "type": "string"
-          },
-          "department": {
-            "$ref": "#/components/schemas/DepartmentSummary"
-          },
-          "jobRole": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "ACTIVE",
-              "INACTIVE"
-            ]
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "UpdateDepartmentRequest": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 100,
-            "minLength": 2
-          },
-          "description": {
-            "type": "string",
-            "maxLength": 255,
-            "minLength": 0
-          }
-        },
-        "required": [
-          "name"
-        ]
-      },
-      "DepartmentResponse": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "active": {
-            "type": "boolean"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "AlertEmployeeSummary": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "name": {
-            "type": "string"
-          }
-        }
-      },
-      "AlertResponse": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "ROOM",
-              "TASK",
-              "INVENTORY",
-              "SYSTEM"
-            ]
-          },
-          "message": {
-            "type": "string"
-          },
-          "severity": {
-            "type": "string",
-            "enum": [
-              "INFO",
-              "WARNING",
-              "HIGH",
-              "CRITICAL"
-            ]
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "UNREAD",
-              "READ",
-              "RESOLVED"
-            ]
-          },
-          "employee": {
-            "$ref": "#/components/schemas/AlertEmployeeSummary"
-          },
-          "task": {
-            "$ref": "#/components/schemas/AlertTaskSummary"
-          },
-          "sourceKey": {
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "readAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "resolvedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "AlertTaskSummary": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "title": {
-            "type": "string"
-          }
-        }
-      },
-      "CreateTaskRequest": {
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string",
-            "maxLength": 120,
-            "minLength": 3
-          },
-          "description": {
-            "type": "string",
-            "maxLength": 1000,
-            "minLength": 0
-          },
-          "departmentId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "assignedEmployeeId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "roomId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "eventId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "priority": {
-            "type": "string",
-            "enum": [
-              "LOW",
-              "MEDIUM",
-              "HIGH",
-              "URGENT"
-            ]
-          },
-          "dueAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "departmentId",
-          "title"
-        ]
-      },
-      "CreateRoomRequest": {
-        "type": "object",
-        "properties": {
-          "roomNumber": {
-            "type": "string",
-            "minLength": 1
-          },
-          "roomType": {
-            "type": "string",
-            "maxLength": 50,
-            "minLength": 2
-          },
-          "floor": {
-            "type": "integer",
-            "format": "int32",
-            "maximum": 99,
-            "minimum": 1
-          },
-          "initialStatus": {
-            "type": "string",
-            "enum": [
-              "READY",
-              "OCCUPIED",
-              "DIRTY",
-              "CLEANING",
-              "INSPECTION",
-              "MAINTENANCE",
-              "OUT_OF_SERVICE"
-            ]
-          },
-          "nextArrivalAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "floor",
-          "roomNumber",
-          "roomType"
-        ]
-      },
-      "CreateInventoryItemRequest": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 120,
-            "minLength": 2
-          },
-          "sku": {
-            "type": "string",
-            "minLength": 1
-          },
-          "quantity": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "reorderThreshold": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "departmentId": {
-            "type": "integer",
-            "format": "int64"
-          }
-        },
-        "required": [
-          "departmentId",
-          "name",
-          "quantity",
-          "reorderThreshold",
-          "sku"
-        ]
-      },
-      "CreateEventRequest": {
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string",
-            "maxLength": 120,
-            "minLength": 3
-          },
-          "description": {
-            "type": "string",
-            "maxLength": 1000,
-            "minLength": 0
-          },
-          "eventDateTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "location": {
-            "type": "string",
-            "maxLength": 120,
-            "minLength": 2
-          },
-          "capacity": {
-            "type": "integer",
-            "format": "int32",
-            "maximum": 10000,
-            "minimum": 1
-          },
-          "initialStatus": {
-            "type": "string",
-            "enum": [
-              "DRAFT",
-              "OPEN",
-              "CLOSED",
-              "IN_PROGRESS",
-              "COMPLETED",
-              "CANCELLED"
-            ]
-          }
-        },
-        "required": [
-          "capacity",
-          "eventDateTime",
-          "location",
-          "title"
-        ]
-      },
-      "EventRegistrationResponse": {
-        "type": "object",
-        "properties": {
-          "userId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "event": {
-            "$ref": "#/components/schemas/EventSummary"
-          }
-        }
-      },
-      "EventSummary": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "title": {
-            "type": "string"
-          },
-          "eventDateTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "location": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "DRAFT",
-              "OPEN",
-              "CLOSED",
-              "IN_PROGRESS",
-              "COMPLETED",
-              "CANCELLED"
-            ]
-          },
-          "remainingCapacity": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }
-      },
-      "CreateEmployeeRequest": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 100,
-            "minLength": 2
-          },
-          "email": {
-            "type": "string",
-            "format": "email",
-            "maxLength": 120,
-            "minLength": 0
-          },
-          "departmentId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "jobRole": {
-            "type": "string",
-            "maxLength": 80,
-            "minLength": 2
-          },
-          "createLogin": {
-            "type": "boolean"
-          },
-          "loginEmail": {
-            "type": "string",
-            "format": "email",
-            "maxLength": 120,
-            "minLength": 0
-          },
-          "temporaryPassword": {
-            "type": "string",
-            "maxLength": 72,
-            "minLength": 8
-          },
-          "securityRole": {
-            "type": "string",
-            "enum": [
-              "USER",
-              "STAFF",
-              "ADMIN"
-            ]
-          },
-          "loginConfigurationValid": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "createLogin",
-          "departmentId",
-          "email",
-          "jobRole",
-          "name"
-        ]
-      },
-      "CreateDepartmentRequest": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 100,
-            "minLength": 2
-          },
-          "description": {
-            "type": "string",
-            "maxLength": 255,
-            "minLength": 0
-          }
-        },
-        "required": [
-          "name"
-        ]
-      },
-      "RegisterUserRequest": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 100,
-            "minLength": 2
-          },
-          "email": {
-            "type": "string",
-            "format": "email",
-            "maxLength": 120,
-            "minLength": 0
-          },
-          "password": {
-            "type": "string",
-            "maxLength": 72,
-            "minLength": 8
-          }
-        },
-        "required": [
-          "email",
-          "name",
-          "password"
-        ]
       },
       "AuthResponse": {
         "type": "object",
@@ -4879,23 +1413,12 @@
             "type": "string",
             "enum": [
               "USER",
-              "STAFF",
+              "MANAGER",
               "ADMIN"
             ]
           },
-          "departmentSummary": {
-            "$ref": "#/components/schemas/DepartmentSummary"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "ACTIVE",
-              "INACTIVE"
-            ]
-          },
-          "employeeId": {
-            "type": "integer",
-            "format": "int64"
+          "active": {
+            "type": "boolean"
           }
         }
       },
@@ -4918,517 +1441,6 @@
           "email",
           "password"
         ]
-      },
-      "AssignTaskRequest": {
-        "type": "object",
-        "properties": {
-          "employeeId": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }
-      },
-      "UpdateRoomStatusRequest": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string",
-            "enum": [
-              "READY",
-              "OCCUPIED",
-              "DIRTY",
-              "CLEANING",
-              "INSPECTION",
-              "MAINTENANCE",
-              "OUT_OF_SERVICE"
-            ]
-          }
-        },
-        "required": [
-          "status"
-        ]
-      },
-      "PagedResponseTaskResponse": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/TaskResponse"
-            }
-          },
-          "page": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "size": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "totalElements": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "totalPages": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "last": {
-            "type": "boolean"
-          }
-        }
-      },
-      "PagedResponseRoomResponse": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RoomResponse"
-            }
-          },
-          "page": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "size": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "totalElements": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "totalPages": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "last": {
-            "type": "boolean"
-          }
-        }
-      },
-      "PagedResponseInventoryItemResponse": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/InventoryItemResponse"
-            }
-          },
-          "page": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "size": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "totalElements": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "totalPages": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "last": {
-            "type": "boolean"
-          }
-        }
-      },
-      "PagedResponseEventResponse": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/EventResponse"
-            }
-          },
-          "page": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "size": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "totalElements": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "totalPages": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "last": {
-            "type": "boolean"
-          }
-        }
-      },
-      "PagedResponseEmployeeResponse": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/EmployeeResponse"
-            }
-          },
-          "page": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "size": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "totalElements": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "totalPages": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "last": {
-            "type": "boolean"
-          }
-        }
-      },
-      "TaskAnalyticsResponse": {
-        "type": "object",
-        "properties": {
-          "asOf": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "departmentId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "totalTaskCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "taskCountsByStatus": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "integer",
-              "format": "int64"
-            }
-          },
-          "overdueTaskCount": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }
-      },
-      "RoomAnalyticsResponse": {
-        "type": "object",
-        "properties": {
-          "asOf": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "floor": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "activeRoomCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "roomCountsByStatus": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        }
-      },
-      "EventCounts": {
-        "type": "object",
-        "properties": {
-          "eventCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "eventCountsByStatus": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "integer",
-              "format": "int64"
-            }
-          },
-          "registrationCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "eventTaskCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "completedEventTaskCount": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }
-      },
-      "InventoryCounts": {
-        "type": "object",
-        "properties": {
-          "departmentId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "activeInventoryItemCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "lowStockItemCount": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }
-      },
-      "OperationsAnalyticsResponse": {
-        "type": "object",
-        "properties": {
-          "asOf": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "inventory": {
-            "$ref": "#/components/schemas/InventoryCounts"
-          },
-          "events": {
-            "$ref": "#/components/schemas/EventCounts"
-          }
-        }
-      },
-      "DepartmentAnalyticsResponse": {
-        "type": "object",
-        "properties": {
-          "asOf": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "departments": {
-            "$ref": "#/components/schemas/PagedResponseDepartmentWorkloadSummary"
-          }
-        }
-      },
-      "DepartmentWorkloadSummary": {
-        "type": "object",
-        "properties": {
-          "departmentId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "name": {
-            "type": "string"
-          },
-          "active": {
-            "type": "boolean"
-          },
-          "activeEmployeeCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "nonTerminalTaskCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "overdueTaskCount": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }
-      },
-      "PagedResponseDepartmentWorkloadSummary": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DepartmentWorkloadSummary"
-            }
-          },
-          "page": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "size": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "totalElements": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "totalPages": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "last": {
-            "type": "boolean"
-          }
-        }
-      },
-      "AdminDashboard": {
-        "type": "object",
-        "properties": {
-          "activeRoomCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "readyRoomCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "nonTerminalTaskCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "overdueTaskCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "completedTaskCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "activeDepartmentCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "unresolvedAlertCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "activeInventoryItemCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "lowStockItemCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "nonTerminalEventCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "registrationCount": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }
-      },
-      "DashboardResponse": {
-        "type": "object",
-        "properties": {
-          "role": {
-            "type": "string",
-            "enum": [
-              "USER",
-              "STAFF",
-              "ADMIN"
-            ]
-          },
-          "asOf": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "user": {
-            "$ref": "#/components/schemas/UserDashboard"
-          },
-          "staff": {
-            "$ref": "#/components/schemas/StaffDashboard"
-          },
-          "admin": {
-            "$ref": "#/components/schemas/AdminDashboard"
-          }
-        }
-      },
-      "StaffDashboard": {
-        "type": "object",
-        "properties": {
-          "employeeId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "departmentId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "nonTerminalAssignedTaskCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "overdueAssignedTaskCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "unreadAlertCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "unresolvedAlertCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "activeInventoryItemCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "lowStockItemCount": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }
-      },
-      "UserDashboard": {
-        "type": "object",
-        "properties": {
-          "registrationCount": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }
-      },
-      "PagedResponseAlertResponse": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AlertResponse"
-            }
-          },
-          "page": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "size": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "totalElements": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "totalPages": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "last": {
-            "type": "boolean"
-          }
-        }
       }
     },
     "securitySchemes": {

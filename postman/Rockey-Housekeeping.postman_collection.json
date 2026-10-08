@@ -1,0 +1,3837 @@
+{
+  "info": {
+    "name": "Rockey Housekeeping — API verification",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Disposable four-table housekeeping workflow. Supply adminEmail/adminPassword privately, never export environment/results containing tokens. This collection intentionally preserves test history."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:18080/api"
+    },
+    {
+      "key": "adminEmail",
+      "value": ""
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Public registration is USER only",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/register",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Verification housekeeper\",\n  \"email\": \"hk-worker-{{runId}}@example.test\",\n  \"password\": \"{{fixturePassword}}\",\n  \"role\": \"ADMIN\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201',()=>pm.response.to.have.status(201));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "pm.test('Public role remains USER',()=>pm.expect(resultBody.user.role).to.equal('USER')); pm.variables.set('workerId',resultBody.user.id); if (pm.response.code < 300 && resultBody) {  pm.variables.set('workerToken',resultBody.accessToken); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "if (pm.response.code < 300 && resultBody) {  pm.variables.set('adminToken',resultBody.accessToken); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Own safe profile",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/me"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "pm.test('Bootstrap admin',()=>pm.expect(resultBody.role).to.equal('ADMIN'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin creates Manager",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/users",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Verification manager\",\n  \"email\": \"hk-manager-{{runId}}@example.test\",\n  \"password\": \"{{fixturePassword}}\",\n  \"role\": \"MANAGER\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201',()=>pm.response.to.have.status(201));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "if (pm.response.code < 300 && resultBody) { pm.variables.set('managerId',resultBody.id);  }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Manager login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"hk-manager-{{runId}}@example.test\",\n  \"password\": \"{{fixturePassword}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "if (pm.response.code < 300 && resultBody) {  pm.variables.set('managerToken',resultBody.accessToken); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Manager creates USER",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/users",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Other verification housekeeper\",\n  \"email\": \"hk-other-{{runId}}@example.test\",\n  \"password\": \"{{fixturePassword}}\",\n  \"role\": \"USER\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201',()=>pm.response.to.have.status(201));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "if (pm.response.code < 300 && resultBody) { pm.variables.set('otherId',resultBody.id);  }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Other USER login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"hk-other-{{runId}}@example.test\",\n  \"password\": \"{{fixturePassword}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "if (pm.response.code < 300 && resultBody) {  pm.variables.set('otherToken',resultBody.accessToken); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Manager list scope",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/users"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "pm.test('Housekeepers only',()=>pm.expect(resultBody.every(u=>u.role==='USER')).to.be.true);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Read worker",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/users/{{workerId}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Manager cannot create Manager",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/users",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Rejected manager\",\n  \"email\": \"rejected-{{runId}}@example.test\",\n  \"password\": \"{{fixturePassword}}\",\n  \"role\": \"MANAGER\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 403',()=>pm.response.to.have.status(403));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "USER cannot list team",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{workerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/users"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 403',()=>pm.response.to.have.status(403));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create dirty room",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomNumber\": \"HK-{{runId}}\",\n  \"floor\": 1,\n  \"status\": \"DIRTY\",\n  \"active\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201',()=>pm.response.to.have.status(201));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "if (pm.response.code < 300 && resultBody) { pm.variables.set('roomId',resultBody.id);  }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Duplicate room conflicts",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomNumber\": \"HK-{{runId}}\",\n  \"floor\": 1,\n  \"status\": \"DIRTY\",\n  \"active\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 409',()=>pm.response.to.have.status(409));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "List rooms is an array",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "pm.test('Plain list',()=>pm.expect(Array.isArray(resultBody)).to.be.true);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Room detail",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms/{{roomId}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "USER cannot list rooms",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{workerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 403',()=>pm.response.to.have.status(403));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create assigned task",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Clean verification room\",\n  \"description\": \"Disposable housekeeping verification\",\n  \"priority\": \"HIGH\",\n  \"assignedUserId\": \"{{workerId}}\",\n  \"roomId\": \"{{roomId}}\",\n  \"dueAt\": \"2020-07-01T08:00:00\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201',()=>pm.response.to.have.status(201));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "if (pm.response.code < 300 && resultBody) { pm.variables.set('taskId',resultBody.id);  }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Duplicate active task conflicts",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Clean verification room\",\n  \"description\": \"Disposable housekeeping verification\",\n  \"priority\": \"HIGH\",\n  \"assignedUserId\": \"{{workerId}}\",\n  \"roomId\": \"{{roomId}}\",\n  \"dueAt\": \"2020-07-01T08:00:00\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 409',()=>pm.response.to.have.status(409));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Active-work room deactivation conflicts",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms/{{roomId}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 409',()=>pm.response.to.have.status(409));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Active-work user deactivation conflicts",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/users/{{workerId}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 409',()=>pm.response.to.have.status(409));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Worker task list is own scope",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{workerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "pm.test('Owned tasks only',()=>pm.expect(resultBody.every(t=>t.assignedUser.id===Number(pm.variables.get('workerId')))).to.be.true);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Task detail",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{workerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{taskId}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cross-user task detail denied",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{otherToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{taskId}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 403',()=>pm.response.to.have.status(403));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cross-user start denied",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{otherToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{taskId}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 403',()=>pm.response.to.have.status(403));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Supervisor edits assignment",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{taskId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Updated clean\",\n  \"description\": \"Disposable housekeeping verification\",\n  \"priority\": \"URGENT\",\n  \"assignedUserId\": \"{{workerId}}\",\n  \"roomId\": \"{{roomId}}\",\n  \"dueAt\": \"2020-07-01T08:00:00\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "MANAGER cannot start housekeeper work",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{taskId}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 403',()=>pm.response.to.have.status(403));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ADMIN cannot start housekeeper work",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{taskId}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 403',()=>pm.response.to.have.status(403));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Worker starts cleaning",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{workerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{taskId}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "pm.test('Room cleaning',()=>pm.expect(resultBody.room.status).to.equal('CLEANING'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "MANAGER cannot complete housekeeper work",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{taskId}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"COMPLETED\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 403',()=>pm.response.to.have.status(403));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ADMIN cannot complete housekeeper work",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{taskId}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"COMPLETED\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 403',()=>pm.response.to.have.status(403));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cross-user completion denied",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{otherToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{taskId}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"COMPLETED\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 403',()=>pm.response.to.have.status(403));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Worker completes cleaning",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{workerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{taskId}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"COMPLETED\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "pm.test('Room awaits inspection',()=>pm.expect(resultBody.room.status).to.equal('INSPECTION'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "USER cannot inspect",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{workerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms/{{roomId}}/inspections",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"taskId\": \"{{taskId}}\",\n  \"result\": \"PASS\",\n  \"notes\": \"Rejected\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 403',()=>pm.response.to.have.status(403));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Supervisor records FAIL",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms/{{roomId}}/inspections",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"taskId\": \"{{taskId}}\",\n  \"result\": \"FAIL\",\n  \"notes\": \"Rework required\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201',()=>pm.response.to.have.status(201));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "pm.test('Inspection result',()=>pm.expect(resultBody.result).to.equal('FAIL'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "FAIL leaves room DIRTY",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms/{{roomId}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "pm.test('Room dirty',()=>pm.expect(resultBody.status).to.equal('DIRTY'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Second cleaning task",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Clean verification room\",\n  \"description\": \"Disposable housekeeping verification\",\n  \"priority\": \"HIGH\",\n  \"assignedUserId\": \"{{workerId}}\",\n  \"roomId\": \"{{roomId}}\",\n  \"dueAt\": \"2020-07-01T08:00:00\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201',()=>pm.response.to.have.status(201));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "if (pm.response.code < 300 && resultBody) { pm.variables.set('taskId',resultBody.id);  }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Second task start",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{workerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{taskId}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Second task complete",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{workerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{taskId}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"COMPLETED\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Supervisor records PASS",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms/{{roomId}}/inspections",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"taskId\": \"{{taskId}}\",\n  \"result\": \"PASS\",\n  \"notes\": \"Room ready\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201',()=>pm.response.to.have.status(201));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "PASS leaves room READY",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms/{{roomId}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "pm.test('Room ready',()=>pm.expect(resultBody.status).to.equal('READY'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inspection history retained",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms/{{roomId}}/inspections"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "pm.test('Both inspections retained',()=>pm.expect(resultBody.map(i=>i.result)).to.deep.equal(['PASS','FAIL']));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Completed task cannot be cancelled",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{taskId}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 409',()=>pm.response.to.have.status(409));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Room floor update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms/{{roomId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomNumber\": \"HK-{{runId}}\",\n  \"floor\": 2,\n  \"active\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Room out of service",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms/{{roomId}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"OUT_OF_SERVICE\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reopen room DIRTY",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms/{{roomId}}/status",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"DIRTY\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Third cleaning task",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Clean verification room\",\n  \"description\": \"Disposable housekeeping verification\",\n  \"priority\": \"HIGH\",\n  \"assignedUserId\": \"{{workerId}}\",\n  \"roomId\": \"{{roomId}}\",\n  \"dueAt\": \"2020-07-01T08:00:00\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201',()=>pm.response.to.have.status(201));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "if (pm.response.code < 300 && resultBody) { pm.variables.set('cancelTaskId',resultBody.id);  }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Task DELETE soft cancels",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{cancelTaskId}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 204',()=>pm.response.to.have.status(204));",
+              "pm.test('No response body',()=>pm.expect(pm.response.text()).to.equal(''));",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Repeat cancel remains safe",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{cancelTaskId}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 204',()=>pm.response.to.have.status(204));",
+              "pm.test('No response body',()=>pm.expect(pm.response.text()).to.equal(''));",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cancelled task remains readable",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks/{{cancelTaskId}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "pm.test('History retained',()=>pm.expect(resultBody.status).to.equal('CANCELLED'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Room DELETE soft deactivates",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms/{{roomId}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 204',()=>pm.response.to.have.status(204));",
+              "pm.test('No response body',()=>pm.expect(pm.response.text()).to.equal(''));",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inactive room retained",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms/{{roomId}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "pm.test('Soft lifecycle',()=>pm.expect(resultBody.active).to.be.false);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inactive room cannot receive work",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Clean verification room\",\n  \"description\": \"Disposable housekeeping verification\",\n  \"priority\": \"HIGH\",\n  \"assignedUserId\": \"{{workerId}}\",\n  \"roomId\": \"{{roomId}}\",\n  \"dueAt\": \"2020-07-01T08:00:00\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 409',()=>pm.response.to.have.status(409));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin updates account",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/users/{{otherId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Updated worker\",\n  \"email\": \"hk-other-{{runId}}@example.test\",\n  \"role\": \"USER\",\n  \"active\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Manager cannot update account",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/users/{{otherId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Forbidden update\",\n  \"email\": \"hk-other-{{runId}}@example.test\",\n  \"role\": \"USER\",\n  \"active\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 403',()=>pm.response.to.have.status(403));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin deactivates worker",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/users/{{otherId}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 204',()=>pm.response.to.have.status(204));",
+              "pm.test('No response body',()=>pm.expect(pm.response.text()).to.equal(''));",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Old access token rejected after deactivation",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{otherToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 401',()=>pm.response.to.have.status(401));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inactive user remains readable",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/users/{{otherId}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "pm.test('Inactive retained',()=>pm.expect(resultBody.active).to.be.false);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invalid room fields return 400",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomNumber\": \"\",\n  \"floor\": 0\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400',()=>pm.response.to.have.status(400));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Missing room returns 404",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{managerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/rooms/9223372036854775807"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 404',()=>pm.response.to.have.status(404));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin login for refresh checks",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "if (pm.response.code < 300 && resultBody) {  pm.variables.set('adminToken',resultBody.accessToken); }pm.variables.set('oldCookie',pm.response.headers.get('Set-Cookie').split(';')[0]);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Refresh trusted Origin",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "{{oldCookie}}"
+          },
+          {
+            "key": "Origin",
+            "value": "http://localhost:5173"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/refresh"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200',()=>pm.response.to.have.status(200));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              "if (pm.response.code < 300 && resultBody) {  pm.variables.set('adminToken',resultBody.accessToken); }pm.variables.set('rotatedCookie',pm.response.headers.get('Set-Cookie').split(';')[0]);"
+            ]
+          }
+        }
+      ],
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      }
+    },
+    {
+      "name": "Old refresh token revoked",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "{{oldCookie}}"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/refresh"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 401',()=>pm.response.to.have.status(401));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ],
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      }
+    },
+    {
+      "name": "Untrusted refresh Origin rejected",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "{{rotatedCookie}}"
+          },
+          {
+            "key": "Origin",
+            "value": "https://untrusted.example.test"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/refresh"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 403',()=>pm.response.to.have.status(403));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ],
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      }
+    },
+    {
+      "name": "Logout revokes refresh and expires cookie",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/logout"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 204',()=>pm.response.to.have.status(204));",
+              "pm.test('No response body',()=>pm.expect(pm.response.text()).to.equal(''));",
+              "pm.test('Cookie expired',()=>pm.expect(pm.response.headers.get('Set-Cookie')).to.include('Max-Age=0'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Refresh after logout rejected",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "{{rotatedCookie}}"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/refresh"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 401',()=>pm.response.to.have.status(401));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ],
+      "protocolProfileBehavior": {
+        "disableCookies": true
+      }
+    },
+    {
+      "name": "Repeat authenticated logout remains safe",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/logout"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 204',()=>pm.response.to.have.status(204));",
+              "pm.test('No response body',()=>pm.expect(pm.response.text()).to.equal(''));",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Unauthenticated tasks rejected",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.get('runId') || pm.variables.replaceIn('{{$guid}}').replace(/-/g,'').slice(0,7);",
+              "pm.variables.set('runId',runId);",
+              "if (!pm.variables.get('fixturePassword')) pm.variables.set('fixturePassword',pm.variables.replaceIn('{{$guid}}'));",
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 401',()=>pm.response.to.have.status(401));",
+              "let resultBody; try { resultBody=pm.response.json(); } catch { resultBody=null; }",
+              "pm.test('No password or refresh-secret fields',()=> {",
+              "  function check(value) {",
+              "    if (!value || typeof value !== 'object') return;",
+              "    for (const [key,item] of Object.entries(value)) {",
+              "      pm.expect(['password','passwordHash','refreshTokenHash','refreshTokenExpiresAt','rawRefreshToken','refreshToken'].includes(key),key).to.be.false;",
+              "      check(item);",
+              "    }",
+              "  } check(resultBody);",
+              "});",
+              ""
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

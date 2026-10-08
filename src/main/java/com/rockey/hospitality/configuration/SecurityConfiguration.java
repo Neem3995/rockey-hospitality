@@ -1,133 +1,64 @@
 package com.rockey.hospitality.configuration;
 
 import com.rockey.hospitality.security.JwtAuthenticationFilter;
-import com.rockey.hospitality.entity.Role;
-import com.rockey.hospitality.security.RestAccessDeniedHandler;
-import com.rockey.hospitality.security.RestAuthenticationEntryPoint;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import com.rockey.hospitality.security.SecurityHandlers.RestAccessDeniedHandler;
+import com.rockey.hospitality.security.SecurityHandlers.RestAuthenticationEntryPoint;
+import java.util.List;
+import org.springframework.context.annotation.*;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.cors.*;
 
-import java.util.List;
-
+/**
+ * STUDY NOTE: Authentication identifies a user; authorization limits that identity's actions.
+ * @Configuration/@Bean build the stateless security chain and explicit credentialed CORS allowlist.
+ * JWT verification reloads active/role state from MySQL; services additionally enforce task ownership.
+ * Bearer APIs do not use CSRF tokens; refresh validates Origin and retains HttpOnly/SameSite controls.
+ */
 @Configuration
 public class SecurityConfiguration {
-
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    private final RestAuthenticationEntryPoint authenticationEntryPoint;
-    private final RestAccessDeniedHandler accessDeniedHandler;
-    private final SecurityProperties securityProperties;
-
-    public SecurityConfiguration(
-            JwtAuthenticationFilter jwtAuthenticationFilter,
-            RestAuthenticationEntryPoint authenticationEntryPoint,
-            RestAccessDeniedHandler accessDeniedHandler,
-            SecurityProperties securityProperties
-    ) {
-        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
-        this.authenticationEntryPoint = authenticationEntryPoint;
-        this.accessDeniedHandler = accessDeniedHandler;
-        this.securityProperties = securityProperties;
+    private final JwtAuthenticationFilter jwt;
+    private final RestAuthenticationEntryPoint unauthorized;
+    private final RestAccessDeniedHandler forbidden;
+    private final SecurityProperties properties;
+    public SecurityConfiguration(JwtAuthenticationFilter jwt, RestAuthenticationEntryPoint unauthorized,
+                                 RestAccessDeniedHandler forbidden, SecurityProperties properties) {
+        this.jwt = jwt; this.unauthorized = unauthorized; this.forbidden = forbidden; this.properties = properties;
     }
-
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-                .csrf(csrf -> csrf.disable())
+        return http.csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .sessionManagement(session -> session.sessionCreationPolicy(
-                        SessionCreationPolicy.STATELESS
-                ))
-                .exceptionHandling(exceptions -> exceptions
-                        .authenticationEntryPoint(authenticationEntryPoint)
-                        .accessDeniedHandler(accessDeniedHandler)
-                )
-                .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers(HttpMethod.GET, "/v3/api-docs", "/v3/api-docs.yaml").hasRole(Role.ADMIN.name())
-                        .requestMatchers("/v3/api-docs/**").denyAll()
-                        .requestMatchers(
-                                HttpMethod.POST,
-                                "/api/auth/register",
-                                "/api/auth/login",
-                                "/api/auth/refresh"
-                        ).permitAll()
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(errors -> errors.authenticationEntryPoint(unauthorized).accessDeniedHandler(forbidden))
+                .authorizeHttpRequests(access -> access
+                        .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/me").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/auth/logout").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/employees").hasRole(Role.ADMIN.name())
-                        .requestMatchers(HttpMethod.GET, "/api/employees/*")
-                        .hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
-                        .requestMatchers("/api/employees/**").hasRole(Role.ADMIN.name())
-                        .requestMatchers(HttpMethod.GET, "/api/departments/**")
-                        .hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
-                        .requestMatchers("/api/departments/**").hasRole(Role.ADMIN.name())
-                        .requestMatchers(HttpMethod.GET, "/api/rooms/**")
-                        .hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
-                        .requestMatchers(HttpMethod.PATCH, "/api/rooms/*/status")
-                        .hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
-                        .requestMatchers("/api/rooms/**").hasRole(Role.ADMIN.name())
-                        .requestMatchers(HttpMethod.GET, "/api/tasks").hasRole(Role.ADMIN.name())
-                        .requestMatchers(HttpMethod.GET, "/api/tasks/assigned/*")
-                        .hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
-                        .requestMatchers(HttpMethod.GET, "/api/tasks/*")
-                        .hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
-                        .requestMatchers(HttpMethod.PATCH, "/api/tasks/*/complete")
-                        .hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
-                        .requestMatchers("/api/tasks/**").hasRole(Role.ADMIN.name())
-                        .requestMatchers(HttpMethod.GET, "/api/events/registrations/me")
-                        .hasRole("USER")
-                        .requestMatchers(HttpMethod.POST, "/api/events/*/registrations")
-                        .hasRole("USER")
-                        .requestMatchers(HttpMethod.DELETE, "/api/events/*/registrations/me")
-                        .hasRole("USER")
-                        .requestMatchers(HttpMethod.GET, "/api/events/**")
-                        .hasAnyRole("USER", Role.STAFF.name(), Role.ADMIN.name())
-                        .requestMatchers("/api/events/**").hasRole(Role.ADMIN.name())
-                        .requestMatchers(HttpMethod.GET, "/api/inventory/**")
-                        .hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
-                        .requestMatchers("/api/inventory/**").hasRole(Role.ADMIN.name())
-                        .requestMatchers(HttpMethod.GET, "/api/alerts/**").hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
-                        .requestMatchers(HttpMethod.PUT, "/api/alerts/*/read").hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
-                        .requestMatchers(HttpMethod.DELETE, "/api/alerts/*").hasAnyRole(Role.STAFF.name(), Role.ADMIN.name())
-                        .requestMatchers("/api/alerts/**").denyAll()
-                        .requestMatchers(HttpMethod.GET, "/api/analytics/dashboard")
-                        .hasAnyRole("USER", Role.STAFF.name(), Role.ADMIN.name())
-                        .requestMatchers(HttpMethod.GET, "/api/analytics/rooms", "/api/analytics/tasks",
-                                "/api/analytics/departments", "/api/analytics/inventory-events").hasRole(Role.ADMIN.name())
-                        .requestMatchers("/api/analytics/**").denyAll()
-                        .anyRequest().authenticated()
-                )
-                .addFilterBefore(
-                        jwtAuthenticationFilter,
-                        UsernamePasswordAuthenticationFilter.class
-                );
-
-        return http.build();
+                        .requestMatchers(HttpMethod.GET, "/v3/api-docs", "/v3/api-docs.yaml").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/users", "/api/users/*").hasAnyRole("MANAGER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/users").hasAnyRole("MANAGER", "ADMIN")
+                        .requestMatchers("/api/users/**").hasRole("ADMIN")
+                        .requestMatchers("/api/rooms/**").hasAnyRole("MANAGER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/tasks", "/api/tasks/*").hasAnyRole("USER", "MANAGER", "ADMIN")
+                        // Shared status route: service permits USER execution and supervisor cancellation only.
+                        .requestMatchers(HttpMethod.PUT, "/api/tasks/*/status").hasAnyRole("USER", "MANAGER", "ADMIN")
+                        .requestMatchers("/api/tasks/**").hasAnyRole("MANAGER", "ADMIN")
+                        .anyRequest().denyAll())
+                .addFilterBefore(jwt, UsernamePasswordAuthenticationFilter.class).build();
     }
-
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(securityProperties.getAllowedOrigins());
-        configuration.setAllowedMethods(List.of(
-                "GET",
-                "POST",
-                "PUT",
-                "PATCH",
-                "DELETE",
-                "OPTIONS"
-        ));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
-        configuration.setAllowCredentials(true);
-
+        CorsConfiguration cors = new CorsConfiguration();
+        cors.setAllowedOrigins(properties.getAllowedOrigins());
+        cors.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        cors.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        cors.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
+        source.registerCorsConfiguration("/**", cors);
         return source;
     }
 }
