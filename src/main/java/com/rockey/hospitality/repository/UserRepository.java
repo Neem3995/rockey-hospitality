@@ -1,39 +1,27 @@
 package com.rockey.hospitality.repository;
 
 import com.rockey.hospitality.entity.User;
-import org.springframework.data.jpa.repository.JpaRepository;
-
-import java.util.Optional;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.*;
+import org.springframework.data.repository.query.Param;
+import java.util.*;
 
 /**
- * STUDY NOTE: A Repository is the data-access layer a Service uses to reach database data.
- * JpaRepository lets Spring Data supply standard create/read/update/delete methods without writing basic
- * SQL.
- * Authentication, Employee and registration services use account lookups, uniqueness checks and membership
- * checks.
- * Spring creates this interface's implementation and sends its queries through JPA/Hibernate to MySQL.
+ * STUDY NOTE: A repository is the service's database-access interface; Spring Data generates this implementation.
+ * JpaRepository supplies save/find operations; method names such as findByEmailIgnoreCase become queries.
+ * @Query gives fixed JPQL, and @Param binds a value into it instead of pasting text into the query.
+ * @Lock(PESSIMISTIC_WRITE) holds the user row until the transaction ends.
+ * It serializes refresh rotation and account changes, such as deactivating a worker while work is assigned.
  */
 public interface UserRepository extends JpaRepository<User, Long> {
-
-    // Repository study key: findBy/existsBy/countBy names are interpreted by Spring Data as queries.
-
-    /**
-     * Finds an account by case-insensitive email for authentication and current-principal loading.
-     */
     Optional<User> findByEmailIgnoreCase(String email);
-
-    /**
-     * Checks login-email uniqueness without revealing the existing account.
-     */
     boolean existsByEmailIgnoreCase(String email);
-
-    /**
-     * Finds the current refresh session by hash rather than raw cookie value.
-     */
+    boolean existsByEmailIgnoreCaseAndIdNot(String email, Long id);
+    List<User> findByRoleOrderByNameAsc(User.Role role);
+    List<User> findAllByOrderByNameAsc();
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<User> findByRefreshTokenHash(String refreshTokenHash);
-
-    /**
-     * Checks whether one User already holds a join-table membership for an Event.
-     */
-    boolean existsByIdAndRegisteredEventsId(Long userId, Long eventId);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.id = :id")
+    Optional<User> findForUpdate(@Param("id") Long id);
 }

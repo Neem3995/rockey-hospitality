@@ -12,6 +12,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -21,7 +22,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * authorization decides access.
  * Here, @Component lets SecurityConfiguration inject this filter into Spring Security's request chain.
  * It verifies the signed Bearer access JWT with JwtService, then reloads the User through
- * RockeyUserDetailsService.
+ * UserDetailsService.
  * Current database ID, role and active state remain authoritative before a principal is placed in the
  * security context.
  */
@@ -41,9 +42,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      */
     private final JwtService jwtService;
     /**
-     * Injected RockeyUserDetailsService collaborator; this layer delegates the operation rather than duplicating its rules.
+     * Injected UserDetailsService collaborator; this layer delegates the operation rather than duplicating its rules.
      */
-    private final RockeyUserDetailsService userDetailsService;
+    private final UserDetailsService userDetailsService;
     /**
      * Shared 401 writer for missing or invalid authentication.
      */
@@ -54,7 +55,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      */
     public JwtAuthenticationFilter(
             JwtService jwtService,
-            RockeyUserDetailsService userDetailsService,
+            UserDetailsService userDetailsService,
             RestAuthenticationEntryPoint authenticationEntryPoint
     ) {
         this.jwtService = jwtService;

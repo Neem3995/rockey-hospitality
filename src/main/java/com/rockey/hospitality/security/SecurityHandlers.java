@@ -1,7 +1,7 @@
 package com.rockey.hospitality.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rockey.hospitality.dto.CommonDtos.ApiError;
+import com.rockey.hospitality.dto.AuthDtos.ApiError;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -22,7 +22,7 @@ import org.springframework.stereotype.Component;
  * shares the JSON error writer.
  * Missing/invalid authentication returns 401, while an authenticated caller without permission receives
  * 403.
- * SecurityErrorWriter serializes CommonDtos.ApiError rather than exposing exceptions, credentials or token
+ * SecurityErrorWriter serializes AuthDtos.ApiError rather than exposing exceptions, credentials or token
  * values.
  */
 public final class SecurityHandlers {

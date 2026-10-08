@@ -8,8 +8,8 @@ import { ApiError, StaleRequestError } from '../services/apiClient.js';
 import { routeDefinitions } from '../routes/routeDefinitions.js';
 
 // Auth/account UI checks isolate the independently tested dashboard request.
-vi.mock('../services/dashboardService.js', async (original) => ({
-  ...await original(), getDashboard: vi.fn(() => new Promise(() => {})),
+vi.mock('../services/housekeepingService.js', async (original) => ({
+  ...await original(), listTasks: vi.fn(() => new Promise(() => {})), listRooms: vi.fn(() => new Promise(() => {})),
 }));
 
 /** @param {string} path @param {Partial<import('../context/authContext.js').AuthContextValue>} [value] */
@@ -19,9 +19,9 @@ function renderApp(path, value = {}) {
 
 describe('FE-02 forms and guards', () => {
   it('blocks protected content during bootstrap without mounting private children', () => {
-    renderApp('/admin/employees', { status: 'checking' });
+    renderApp('/team', { status: 'checking' });
     expect(screen.getByRole('status').textContent).toContain('Checking your session');
-    expect(screen.queryByRole('heading', { name: 'Employees' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Team' })).toBeNull();
   });
 
   it('shows recoverable unavailable state and permits explicit retry', async () => {
@@ -34,7 +34,7 @@ describe('FE-02 forms and guards', () => {
   });
 
   it('redirects an anonymous protected deep link to sign in', () => {
-    renderApp('/tasks/1');
+    renderApp('/tasks');
     expect(screen.getByRole('heading', { name: 'Sign in', level: 1 })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Task details' })).toBeNull();
   });
@@ -42,17 +42,17 @@ describe('FE-02 forms and guards', () => {
   it.each(['/login', '/register', '/'])('authenticated %s redirects to dashboard with a read-only profile', (path) => {
     renderApp(path, { status: 'authenticated', user: testUser() });
     expect(screen.getByRole('heading', { name: 'Dashboard', level: 1 })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Your account' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'My account' })).toBeTruthy();
     expect(screen.getByText('reviewer@example.test')).toBeTruthy();
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
   });
 
-  it.each(['USER', 'STAFF', 'ADMIN'])('%s sees only role-eligible navigation', (role) => {
+  it.each(['USER', 'MANAGER', 'ADMIN'])('%s sees only role-eligible navigation', (role) => {
     const user = testUser(/** @type {import('../routes/routeDefinitions.js').Role} */ (role));
     renderApp('/dashboard', { status: 'authenticated', user });
     for (const route of routeDefinitions.filter((item) => item.access === 'protected' && !item.path.includes(':'))) {
-      expect(screen.queryByRole('link', { name: route.title }) !== null).toBe(route.roles.includes(user.role));
+      expect(screen.queryByRole('link', { name: route.path === '/tasks' && user.role === 'USER' ? 'My Tasks' : route.title }) !== null).toBe(route.roles.includes(user.role));
     }
     expect(screen.queryByRole('link', { name: 'Create an account' })).toBeNull();
   });
@@ -67,10 +67,7 @@ describe('FE-02 forms and guards', () => {
     },
   );
 
-  it('STAFF cannot view USER registrations or ADMIN analytics', () => {
-    renderApp('/registrations', { status: 'authenticated', user: testUser('STAFF') });
-    expect(screen.getByRole('heading', { name: 'Access denied' })).toBeTruthy();
-  });
+
 
   it('validates empty fields with accessible associations and focuses the error summary', async () => {
     const login = vi.fn(async () => {});
@@ -100,7 +97,7 @@ describe('FE-02 forms and guards', () => {
     await userEvent.type(screen.getByLabelText('Name (required)'), 'A');
     await userEvent.type(screen.getByLabelText('Email (required)'), 'synthetic@example.test');
     await userEvent.type(screen.getByLabelText('Password (required)'), 'short');
-    await userEvent.click(screen.getByRole('button', { name: 'Create USER account' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create housekeeper account' }));
     expect(register).not.toHaveBeenCalled();
     expect(screen.getByLabelText('Name (required)').getAttribute('aria-invalid')).toBe('true');
     await userEvent.clear(screen.getByLabelText('Name (required)'));
@@ -108,7 +105,7 @@ describe('FE-02 forms and guards', () => {
     await userEvent.clear(screen.getByLabelText('Password (required)'));
     const password = crypto.randomUUID();
     await userEvent.type(screen.getByLabelText('Password (required)'), password);
-    await userEvent.click(screen.getByRole('button', { name: 'Create USER account' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create housekeeper account' }));
     expect(register).toHaveBeenCalledWith({ name: 'Synthetic reviewer', email: 'synthetic@example.test', password });
   });
 
@@ -142,22 +139,21 @@ describe('FE-02 forms and guards', () => {
 
   it('failed server logout displays no false success and offers retry', async () => {
     const logout = vi.fn(async () => { throw new ApiError(0); });
-    renderApp('/dashboard', { status: 'authenticated', user: { ...testUser('STAFF'), departmentSummary: { id: 2, name: 'Synthetic department' } }, logout });
+    renderApp('/dashboard', { status: 'authenticated', user: testUser('MANAGER'), logout });
     await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(screen.getByRole('alert').textContent).toContain('Sign-out could not be confirmed');
     expect(document.activeElement).toBe(screen.getByRole('alert'));
-    expect(screen.getByText('Synthetic department')).toBeTruthy();
+    expect(screen.getByText('reviewer@example.test')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
   });
 
   it('a session-key change remounts private page state and hides it on logout', () => {
     const user = testUser();
     const view = renderApp('/dashboard', { status: 'authenticated', user, sessionKey: 1 });
-    const oldPanel = screen.getByRole('heading', { name: 'Your account' });
+    const oldPanel = screen.getByRole('heading', { name: 'My account' });
     view.rerender(<MemoryRouter initialEntries={['/dashboard']}><TestAuth value={{ status: 'authenticated', user, sessionKey: 2 }}><App /></TestAuth></MemoryRouter>);
-    expect(screen.getByRole('heading', { name: 'Your account' })).not.toBe(oldPanel);
+    expect(screen.getByRole('heading', { name: 'My account' })).not.toBe(oldPanel);
     view.rerender(<MemoryRouter><TestAuth><App /></TestAuth></MemoryRouter>);
     expect(screen.queryByText('reviewer@example.test')).toBeNull();
   });
 });
-

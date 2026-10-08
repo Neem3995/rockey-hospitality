@@ -11,21 +11,22 @@ import java.util.List;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.annotation.EnableScheduling;
+import com.rockey.hospitality.repository.UserRepository;
+import com.rockey.hospitality.security.RockeyUserPrincipal;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import java.util.Locale;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
  * STUDY NOTE: Configuration is code that sets up Spring and application features.
  * Here, @Configuration marks this setup class; @Bean creates an object managed by Spring's application context.
- * Here, @EnableScheduling turns on alert jobs, while shared Clock and BCrypt beans give services time and
- * password-hashing tools.
+ * Shared Clock and BCrypt beans give services time and password-hashing tools.
  * OpenAPI beans describe the existing controllers for API documentation; SecurityConfiguration still
  * controls access.
  */
 @Configuration
-// Enables periodic alert scans delegated to the transactional automation service.
-@EnableScheduling
 public class ApplicationConfiguration {
 
     // OpenAPI is a machine-readable endpoint contract; Swagger-compatible tools can display it interactively.
@@ -58,9 +59,7 @@ public class ApplicationConfiguration {
     @Bean
     public OpenAPI rockeyOpenApi() {
         return new OpenAPI().info(new Info().title("Rockey Hospitality API").version("1.0")
-                .description("Frozen 51-operation business contract. Documentation requires ADMIN. "
-                        + "USER: own registrations; STAFF: authorized identity/Department scope; ADMIN: operational oversight. "
-                        + "See the canonical API contract for lifecycle, validation and scope rules."))
+                .description("Housekeeping-only API. USER: housekeeper; MANAGER: supervisor; ADMIN: account oversight."))
                 .components(new Components().addSecuritySchemes("BearerAuth", new SecurityScheme()
                         .type(SecurityScheme.Type.HTTP).scheme("bearer").bearerFormat("JWT"))
                         .addSecuritySchemes("RefreshCookie", new SecurityScheme().type(SecurityScheme.Type.APIKEY)
@@ -112,5 +111,12 @@ public class ApplicationConfiguration {
             item.getPost().setSecurity(path.endsWith("/refresh")
                     ? List.of(new SecurityRequirement().addList("RefreshCookie")) : List.of());
         }
+    }
+    /** The small account loader bean bridges MySQL users and JWT authentication. */
+    @Bean
+    public UserDetailsService userDetailsService(UserRepository users) {
+        return email -> users.findByEmailIgnoreCase(email.trim().toLowerCase(Locale.ROOT))
+                .map(RockeyUserPrincipal::new)
+                .orElseThrow(() -> new UsernameNotFoundException("Account not found."));
     }
 }

@@ -1,4 +1,4 @@
-import { StrictMode, useState } from 'react';
+import { StrictMode, useRef, useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -8,7 +8,7 @@ import Card from '../components/ui/Card.jsx';
 import Modal from '../components/ui/Modal.jsx';
 import Table from '../components/ui/Table.jsx';
 import ErrorNotice from '../components/ui/ErrorNotice.jsx';
-import ScaffoldPage from '../pages/ScaffoldPage.jsx';
+
 
 describe('ErrorNotice', () => {
   it('uses caller-provided wording and preserves alert announcements and Card styling', () => {
@@ -53,12 +53,6 @@ describe('ErrorNotice', () => {
   });
 });
 
-it.each(['public', 'protected'])('removes obsolete authentication wording from the %s scaffold fallback', (access) => {
-  render(<ScaffoldPage route={{ path: '/unused', title: 'Workspace', access: /** @type {'public' | 'protected'} */ (access), roles: [] }} />);
-  expect(screen.queryByText(/Authentication is coming in FE-02|Sign-in and registration are not connected yet/)).toBeNull();
-  expect(screen.getByText(/No hotel operational data is loaded or displayed/)).toBeTruthy();
-  expect(screen.getByRole('heading', { name: access === 'protected' ? 'Protected workspace scaffold' : 'Workspace scaffold', level: 2 })).toBeTruthy();
-});
 
 describe('Button', () => {
   it('defaults to a non-submit button and supports keyboard activation', async () => {
@@ -237,4 +231,19 @@ describe('Table', () => {
     render(<Table caption="Sample list" columns={columns} rows={[{ id: 1, name: '<script>example</script>' }]} getRowKey={(row) => row.id} />);
     expect(screen.getByRole('cell', { name: '<script>example</script>' }).querySelector('script')).toBeNull();
   });
+});
+
+it('moves focus to a stable view heading when the modal opener legitimately disappears', async () => {
+  function Harness() {
+    const fallback = useRef(/** @type {HTMLHeadingElement|null} */ (null));
+    const [open,setOpen] = useState(false), [visible,setVisible] = useState(true);
+    return <><h1 ref={fallback} tabIndex={-1}>Rooms</h1>{visible && <Button onClick={()=>setOpen(true)}>Inspect room</Button>}
+      <Modal isOpen={open} onClose={()=>setOpen(false)} title="Inspect" fallbackFocusRef={fallback}>
+        <Button onClick={()=>{setVisible(false);setOpen(false);}}>Record result</Button>
+      </Modal></>;
+  }
+  render(<Harness />);
+  await userEvent.click(screen.getByRole('button',{name:'Inspect room'}));
+  await userEvent.click(screen.getByRole('button',{name:'Record result'}));
+  expect(document.activeElement).toBe(screen.getByRole('heading',{name:'Rooms'}));
 });

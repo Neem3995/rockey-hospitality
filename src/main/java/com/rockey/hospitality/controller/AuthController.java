@@ -5,7 +5,7 @@ import com.rockey.hospitality.dto.AuthDtos.AuthResponse;
 import com.rockey.hospitality.dto.AuthDtos.CurrentUserResponse;
 import com.rockey.hospitality.dto.AuthDtos.LoginRequest;
 import com.rockey.hospitality.dto.AuthDtos.RegisterUserRequest;
-import com.rockey.hospitality.dto.CommonDtos.ApiError;
+import com.rockey.hospitality.dto.AuthDtos.ApiError;
 import com.rockey.hospitality.exception.ApiException.ForbiddenException;
 import com.rockey.hospitality.security.RockeyUserPrincipal;
 import com.rockey.hospitality.service.AuthService;
@@ -87,7 +87,7 @@ public class AuthController {
      * Delegates public USER registration and writes the separate refresh cookie.
      * ResponseEntity sets 201 and returns only the authentication DTO.
      */
-    @Operation(summary = "Register guest/event USER", description = "Access: Public, rate limited. Canonical operation: POST /api/auth/register.")
+    @Operation(summary = "Register housekeeping USER", description = "Access: Public, rate limited. Canonical operation: POST /api/auth/register.")
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Created", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ApiError.class))),
@@ -184,7 +184,7 @@ public class AuthController {
     /**
      * Returns the authenticated principal's own current profile through AuthService.
      */
-    @Operation(summary = "Own profile", description = "Access: USER, STAFF, ADMIN. Canonical operation: GET /api/auth/me.")
+    @Operation(summary = "Own profile", description = "Access: USER, MANAGER, ADMIN. Canonical operation: GET /api/auth/me.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "OK", useReturnTypeSchema = true),
         @ApiResponse(responseCode = "401", description = "Authentication required or invalid token", content = @Content(schema = @Schema(implementation = ApiError.class))),
@@ -202,7 +202,7 @@ public class AuthController {
      * Revokes the authenticated User's refresh session and expires the same cookie path and name.
      * Returns 204 without token or password data.
      */
-    @Operation(summary = "Revoke current refresh session and expire refresh cookie", description = "Access: USER, STAFF, ADMIN; access token required. Canonical operation: POST /api/auth/logout.")
+    @Operation(summary = "Revoke current refresh session and expire refresh cookie", description = "Access: USER, MANAGER, ADMIN; access token required. Canonical operation: POST /api/auth/logout.")
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "No Content", content = @Content),
         @ApiResponse(responseCode = "401", description = "Authentication required or invalid token", content = @Content(schema = @Schema(implementation = ApiError.class))),

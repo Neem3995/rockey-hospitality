@@ -35,7 +35,7 @@ async function authenticated(user = testUser()) {
 describe('FE-02 API client', () => {
   it('shares initial bootstrap, sends only cookie credentials and initializes the safe /me profile', async () => {
     const token = session();
-    const user = testUser('STAFF');
+    const user = testUser('MANAGER');
     fetchMock.mockResolvedValueOnce(reply(token)).mockResolvedValueOnce(reply({ ...user, accessToken: token.accessToken, password: crypto.randomUUID() }));
     const store = vi.spyOn(Storage.prototype, 'setItem');
     const read = vi.spyOn(Storage.prototype, 'getItem');
@@ -254,7 +254,7 @@ describe('FE-02 API client', () => {
     fetchMock.mockResolvedValueOnce(reply(session())).mockReturnValueOnce(stale.promise);
     const previous = client.login(credentials()).catch((error) => error);
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    fetchMock.mockResolvedValueOnce(reply(session())).mockResolvedValueOnce(reply({ ...testUser('STAFF'), id: 3 }));
+    fetchMock.mockResolvedValueOnce(reply(session())).mockResolvedValueOnce(reply({ ...testUser('MANAGER'), id: 3 }));
     await client.login(credentials());
     stale.resolve(reply(testUser()));
     expect(await previous).toBeInstanceOf(client.StaleRequestError);
@@ -264,9 +264,9 @@ describe('FE-02 API client', () => {
   it('authorization change invalidates old requests and increments private view key', async () => {
     await authenticated();
     const oldKey = client.getAuthState().sessionKey;
-    fetchMock.mockResolvedValueOnce(reply({}, 401)).mockResolvedValueOnce(reply(session())).mockResolvedValueOnce(reply(testUser('STAFF')));
+    fetchMock.mockResolvedValueOnce(reply({}, 401)).mockResolvedValueOnce(reply(session())).mockResolvedValueOnce(reply(testUser('MANAGER')));
     await expect(client.apiRequest('/auth/me')).rejects.toBeInstanceOf(client.StaleRequestError);
-    expect(client.getAuthState().user?.role).toBe('STAFF');
+    expect(client.getAuthState().user?.role).toBe('MANAGER');
     expect(client.getAuthState().sessionKey).toBeGreaterThan(oldKey);
   });
 
@@ -296,7 +296,7 @@ describe('FE-02 API client', () => {
     fetchMock.mockResolvedValueOnce(reply({ accessToken: crypto.randomUUID(), tokenType: 'Bearer', accessExpiresAt: 'invalid' }));
     await client.bootstrapAuth();
     expect(client.getAuthState().status).toBe('recoverable-error');
-    fetchMock.mockResolvedValueOnce(reply(session())).mockResolvedValueOnce(reply({ ...testUser(), role: 'MANAGER' }));
+    fetchMock.mockResolvedValueOnce(reply(session())).mockResolvedValueOnce(reply({ ...testUser(), role: 'UNKNOWN' }));
     await client.bootstrapAuth(true);
     expect(client.getAuthState().user).toBeNull();
   });

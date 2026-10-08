@@ -1,6 +1,6 @@
 package com.rockey.hospitality.exception;
 
-import com.rockey.hospitality.dto.CommonDtos.ApiError;
+import com.rockey.hospitality.dto.AuthDtos.ApiError;
 import com.rockey.hospitality.exception.ApiException.BadRequestException;
 import com.rockey.hospitality.exception.ApiException.ConflictException;
 import com.rockey.hospitality.exception.ApiException.ForbiddenException;
@@ -29,7 +29,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
  * responses.
  * Here, @RestControllerAdvice applies these mappings across REST controllers; @ExceptionHandler selects a method
  * for listed failure types.
- * CommonDtos.ApiError carries safe status, message, path and optional field errors rather than a stack
+ * AuthDtos.ApiError carries safe status, message, path and optional field errors rather than a stack
  * trace.
  * Unexpected and persistence failures receive generic messages so private implementation details stay out
  * of the response.
@@ -49,7 +49,7 @@ public class GlobalExceptionHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /**
-     * Maps a missing resource or registration to a safe 404 response.
+     * Maps a missing resource to a safe 404 response.
      */
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(

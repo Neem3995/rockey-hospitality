@@ -1,7 +1,7 @@
 import { API_BASE_URL } from './config.js';
 
 /** @typedef {import('../routes/routeDefinitions.js').Role} Role */
-/** @typedef {{id: number, name: string, email: string, role: Role, status: 'ACTIVE', employeeId: number | null, departmentSummary: {id: number, name: string} | null}} User */
+/** @typedef {{id: number, name: string, email: string, role: Role, active: boolean}} User */
 /** @typedef {{status: 'checking' | 'authenticated' | 'anonymous' | 'recoverable-error', user: User | null, error: ApiError | null, sessionKey: number}} AuthState */
 /** @typedef {{email: string, password: string, name?: string}} Credentials */
 
@@ -11,7 +11,7 @@ const messages = new Map([
   [401, 'Your session or sign-in details could not be verified.'],
   [403, 'You do not have permission to perform this action.'],
   [404, 'This account or resource is unavailable.'],
-  [409, 'The request conflicts with the current account or session.'],
+  [409, 'The request conflicts with the current account or housekeeping workflow.'],
   [429, 'Too many attempts. Wait before trying again.'],
 ]);
 
@@ -88,56 +88,30 @@ function safeUser(value) {
   const user = /** @type {Partial<User> | null} */ (value);
   if (!user || !Number.isSafeInteger(user.id) || Number(user.id) < 1
       || typeof user.name !== 'string' || typeof user.email !== 'string'
-      || !['USER', 'STAFF', 'ADMIN'].includes(String(user.role)) || user.status !== 'ACTIVE'
-      || (user.role !== 'USER' && (!Number.isSafeInteger(user.employeeId) || Number(user.employeeId) < 1))) {
-    throw new ApiError(502);
-  }
-  const department = user.departmentSummary;
+      || !['USER', 'MANAGER', 'ADMIN'].includes(String(user.role)) || user.active !== true) throw new ApiError(502);
   return Object.freeze({
     id: /** @type {number} */ (user.id), name: user.name, email: user.email,
-    role: /** @type {Role} */ (user.role), status: 'ACTIVE',
-    employeeId: Number.isSafeInteger(user.employeeId) ? /** @type {number} */ (user.employeeId) : null,
-    departmentSummary: department && Number.isSafeInteger(department.id) && typeof department.name === 'string'
-      ? Object.freeze({ id: department.id, name: department.name }) : null,
+    role: /** @type {Role} */ (user.role), active: true,
   });
 }
 /** @param {User} user */
-function userIdentity(user) {
-  return JSON.stringify([user.id, user.role, user.status, user.employeeId, user.departmentSummary?.id]);
-}
-
-const managementConflicts = new Set([
-  'Employees cannot be assigned to an inactive department.',
-  'Employee email is already registered.',
-  'Login email is already registered.',
-  'Employee department changed concurrently. Retry the operation.',
-  'Employee cannot be deactivated while active tasks are assigned.',
-  'Department cannot be deactivated while active employees are assigned.',
-  'Department cannot be deactivated while non-terminal tasks exist.',
-  'Department cannot be deactivated while active inventory exists.',
-  'Department name already exists.',
-  'Request conflicts with existing data.',
-]);
+function userIdentity(user) { return JSON.stringify([user.id, user.role, user.active]); }
 
 /** Only allowlisted field keys and fixed canonical conflict messages enter UI.
  * @param {Response} response @param {string} path
  */
 async function responseError(response, path) {
+  void path;
   /** @type {Record<string, string>} */
-  const fieldErrors = {};
-  const error = new ApiError(response.status, fieldErrors);
-  const management = /^\/(employees|departments)(\/\d+)?(\?|$)/.test(path);
+  const fields = {};
+  const error = new ApiError(response.status, fields);
   try {
     const data = await response.json();
-    const keys = ['name', 'email', 'password'];
-    if (management) keys.push('departmentId', 'jobRole', 'status', 'description', 'createLogin', 'loginEmail', 'temporaryPassword', 'securityRole', 'loginConfigurationValid');
-    for (const key of keys) {
-      if (data?.fieldErrors && typeof data.fieldErrors[key] === 'string') fieldErrors[key] = 'Check this value.';
+    for (const key of ['name', 'email', 'password', 'role', 'active', 'roomNumber', 'floor',
+      'title', 'description', 'priority', 'assignedUserId', 'roomId', 'dueAt', 'taskId', 'result', 'notes', 'status']) {
+      if (typeof data?.fieldErrors?.[key] === 'string') fields[key] = 'Check this value.';
     }
-    if (management && response.status === 409) {
-      error.message = managementConflicts.has(data?.message) ? data.message : 'Request conflicts with existing data.';
-    }
-  } catch { /* A non-JSON error still receives a safe status message. */ }
+  } catch { /* Only safe status messages enter the UI. */ }
   return error;
 }
 
@@ -265,7 +239,7 @@ export function login(credentials) { return authenticate('login', credentials); 
 /** @param {Credentials & {name: string}} credentials */
 export function register(credentials) { return authenticate('register', credentials); }
 
-/** Protected future service calls; no caller can retrieve the token.
+/** Protected housekeeping service calls; no caller can retrieve the token.
  * @param {string} path @param {RequestInit} [options] @returns {Promise<unknown>}
  */
 export async function apiRequest(path, options = {}) {

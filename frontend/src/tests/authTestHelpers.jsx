@@ -5,7 +5,7 @@ import { AuthContext, authActions } from '../context/authContext.js';
  * @returns {import('../services/apiClient.js').User}
  */
 export function testUser(role = 'USER') {
-  return { id: 1, name: 'Synthetic reviewer', email: 'reviewer@example.test', role, status: 'ACTIVE', employeeId: role === 'USER' ? null : 2, departmentSummary: null };
+  return { id: 1, name: 'Synthetic reviewer', email: 'reviewer@example.test', role, active: true };
 }
 
 /** @param {{children: import('react').ReactNode, value?: Partial<import('../context/authContext.js').AuthContextValue>}} props */

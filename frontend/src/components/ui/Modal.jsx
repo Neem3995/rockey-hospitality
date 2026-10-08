@@ -25,11 +25,33 @@ function keepTabInDialog(event) {
   }
 }
 
+/** Restore immediately; keep a fallback if a later background refresh removes that opener.
+ * @param {Element|null} opener @param {HTMLElement|null|undefined} fallback
+ */
+function restoreFocus(opener, fallback) {
+  const available = () => opener instanceof HTMLElement && opener.isConnected && !opener.matches(':disabled');
+  if (!available()) { if (fallback?.isConnected) fallback.focus(); return; }
+  if (!(opener instanceof HTMLElement)) return;
+  opener.focus();
+  if (!fallback) return;
+  const scope = opener.closest('main') || document.body;
+  const stop = () => { observer.disconnect(); document.removeEventListener('focusin', changedFocus); };
+  const changedFocus = () => { if (document.activeElement !== opener) stop(); };
+  const observer = new MutationObserver(() => {
+    if (available()) return;
+    if ((document.activeElement === document.body || document.activeElement === opener) && fallback.isConnected) fallback.focus();
+    stop();
+  });
+  observer.observe(scope, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled','hidden'] });
+  document.addEventListener('focusin', changedFocus);
+}
+
 /**
  * @param {{isOpen: boolean, onClose: () => void, title: string,
- *   children: import('react').ReactNode, footer?: import('react').ReactNode}} props
+ *   children: import('react').ReactNode, footer?: import('react').ReactNode,
+ *   fallbackFocusRef?: import('react').RefObject<HTMLElement | null>}} props
  */
-export default function Modal({ isOpen, onClose, title, children, footer }) {
+export default function Modal({ isOpen, onClose, title, children, footer, fallbackFocusRef }) {
   const dialogRef = useRef(/** @type {HTMLDialogElement | null} */ (null));
   const titleId = useId();
 
@@ -38,6 +60,7 @@ export default function Modal({ isOpen, onClose, title, children, footer }) {
     if (!dialog || !isOpen) return;
 
     const previousFocus = document.activeElement;
+    const fallbackFocus = fallbackFocusRef?.current;
     dialog.showModal();
     // Chrome force-closes after a repeated Escape even when onClose refuses
     // (e.g. a pending write); controlled isOpen stays authoritative.
@@ -46,9 +69,9 @@ export default function Modal({ isOpen, onClose, title, children, footer }) {
     return () => {
       dialog.removeEventListener('close', keepOpen);
       if (dialog.open) dialog.close();
-      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
+      restoreFocus(previousFocus, fallbackFocus);
     };
-  }, [isOpen]);
+  }, [isOpen, fallbackFocusRef]);
 
   return (
     <dialog

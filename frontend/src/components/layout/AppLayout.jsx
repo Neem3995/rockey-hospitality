@@ -1,68 +1,40 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router';
+import { Link, NavLink, Outlet } from 'react-router';
+import useAuth from '../../hooks/useAuth.js';
 import Button from '../ui/Button.jsx';
-import { HOTEL_TIME_ZONE } from '../../utils/hotelTime.js';
-import ThemeToggle from './ThemeToggle.jsx';
+import { routeDefinitions } from '../../routes/routeDefinitions.js';
+import { readThemePreference, saveThemePreference } from '../../utils/theme.js';
+import { ApiError } from '../../services/apiClient.js';
+import { roleLabel } from '../../services/housekeepingService.js';
 import lightLogo from '../../assets/brand/Light_Mode_Logo.png';
 import darkLogo from '../../assets/brand/Dark_Mode_Logo.png';
-import useAuth from '../../hooks/useAuth.js';
-import { routeDefinitions } from '../../routes/routeDefinitions.js';
 
 export default function AppLayout() {
-  const [menuOpen, setMenuOpen] = useState(false);
   const auth = useAuth();
-  const location = useLocation();
-  const previousPath = useRef(location.pathname);
-  useEffect(() => {
-    const title = routeDefinitions.find((route) => route.path === location.pathname)?.title || 'Hotel operations';
-    document.title = `${title} | Rockey`;
-    if (previousPath.current !== location.pathname) {
-      document.getElementById('main-content')?.focus();
-      previousPath.current = location.pathname;
-    }
-  }, [location.pathname]);
-  const currentRole = auth.user?.role;
-  const navigation = auth.status === 'authenticated' && currentRole
-    ? routeDefinitions.filter((route) => route.access === 'protected' && !route.path.includes(':') && route.roles.includes(currentRole))
-    : routeDefinitions.filter((route) => route.access === 'public');
-
-  return (
-    <div className="app-shell">
-      <a className="skip-link" href="#main-content">Skip to content</a>
-      <header className="site-header">
-        <div className="header-inner">
-          <Link className="brand" to="/" aria-label="Rockey home" onClick={() => setMenuOpen(false)}>
-            <span className="brand-logos" aria-hidden="true">
-              <img className="brand-logo logo-light" src={lightLogo} alt="" width="64" height="64" />
-              <img className="brand-logo logo-dark" src={darkLogo} alt="" width="64" height="64" />
-            </span>
-            <span>Rockey<span className="brand-subtitle">HOTEL OPERATIONS</span></span>
-          </Link>
-          <div className="header-actions">
-            <ThemeToggle />
-            <Button
-              className="menu-toggle"
-              variant="secondary"
-              aria-expanded={menuOpen}
-              aria-controls="main-navigation"
-              onClick={() => setMenuOpen(!menuOpen)}
-            >
-              {menuOpen ? 'Close menu' : 'Menu'}
-            </Button>
-          </div>
-          <nav id="main-navigation" aria-label="Main navigation" className={menuOpen ? 'navigation is-open' : 'navigation'}>
-            {navigation.map((route) => <NavLink key={route.path} to={route.path} onClick={() => setMenuOpen(false)}>{route.title}</NavLink>)}
-            {auth.status === 'authenticated' && <NavLink to="/dashboard" onClick={() => setMenuOpen(false)}>Your account</NavLink>}
-          </nav>
-        </div>
-      </header>
-      <main id="main-content" tabIndex={-1} className="main-content">
-        <Outlet />
-      </main>
-      <footer className="site-footer">
-        <span>Rockey · Hotel operations</span>
-        <span>Hotel time zone: {HOTEL_TIME_ZONE}</span>
-      </footer>
-    </div>
-  );
+  const [theme, setTheme] = useState(readThemePreference);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+  const errorRef = useRef(/** @type {HTMLParagraphElement|null} */ (null));
+  useEffect(() => { document.documentElement.dataset.theme = theme; document.documentElement.style.colorScheme = theme; }, [theme]);
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
+  async function signOut() {
+    setPending(true); setError('');
+    try { await auth.logout(); } catch (failure) { setError('Sign-out could not be confirmed. ' + (failure instanceof ApiError ? failure.message : 'Retry.')); }
+    finally { setPending(false); }
+  }
+  function toggleTheme() { const next = theme === 'light' ? 'dark' : 'light'; setTheme(next); saveThemePreference(next); }
+  const user = auth.user;
+  const links = user ? routeDefinitions.filter(route => route.access === 'protected' && route.roles.includes(user.role)) : [];
+  return <div className="app-shell">
+    <a className="skip-link" href="#main">Skip to content</a>
+    <header className="app-header">
+      <Link to={auth.user ? '/dashboard' : '/login'} aria-label="Rockey home"><img className="brand-logo logo-light" src={lightLogo} alt="" width="56" height="56" /><img className="brand-logo logo-dark" src={darkLogo} alt="" width="56" height="56" /></Link>
+      <div className="header-actions"><Button variant="secondary" onClick={toggleTheme} aria-label={'Switch to ' + (theme === 'light' ? 'dark' : 'light') + ' mode'} title={'Switch to ' + (theme === 'light' ? 'dark' : 'light') + ' mode'}>Theme: {theme}</Button>
+        {auth.user && <Button variant="secondary" isLoading={pending} onClick={() => void signOut()}>Sign out</Button>}</div>
+    </header>
+    {error && <p className="auth-error" role="alert" ref={errorRef} tabIndex={-1}>{error}</p>}
+    {auth.user && <nav className="main-nav" aria-label="Housekeeping navigation">{links.map(route => <NavLink key={route.path} to={route.path}>{route.path === '/tasks' && auth.user?.role === 'USER' ? 'My Tasks' : route.title}</NavLink>)}<span>{roleLabel(auth.user.role)}</span></nav>}
+    <main id="main" tabIndex={-1}><Outlet /></main>
+    <footer>Rockey · Housekeeping · America/New_York</footer>
+  </div>;
 }

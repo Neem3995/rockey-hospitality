@@ -16,13 +16,13 @@ function Inspector() {
 it('StrictMode provider shares bootstrap, publishes safe context and unsubscribes on unmount', async () => {
   const token = crypto.randomUUID();
   const mock = vi.spyOn(globalThis, 'fetch')
-    .mockImplementation(async () => new Response(JSON.stringify({ role: 'USER', asOf: '2026-07-06T16:00:00Z', user: { registrationCount: 0 } }), { status: 200 }))
+    .mockImplementation(async () => new Response(JSON.stringify([]), { status: 200 }))
     .mockResolvedValueOnce(new Response(JSON.stringify({ accessToken: token, tokenType: 'Bearer', accessExpiresAt: new Date(Date.now() + 60000).toISOString() }), { status: 200 }))
     .mockResolvedValueOnce(new Response(JSON.stringify(testUser()), { status: 200 }));
   const storage = vi.spyOn(Storage.prototype, 'setItem');
   const view = render(<StrictMode><MemoryRouter initialEntries={['/login']}><AuthProvider><App /><Inspector /></AuthProvider></MemoryRouter></StrictMode>);
-  expect(await screen.findByRole('heading', { name: 'Your account' })).toBeTruthy();
-  expect(await screen.findByRole('heading', { name: 'Your registrations' })).toBeTruthy();
+  expect(await screen.findByRole('heading', { name: 'My account' })).toBeTruthy();
+  expect(await screen.findByRole('heading', { name: 'Assigned tasks' })).toBeTruthy();
   expect(mock.mock.calls.filter(([url]) => String(url).includes('/auth/')).length).toBe(2);
   const context = screen.getByTestId('context').textContent;
   expect(context).toContain('authenticated');

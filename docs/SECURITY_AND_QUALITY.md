@@ -1,30 +1,50 @@
-# Security and backend quality
+# Housekeeping security and quality
 
-This summary explains the backend's quality evidence and retained safeguards. It does not replace the API contract, source tests, JaCoCo output or Sonar project's analysis history.
+## Controls
 
-## Existing verified baseline
+- BCrypt and 72-byte UTF-8 limit; no plaintext password persistence.
+- JJWT signature/expiry; database id/role/active reloaded for each authenticated request.
+- Memory-only browser access JWT; HttpOnly refresh cookie, configurable Secure, SameSite=Lax, /api/auth path.
+- Hash-only single refresh session; row-locked rotation, logout revocation/cookie expiry.
+- Preserved bounded login/register/refresh rate limits.
+- Explicit credentialed CORS allowlist; present refresh Origin must be a single configured approved origin.
+- Non-browser Origin-absent refresh is supported. Stateless bearer APIs do not invent a CSRF endpoint. Cookie/Origin protections are compensating controls, not zero-risk certification.
+- Safe errors, Spring headers, no raw credentials/hashes/refresh values in public responses.
+- Backend service role/ownership checks; only the assigned USER can start/complete work. MANAGER/ADMIN manage tasks and inspections, never execute cleaning work.
+- Locking current reads for task/room/worker guards; task/room and inspection/room changes are atomic.
+- Soft lifecycle and foreign keys preserve history.
 
-The historical final backend gate passed **561/561** Java17/live tests (zero failures/errors/skips), including database persistence, rollback and coordinated lock/capacity/deduplication races. The packaged API run covered all **51 business operations**, **116 requests**, **291 assertions**, zero failures. The final full JaCoCo evidence was line **95.45%**, branch **83.76%**, instruction **95.50%**. The build's production line gate is **70%**, with **80%** target and no production coverage exclusions.
+## Evidence boundary
 
-The final historical Sonar recheck on project `Rockey-Hospitality` passed its Quality Gate: **0 open vulnerabilities/Critical/High/Major/Medium/Bugs/security hotspots**, combined coverage **92.9%**. Human dispositions were **13 Accepted + 6 False Positive**; **89 Minor/Info findings** remained deferred. These historical results do not mean every concern is absent or that later changes automatically inherit them. Repeat live/coverage/API/Sonar checks when behavior changes; local reproduction is documented in [LOCAL_SETUP.md](LOCAL_SETUP.md).
+The former 561-test/nine-table/51-operation Sonar baseline is historical, not verification of rewritten housekeeping source.
+Existing JaCoCo gate remains ≥70% overall production line coverage (≥80% target), no exclusions/weakened thresholds.
+New unit/MVC/live MySQL/Postman/frontend checks and independent Claude review are required.
+Current final measured results are recorded below. Skips are never counted as passes.
 
-## Reviewed findings and safeguards retained
+## Secrets and reproduction
 
-- **CSRF / S4502:** Bearer APIs remain stateless. Cookie refresh enforces exact configured browser Origin, rejects unknown/duplicate Origin headers, and permits non-browser requests without Origin. HttpOnly, SameSite, configurable Secure, restrictive credentialed CORS, rotation and logout revocation remain. Browser/cross-site/TLS topology must be re-evaluated before deployment. This was human Accepted, not hidden through exclusions.
-- **JPQL / S2077 (six findings):** appended fragments are fixed application-controlled strings; request values use named parameter binding, never string interpolation. Repository/service/live aggregate verification supported the human False Positive dispositions.
-- **Parameter count / S107 (eleven accepted findings):** contract-shaped response constructors and cohesive domain state were deliberately retained. Internal Task/Room/Alert filters use small criteria objects where helpful. Public fields/query parameters did not change.
-- **JJWT / S2143 (one accepted finding):** internal Instant/Duration/Clock remains; Date conversion exists only at the pinned JJWT 0.13.0 API boundary.
+Only disposable rockey_hospitality_hardening is reset; LOCAL_SETUP.md explains fresh setup and first ADMIN.
+.env, filled bootstrap-admin.sql, target/, node_modules/, dist/, coverage/, IDE/log/Sonar artifacts remain ignored.
+Postman uses runtime synthetic fixtures; no raw reports or environments are exported.
+Source examples are placeholders or synthetic test-only values. No default ADMIN password is shipped.
 
-## Security boundaries
+## Remaining gates
 
-Public registration creates USER only. STAFF/ADMIN logins come from authorized internal Employee provisioning after a controlled first-ADMIN bootstrap. Services enforce active account/Employee/Department and ownership. No credential/hash/refresh secret is returned in DTOs. Access JWT is frontend memory-only; refresh is an opaque HttpOnly cookie whose hash/expiry is stored in User. One active refresh session per account is supported.
+New-model Sonar analysis **NOT RUN**; previous dispositions do not certify new source.
+jsdom checks are not real-browser evidence; fresh responsive/native-dialog checks are distinct.
+AWS/CI-CD, CloudWatch/deployment, presentation/peer review and final submission remain separate capstone gates, not implemented or waived here.
 
-Frontend filtering applies only to already-authorized data. It cannot replace STAFF self-assignment/recipient/Department scoping or USER-own registration restrictions. CORS is an exact origin allowlist, not authentication. DB passwords/signing material must come from private runtime configuration, never `VITE_*` or committed environments. Previously disclosed credentials should be rotated privately, without reproducing values.
+## Current housekeeping measurements
 
-## Re-running verification
-
-Run ordinary tests/coverage with the Java17 Maven Wrapper. Live fixture tests are opt-in and refuse schemas other than the disposable local `rockey_hospitality_hardening`; they intentionally reset their own test data. Never point them at `rockey_hospitality`. The existing `scripts/verify-hardening.cjs` and Postman collections remain available; provide runtime-generated fixtures/secrets privately and retain only sanitized results.
-
-Production behavior, schema definitions, tests, OpenAPI, Maven configuration and the runtime verification script are retained; educational comments do not change Java behavior. No test was weakened/deleted. The Auth Postman collection generates a temporary password in run-local variable scope rather than saving it. Its five requests and assertions remain unchanged; collection titles may describe their domain without development-process labels.
-
-Test signing keys and valid disposable fixture passwords are generated at runtime rather than saved as usable accounts or keys. Validation-only/mock literals are test inputs, not MySQL/application credentials; no real value is reproduced here. No strong private-key/cloud-token/JWT literal markers or tracked private credential files were found in the scoped candidate review. This is a bounded review, not a guarantee that all historical secrets are absent. The old test fixture value remains in previously published Git history; no history rewriting is authorized. Manually review any old test account created with it and rotate/remove its credential privately.
+- Java 17.0.20.1 (Temurin), Maven Wrapper 3.9.16; production compilation/package and full `mvnw.cmd verify` passed.
+- **155 backend tests: 155 pass, 0 failures, 0 errors, 0 skipped.** Includes 94 service, 9 retained crypto/rate-limit, 38 MVC/security and 14 opt-in live MySQL cases.
+- JaCoCo production coverage: **line 95.12%, branch 80.65%, instruction 94.97%**. Existing ≥70% gate passed; ≥80% line target exceeded.
+- Fresh four-table MySQL/Hibernate validation and actual loopback application startup passed.
+- Persisted PASS/FAIL/rework/history, rollback, ownership, assignment/deactivation races, duplicate task/inspection races and refresh rotation/logout checks passed.
+- Disposable first-ADMIN registration/promotion/relogin passed; no default credentials or privileged endpoint.
+- Live Postman: **67 requests, 149 assertions, 0 failures; 24/24 API operations**. Live ADMIN OpenAPI has exactly 24 operations and 17 DTO schemas; all operations have concise access notes and the frozen snapshot is reconciled.
+- Frontend: **153/153 tests**, line **97.34%**, branch **88.24%**, statements **94.70%**, functions **92.16%**; lint/checked-JS/build passed. Serial execution avoids concurrent-build resource contention without relaxing test timeouts.
+- Focus tests cover both immediate opener restoration and the later removal of an inspection opener during background refresh. Existing native forced-close/save regression remains.
+- Credential-candidate scan over 99 eligible project text files found no candidates; active source scan found no removed-domain/old-role references.
+- **New-model Sonar and real-browser UI checks NOT RUN** in this pass; no prior Sonar/browser certification is reused. Independent Claude review remains the next gate.
+- No dependency/POM/package/lockfile changes, commit or push. The lean-backend, frontend and main branch pointers were preserved.

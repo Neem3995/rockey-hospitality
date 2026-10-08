@@ -50,18 +50,18 @@ export default function AuthPage({ registration = false }) {
 
   return (
     <section className="page-intro auth-page">
-      <p className="eyebrow">Rockey · Hotel operations</p>
+      <p className="eyebrow">Rockey · Housekeeping</p>
       <h1>{registration ? 'Create an account' : 'Sign in'}</h1>
-      <p className="page-description">{registration ? 'Create a USER account to browse events and manage your own registrations.' : 'Sign in to your hotel operations workspace.'}</p>
+      <p className="page-description">{registration ? 'Create a housekeeper account. Supervisors assign your room-cleaning work.' : 'Sign in to your housekeeping workspace.'}</p>
       <Card>
         <form noValidate onSubmit={submit} aria-busy={pending}>
           {error && <div className="auth-error" role="alert" tabIndex={-1} ref={errorRef}>{error}</div>}
           {registration && <Input id="auth-name" name="name" label="Name" autoComplete="name" required minLength={2} maxLength={100} value={name} onChange={(e) => setName(e.target.value)} error={fieldErrors.name} disabled={pending} />}
           <Input id="auth-email" name="email" type="email" label="Email" autoComplete="username" required maxLength={120} value={email} onChange={(e) => setEmail(e.target.value)} error={fieldErrors.email} disabled={pending} />
           <Input id="auth-password" name="password" type="password" label="Password" autoComplete={registration ? 'new-password' : 'current-password'} required minLength={registration ? 8 : undefined} maxLength={72} value={password} onChange={(e) => setPassword(e.target.value)} error={fieldErrors.password} disabled={pending} hint={registration ? 'Use 8–72 characters.' : undefined} />
-          <Button type="submit" isLoading={pending} loadingLabel={registration ? 'Creating account…' : 'Signing in…'}>{registration ? 'Create USER account' : 'Sign in'}</Button>
+          <Button type="submit" isLoading={pending} loadingLabel={registration ? 'Creating account…' : 'Signing in…'}>{registration ? 'Create housekeeper account' : 'Sign in'}</Button>
         </form>
-        <p className="auth-form-link">{registration ? <Link to="/login">Already have an account? Sign in</Link> : <Link to="/register">Create a USER account</Link>}</p>
+        <p className="auth-form-link">{registration ? <Link to="/login">Already have an account? Sign in</Link> : <Link to="/register">Create a housekeeper account</Link>}</p>
       </Card>
     </section>
   );

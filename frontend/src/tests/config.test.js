@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { HOTEL_TIME_ZONE } from '../utils/hotelTime.js';
+import { hotelNow } from '../services/housekeepingService.js';
 
 afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
 
@@ -17,6 +17,9 @@ describe('Public frontend configuration', () => {
   });
 
   it('fixes the approved display zone without converting backend timestamps', () => {
-    expect(HOTEL_TIME_ZONE).toBe('America/New_York');
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-01T12:30:00Z'));
+    expect(hotelNow()).toBe('2026-07-01T08:30:00');
+    vi.useRealTimers();
   });
 });
