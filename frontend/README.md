@@ -48,12 +48,21 @@ Modal traps focus, handles Escape/forced browser close during save, restores ope
 Loaded content remains mounted during background refresh; opener controls stay usable during ordinary reads, but are blocked during pending or unreconciled writes.
 Navigation wraps; wide tables scroll within named keyboard-focusable regions. Reduced-motion spinner rule.
 Hotel time is America/New_York; naive backend operational timestamps are not relabeled UTC.
+See the [theme reference](THEME_SYSTEM.md) for assets, palette variables, preference handling and theme-test limitations.
 
 ## Verify
 
-npm run test:coverage; npm run lint; npm run typecheck; npm run build.
+```powershell
+npm run test
+npm run test:watch
+npm run test:coverage
+npm run lint
+npm run typecheck
+npm run build
+npm run preview
+```
 Unit/jsdom tests do not certify live backend RBAC or native-browser focus/responsiveness.
-See ../docs/LOCAL_SETUP.md for backend reproduction/Postman.
+See [local setup](../docs/LOCAL_SETUP.md) for backend reproduction/Postman and the preview-port/CORS limitation.
 See [canonical verification evidence](../docs/SECURITY_AND_QUALITY.md#current-verification--2026-10-08) for dated results and [submission draft](../docs/CAPSTONE_SUBMISSION.md) for current requirements and pending gates.
 
 ## Application source tree (29 files; tests and supplied assets counted separately)
@@ -65,8 +74,8 @@ src/
   components/ui/
     Button.jsx  Input.jsx  Card.jsx  Modal.jsx  Table.jsx
     ErrorNotice.jsx  Select.jsx  Spinner.jsx  Skeleton.jsx
-  context/AuthProvider.jsx  context/authContext.js
-  hooks/useAuth.js  hooks/useRead.js
+  auth/AuthProvider.jsx  auth/authContext.js  auth/useAuth.js
+  hooks/useRead.js
   routes/AuthGuard.jsx  routes/routeDefinitions.js
   services/apiClient.js  services/config.js  services/housekeepingService.js
   utils/theme.js

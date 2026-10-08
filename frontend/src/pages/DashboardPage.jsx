@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import useAuth from '../hooks/useAuth.js';
+import useAuth from '../auth/useAuth.js';
 import useRead from '../hooks/useRead.js';
 import Card from '../components/ui/Card.jsx';
 import ErrorNotice from '../components/ui/ErrorNotice.jsx';

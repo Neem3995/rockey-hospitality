@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
-import useAuth from '../../hooks/useAuth.js';
+import useAuth from '../../auth/useAuth.js';
 import Button from '../ui/Button.jsx';
 import { routeDefinitions } from '../../routes/routeDefinitions.js';
 import { readThemePreference, saveThemePreference } from '../../utils/theme.js';

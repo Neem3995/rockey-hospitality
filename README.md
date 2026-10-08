@@ -15,7 +15,6 @@ Inspections retain the room, completed task, inspecting user, result, notes and 
 
 Java 17; Spring Boot 3.5.16; Spring Web/Data JPA/Validation/Security; MySQL; BCrypt; JJWT 0.13.0; Maven Wrapper; Springdoc 2.8.17; JUnit 5/Mockito/MockMvc; JaCoCo 0.8.14.
 React/Vite; checked JavaScript/JSDoc; React Router; native fetch; reusable Button/Input/Card/Modal/Table.
-No new dependency was introduced.
 
 ## Run, study and verify
 
@@ -28,7 +27,6 @@ No new dependency was introduced.
 - [Postman workflow collection](postman/Rockey-Housekeeping.postman_collection.json)
 
 **24 business API operations**. ADMIN-only /v3/api-docs and /v3/api-docs.yaml are documentation tools, not extra business operations.
-The previous nine-table/51-operation plan describes earlier branches, not this authorized housekeeping-only version.
 
 Public registration creates USER only. Backend role/ownership checks are authoritative.
 Access JWTs stay in browser memory; refresh tokens stay in HttpOnly cookies, with hash-only rotation/revocation on User.

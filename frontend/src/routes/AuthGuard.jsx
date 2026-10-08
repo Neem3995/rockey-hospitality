@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router';
-import useAuth from '../hooks/useAuth.js';
+import useAuth from '../auth/useAuth.js';
 import SessionStatus from '../pages/auth/SessionStatus.jsx';
 
 /** @param {{roles?: import('./routeDefinitions.js').Role[], publicOnly?: boolean, children: import('react').ReactNode}} props */

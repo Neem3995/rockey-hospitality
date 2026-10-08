@@ -1,6 +1,6 @@
 # Rockey housekeeping capstone submission draft
 
-Status: current product/implementation documentation, **not a claim that final submission is complete**. Prepared 2026-10-08 on the uncommitted `refactor/final-capstone-polish` working tree based on `2ccc706b2ee7f93efd395d60b00a009057a30dbd`.
+Status: current product/implementation documentation, **not a claim that final submission is complete**. Prepared 2026-10-08 for the `refactor/final-capstone-polish` quality checkpoint based on `2ccc706b2ee7f93efd395d60b00a009057a30dbd`, committed/pushed as `51efcd06768070a51913fb9874eefdcd966d0533`. Pending submission gates remain unchanged.
 
 The supplied official capstone PDF and `00_CAPSTONE_REQUIREMENTS.md` remain grading sources; they live outside this repository. Instructor-confirmed AWS waiver is recorded below. No other waiver is inferred. Earlier CAPSTONE documents 10–20 describe the superseded hotel-wide product, not a requirement to restore removed domains.
 

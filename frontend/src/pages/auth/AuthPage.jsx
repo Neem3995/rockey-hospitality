@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import Button from '../../components/ui/Button.jsx';
 import Input from '../../components/ui/Input.jsx';
 import Card from '../../components/ui/Card.jsx';
-import useAuth from '../../hooks/useAuth.js';
+import useAuth from '../../auth/useAuth.js';
 import { ApiError, StaleRequestError } from '../../services/apiClient.js';
 
 /** @param {{registration?: boolean}} props */

@@ -12,7 +12,7 @@ vi.mock('../services/housekeepingService.js', async (original) => ({
   ...await original(), listTasks: vi.fn(() => new Promise(() => {})), listRooms: vi.fn(() => new Promise(() => {})),
 }));
 
-/** @param {string} path @param {Partial<import('../context/authContext.js').AuthContextValue>} [value] */
+/** @param {string} path @param {Partial<import('../auth/authContext.js').AuthContextValue>} [value] */
 function renderApp(path, value = {}) {
   return render(<MemoryRouter initialEntries={[path]}><TestAuth value={value}><App /></TestAuth></MemoryRouter>);
 }

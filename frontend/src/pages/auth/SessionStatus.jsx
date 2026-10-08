@@ -1,6 +1,6 @@
 import Button from '../../components/ui/Button.jsx';
 import Card from '../../components/ui/Card.jsx';
-import useAuth from '../../hooks/useAuth.js';
+import useAuth from '../../auth/useAuth.js';
 
 export default function SessionStatus() {
   const auth = useAuth();

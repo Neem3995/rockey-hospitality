@@ -36,7 +36,7 @@ AWS (including its infrastructure/CloudWatch work) is explicitly instructor-waiv
 
 ## Current verification — 2026-10-08
 
-Scope: uncommitted `refactor/final-capstone-polish` working tree based on `2ccc706b2ee7f93efd395d60b00a009057a30dbd`. Frontend resilience/accessibility and documentation changes only; Java changes are comments, not executable behavior. No API/schema/dependency change. This pass has not been independently re-verified yet.
+Scope: published quality checkpoint on `refactor/final-capstone-polish`, based on `2ccc706b2ee7f93efd395d60b00a009057a30dbd` and committed/pushed as `51efcd06768070a51913fb9874eefdcd966d0533`. Frontend resilience/accessibility and documentation changes only; Java changes are comments, not executable behavior. No API/schema/dependency change. Measurements below describe the original quality pass before publication, not a fresh execution of the subsequent repository cleanup; pending gates remain unchanged.
 
 Runtime: Temurin Java 17.0.20.1, Maven Wrapper 3.9.16; Node 22.18.0, npm 10.9.3. No machine-specific runtime path is required by production configuration.
 

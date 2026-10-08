@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import useAuth from '../hooks/useAuth.js';
+import useAuth from '../auth/useAuth.js';
 import useRead from '../hooks/useRead.js';
 import { listTasks, listRooms, listUsers, save, deactivate, taskStatus, overdue, displayTime } from '../services/housekeepingService.js';
 import { ApiError, StaleRequestError, formFieldErrors, isUncertainWriteFailure, UNCERTAIN_WRITE_MESSAGE } from '../services/apiClient.js';

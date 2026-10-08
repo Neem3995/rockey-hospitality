@@ -3,8 +3,8 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
-import AuthProvider from '../context/AuthProvider.jsx';
-import useAuth from '../hooks/useAuth.js';
+import AuthProvider from '../auth/AuthProvider.jsx';
+import useAuth from '../auth/useAuth.js';
 import App from '../App.jsx';
 import { testUser } from './authTestHelpers.jsx';
 

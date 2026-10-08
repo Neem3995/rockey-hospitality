@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import useAuth from '../hooks/useAuth.js';
+import useAuth from '../auth/useAuth.js';
 import useRead from '../hooks/useRead.js';
 import { listUsers, save, deactivate, roleLabel } from '../services/housekeepingService.js';
 import { ApiError, StaleRequestError, formFieldErrors, isUncertainWriteFailure, UNCERTAIN_WRITE_MESSAGE } from '../services/apiClient.js';
