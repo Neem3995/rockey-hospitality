@@ -1,3 +1,10 @@
+/*
+ * STUDY NOTE: Pages use these small functions to read/write the frozen housekeeping API.
+ * We pass paths, JSON bodies and abort signals to apiClient, then check fields the list UI consumes.
+ * JSDoc helps the checker; checkedList and shape functions do the actual runtime response checks.
+ * Time helpers display/compare hotel-local values without silently attaching a UTC offset.
+ * The server still validates permissions and workflow. These helpers do not own auth tokens or React state.
+ */
 import { apiRequest, ApiError } from './apiClient.js';
 
 /** @typedef {import('../routes/routeDefinitions.js').Role} Role */

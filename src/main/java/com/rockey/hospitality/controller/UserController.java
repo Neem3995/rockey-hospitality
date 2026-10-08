@@ -11,11 +11,11 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * STUDY NOTE: A Controller is the HTTP entry point. @RestController returns JSON and @RequestMapping sets /api/users.
- * @GetMapping/@PostMapping/@PutMapping/@DeleteMapping map HTTP methods; @PathVariable reads the user id from the URL.
- * @Valid checks the request DTO and @AuthenticationPrincipal supplies the logged-in caller, not a client-sent id.
- * This is the Team API: MANAGER views and creates USER accounts, ADMIN also manages MANAGER accounts.
- * DELETE deactivates an account and keeps its work history. UserService enforces each rule.
+ * STUDY NOTE: This is the Team API entry point for matching /api/users requests.
+ * First Spring supplies the principal, URL id and validated account DTO. Next we call UserService.
+ * We send back safe user DTOs; DELETE returns no body after deactivation, not physical deletion.
+ * MANAGER can view/create USER accounts; ADMIN can also manage non-ADMIN accounts.
+ * UserService checks targets and grants. This controller does not bootstrap an ADMIN or hash passwords.
  */
 @RestController
 @RequestMapping("/api/users")

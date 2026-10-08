@@ -16,14 +16,11 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.stereotype.Component;
 
 /**
- * STUDY NOTE: Security failure handlers turn filter-level authentication/authorization failures into safe
- * JSON errors.
- * Here, @Component registers each nested handler as a Spring bean with its original name; constructor injection
- * shares the JSON error writer.
- * Missing/invalid authentication returns 401, while an authenticated caller without permission receives
- * 403.
- * SecurityErrorWriter serializes AuthDtos.ApiError rather than exposing exceptions, credentials or token
- * values.
+ * STUDY NOTE: These nested components handle failures in Spring Security, before a controller response.
+ * Spring creates the shared handlers/writer and injects them into SecurityConfiguration and the JWT filter.
+ * Authentication failure becomes 401; missing permission becomes 403. SecurityErrorWriter uses
+ * ObjectMapper to write AuthDtos.ApiError as JSON with safe status/message/path.
+ * This grouping class is not itself a handler bean. Controller/service errors use GlobalExceptionHandler.
  */
 public final class SecurityHandlers {
 

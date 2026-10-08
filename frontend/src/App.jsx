@@ -1,3 +1,9 @@
+/*
+ * STUDY NOTE: main.jsx renders App inside the router and auth provider.
+ * We match the current URL to a page, put it inside AppLayout and use AuthGuard for protected views.
+ * Props select registration mode and role eligibility; route changes select a new rendered page.
+ * This file does not fetch work or authorize the API. Backend security remains the final check.
+ */
 import { Navigate, Route, Routes } from 'react-router';
 import AppLayout from './components/layout/AppLayout.jsx';
 import AuthGuard from './routes/AuthGuard.jsx';

@@ -11,11 +11,12 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * STUDY NOTE: A Controller is the HTTP entry point. @RestController returns JSON and @RequestMapping sets /api/rooms.
- * @GetMapping/@PostMapping/@PutMapping/@DeleteMapping map HTTP methods; @PathVariable reads the room id from the URL.
- * @Valid checks the request DTO and @AuthenticationPrincipal supplies the logged-in caller, not a client-sent id.
- * Room management and inspections are MANAGER/ADMIN only. DELETE deactivates rather than erasing the row.
- * SecurityConfiguration and RoomService both enforce the rules.
+ * STUDY NOTE: Spring routes /api/rooms requests here after the security checks.
+ * We receive a room id, validated DTO and/or the authenticated principal, then call RoomService.
+ * The service returns a room or inspection DTO; this controller supplies the HTTP response.
+ * For inspection, actor.getId() identifies the supervisor. The client does not choose the inspector.
+ * DELETE means deactivate, not erase. Permission and readiness rules stay in SecurityConfiguration
+ * and RoomService, not in the frontend controls or this routing layer.
  */
 @RestController
 @RequestMapping("/api/rooms")

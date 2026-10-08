@@ -1,11 +1,11 @@
 package com.rockey.hospitality.exception;
 
 /**
- * STUDY NOTE: An exception represents an error or abnormal condition in a program.
- * ApiException is a namespace grouping controlled application/API failures, not an exception object itself.
- * Services throw its specific nested RuntimeException types; GlobalExceptionHandler converts them to safe
- * HTTP responses.
- * Keeping distinct types preserves each failure's original status and client-facing message.
+ * STUDY NOTE: An exception interrupts the normal operation to report a failure.
+ * ApiException itself groups our nested RuntimeException classes; it is not the thrown exception.
+ * Services construct a specific failure, such as ConflictException, when a rule is not satisfied.
+ * GlobalExceptionHandler turns it into the matching safe HTTP error; a runtime failure also
+ * triggers default transactional rollback. These types do not send JSON or log private values.
  */
 public final class ApiException {
 

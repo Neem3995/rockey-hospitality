@@ -10,13 +10,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * STUDY NOTE: A configuration-properties object holds application settings rather than business data.
- * Here, @ConfigurationProperties binds rockey.security settings to these fields; @Component makes Spring manage
- * the object.
- * Here, @Validated checks required settings at startup instead of accepting invalid token lifetimes or a missing
- * signing key.
- * Token services, SecurityConfiguration and AuthController share these lifetimes, cookie options and
- * allowed origins.
+ * STUDY NOTE: These fields are startup settings, not account records or request input.
+ * Spring binds rockey.security properties, then validates required values and positive lifetimes.
+ * JwtService, RefreshTokenService, SecurityConfiguration and AuthController use the same settings
+ * for signing, expiry, cookie flags and allowed origins. No secret value belongs in a study note.
+ * This object holds configuration; it does not issue tokens or decide task ownership.
  */
 @Component
 // Enables validation of the bound configuration properties.

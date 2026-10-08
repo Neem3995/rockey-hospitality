@@ -5,10 +5,11 @@ import jakarta.validation.constraints.*;
 import java.time.LocalDateTime;
 
 /**
- * STUDY NOTE: DTOs (data transfer objects) are the JSON input/output shapes of the API, not database entities.
- * Bean Validation annotations such as @NotBlank, @Size, @Min/@Max and @NotNull check room and inspection input.
- * InspectionRequest names only the task and result; the inspecting supervisor comes from authentication.
- * Room and inspection responses expose plain fields and a safe inspector summary.
+ * STUDY NOTE: These classes carry room and inspection data between JSON and the controller/service.
+ * Spring validates request fields before RoomService sees them; services build the response objects.
+ * InspectionRequest supplies taskId, result and optional notes, but not an inspecting user id.
+ * RoomService obtains that identity from the authenticated caller and returns a safe summary.
+ * Validation catches bad field shapes; it does not prove a room can change state or be inspected.
  */
 public final class RoomDtos {
     private RoomDtos() { }

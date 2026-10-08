@@ -12,12 +12,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * STUDY NOTE: @Service enforces task ownership, assignment and housekeeping transitions.
- * @Transactional keeps task and room state atomic; all mutations lock the room before loading the task.
- * When assignment also locks a User, the order is User -> Room -> Task to avoid competing lock orders.
- * Authentication uses UTC instants; operational LocalDateTime uses the configured JVM hotel zone.
- * USER reads only own assigned work; supervisor management is checked against the current database identity.
- * Repositories load entities and this service returns DTOs, including only safe worker/room summaries.
+ * STUDY NOTE: This service decides whether a task action is allowed and coordinates its room change.
+ * TaskController calls it with the caller id, task id and/or validated request values.
+ * First we check identity and rules, then use the repositories to load or lock the needed entities.
+ * When assignment needs a user lock, mutable rows are locked User -> Room -> Task; an id lookup
+ * may happen first. Starting/completing work changes both Task and Room in one transaction.
+ * We return TaskResponse, not the entities. Ordinary runtime failures roll the transaction back.
+ * This layer does not parse HTTP or record inspections; RoomService handles inspections.
  */
 @Service
 public class TaskService {
@@ -81,6 +82,8 @@ public class TaskService {
         if (!room.isActive() || !task.getAssignedUser().isActive()
                 || task.getAssignedUser().getRole() != User.Role.USER) throw new ConflictException("Room and assigned housekeeper must remain active.");
         if (next == Task.Status.IN_PROGRESS && task.getStatus() == Task.Status.ASSIGNED && room.getStatus() == Room.Status.DIRTY) {
+            // All three states must fit: the requested move, stored task and stored room.
+            // Now both managed objects change in this transaction; neither save means a separate commit.
             task.start(); room.updateStatus(Room.Status.CLEANING);
         } else if (next == Task.Status.COMPLETED && task.getStatus() == Task.Status.IN_PROGRESS && room.getStatus() == Room.Status.CLEANING) {
             task.complete(LocalDateTime.now(clock.withZone(ZoneId.systemDefault())));
@@ -123,6 +126,8 @@ public class TaskService {
         }
     }
     private Room roomForTask(Long id) {
+        // First read only the task's room id, then lock that Room. lockedTask follows in the caller.
+        // This preliminary lookup is not a task write lock and does not authorize the request.
         Long roomId = tasks.findRoomId(id).orElseThrow(() -> new ResourceNotFoundException("Task not found."));
         return lockedRoom(roomId);
     }

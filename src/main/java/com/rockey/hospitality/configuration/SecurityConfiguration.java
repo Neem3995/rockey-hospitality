@@ -13,10 +13,12 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.*;
 
 /**
- * STUDY NOTE: Authentication identifies a user; authorization limits that identity's actions.
- * @Configuration/@Bean build the stateless security chain and explicit credentialed CORS allowlist.
- * JWT verification reloads active/role state from MySQL; services additionally enforce task ownership.
- * Bearer APIs do not use CSRF tokens; refresh validates Origin and retains HttpOnly/SameSite controls.
+ * STUDY NOTE: Authentication asks who is calling; authorization asks what they may do.
+ * At startup Spring builds this shared filter chain from the JWT filter, handlers and properties.
+ * Each request then follows its ordered URL/method rules; a match allows or rejects route access.
+ * The CORS bean uses an explicit browser-origin allowlist. CORS is not a login check.
+ * Refresh also checks Origin in AuthController. Task ownership and state rules remain in services;
+ * a route match alone cannot prove that this USER owns the requested task.
  */
 @Configuration
 public class SecurityConfiguration {

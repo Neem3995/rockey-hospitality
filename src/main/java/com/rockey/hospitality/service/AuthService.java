@@ -12,11 +12,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * STUDY NOTE: A service checks rules and coordinates a use case.
- * @Service makes this injectable; @Transactional groups account/session writes with rollback.
- * AuthController delegates here, and UserRepository/token helpers provide persistence and secure tokens.
- * Registration creates USER only; refresh rotation stores a hash and logout clears refresh capability.
- * Each User stores one refresh session: a new login replaces it, including sessions in other tabs/devices.
+ * STUDY NOTE: AuthController calls this service with validated credentials, a refresh secret or caller id.
+ * First we check rate limits/accounts, then coordinate BCrypt, JWT and refresh helpers with UserRepository.
+ * Public registration creates USER. Login and successful refresh replace the row's one refresh session;
+ * another tab/device's old refresh secret then fails. Logout clears that hash/expiry pair.
+ * Account/session writes are transactional; limiter counters are separate in-memory state.
+ * We return an internal AuthSession. AuthController sends only its safe response in JSON and its
+ * raw refresh value as a cookie. Logout does not blacklist already-issued access JWTs.
  */
 @Service
 public class AuthService {

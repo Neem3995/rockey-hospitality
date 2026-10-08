@@ -11,11 +11,12 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * STUDY NOTE: A Controller is the HTTP entry point. @RestController returns JSON and @RequestMapping sets /api/tasks.
- * @GetMapping/@PostMapping/@PutMapping/@DeleteMapping map HTTP methods; @PathVariable reads the task id from the URL.
- * @Valid checks the request DTO and @AuthenticationPrincipal supplies the logged-in caller, not a client-sent id.
- * A USER sees and starts/completes only their own assigned work; supervisors create, edit, reassign and cancel it.
- * DELETE cancels the task and keeps its history. TaskService enforces ownership and transitions.
+ * STUDY NOTE: A controller connects an HTTP request to a service; it does not own the work rules.
+ * First Spring matches /api/tasks and reads the URL, JSON DTO and authenticated principal.
+ * Next we pass actor.getId() and the requested task id to TaskService: who is asking, and which work.
+ * TaskService returns a safe TaskResponse (or list); Spring writes that as JSON for the client.
+ * USER works only on their own tasks. MANAGER/ADMIN manage work, but do not execute it.
+ * SecurityConfiguration checks route access; TaskService checks ownership and transitions.
  */
 @RestController
 @RequestMapping("/api/tasks")
@@ -41,6 +42,9 @@ public class TaskController {
     @PutMapping("/{id}/status")
     @Operation(description = "USER: start own ASSIGNED task or complete own IN_PROGRESS task. MANAGER/ADMIN: cancel only.")
     public TaskResponse status(@AuthenticationPrincipal RockeyUserPrincipal actor, @PathVariable Long id, @Valid @RequestBody TaskStatusRequest request) {
+        // First get who is calling from Spring, which task from the URL, and the next status from JSON.
+        // These are arguments to service.status; its actorId/id/next parameters receive those values.
+        // The service checks ownership and changes Task + Room; we return its DTO, not either entity.
         return service.status(actor.getId(), id, request.getStatus());
     }
     @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT)

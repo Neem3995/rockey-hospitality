@@ -1,3 +1,12 @@
+/*
+ * STUDY NOTE: App renders this page through AuthGuard; useAuth gives us the current safe profile.
+ * First useRead loads tasks, plus room/worker choices for supervisors, through housekeepingService.
+ * A click or form submit sends an action; state then shows progress, an error or refreshed rows.
+ * The draft reducer collects fields. Refs block a second write before React has rendered pending.
+ * useRead cancels old reads, and AuthGuard remounts the page when the session changes.
+ * After an uncertain write we read server state before retrying. Visible buttons are guidance;
+ * TaskService still decides ownership, assignment and which room/task transitions are allowed.
+ */
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import useAuth from '../auth/useAuth.js';
 import useRead from '../hooks/useRead.js';
@@ -23,6 +32,8 @@ export default function TasksPage() {
   const auth = useAuth();
   const supervisor = auth.user?.role !== 'USER';
   const heading = useRef(/** @type {HTMLHeadingElement|null} */ (null));
+  // Keep the same load function until supervisor changes, rather than re-triggering reads every render.
+  // await pauses this async function between calls; the browser can still process input and render.
   const load = useCallback(async (/** @type {AbortSignal} */ signal) => ({
     tasks: await listTasks(signal),
     rooms: supervisor ? await listRooms(signal) : [],
@@ -72,6 +83,8 @@ export default function TasksPage() {
   async function act(operation) {
     if (submitting.current || mustReconcile.current) return;
     submitting.current = true;
+    // The ref changes immediately; setPending schedules the next render. Both protect this UI,
+    // but only the backend transaction decides whether the operation is allowed and committed.
     setPending(true); setError(''); setFieldErrors({});
     try { await operation(); setOpen(false); view.reload(); }
     catch (failure) {

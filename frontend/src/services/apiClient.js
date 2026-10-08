@@ -1,3 +1,11 @@
+/*
+ * STUDY NOTE: AuthProvider/actions and housekeepingService call this shared request module.
+ * We keep the access JWT private in memory; fetch includes cookies, whose HttpOnly refresh value
+ * is managed by the browser/backend. Context receives only safe validated account state.
+ * Requests track an epoch/identity/session scope; auth changes abort or reject stale results.
+ * A protected 401 can refresh and retry once in the same scope; 403 and uncertain failures do not.
+ * This module handles transport/session safety, not room/task business rules or browser token storage.
+ */
 import { API_BASE_URL } from './config.js';
 
 /** @typedef {import('../routes/routeDefinitions.js').Role} Role */
@@ -142,6 +150,9 @@ async function rawRequest(path, options, expected) {
   checkEpoch(expected);
   const signal = options.signal ? AbortSignal.any([lifetime.signal, options.signal]) : lifetime.signal;
   try {
+    // First join the public base/path and include cookies. await yields until fetch supplies a response;
+    // it does not read JSON yet or prove a write rolled back if the connection fails.
+    // Next checkEpoch rejects a result from an older session before callers can use it.
     const response = await fetch(`${API_BASE_URL}${path}`, { ...options, credentials: 'include', signal });
     checkEpoch(expected);
     if (!response.ok) throw await responseError(response, path);

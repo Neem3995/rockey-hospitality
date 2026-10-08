@@ -1,3 +1,10 @@
+/*
+ * STUDY NOTE: App/AuthGuard render this supervisor page and useAuth supplies current role/scope.
+ * useRead calls listUsers; the backend decides which accounts that caller may see.
+ * Form/click handlers send safe fields through housekeepingService, then refresh the Table.
+ * State controls the Modal/errors; refs stop overlapping or uncertain repeat writes, and read
+ * cleanup/session remounts discard old data. USER/MANAGER options do not override UserService rules.
+ */
 import { useEffect, useRef, useState } from 'react';
 import useAuth from '../auth/useAuth.js';
 import useRead from '../hooks/useRead.js';

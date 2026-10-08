@@ -1,3 +1,9 @@
+/*
+ * STUDY NOTE: AuthGuard renders this instead of private content while session checking is unresolved.
+ * useAuth supplies checking/error state; we show a status or an error with an explicit retry.
+ * The retry action delegates to apiClient bootstrap. This component does not claim a server logout
+ * or reveal work data when the session cannot be confirmed.
+ */
 import Button from '../../components/ui/Button.jsx';
 import Card from '../../components/ui/Card.jsx';
 import useAuth from '../../auth/useAuth.js';

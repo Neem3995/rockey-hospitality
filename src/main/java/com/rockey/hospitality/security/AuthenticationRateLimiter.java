@@ -9,11 +9,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Service;
 
 /**
- * STUDY NOTE: Rate limiting caps how many authentication attempts are allowed within a time window.
- * Here, @Service lets AuthService share these process-local login, registration and refresh counters.
- * Clock makes expiry testable, and ConcurrentHashMap updates counters atomically within this server
- * process, not across servers.
- * Exceeded limits throw a controlled failure that becomes HTTP 429.
+ * STUDY NOTE: AuthService asks this shared object whether another auth attempt is allowed.
+ * IP/email keys and the injected Clock identify counters/windows; excess attempts raise a 429 failure.
+ * Registration/refresh consume attempts; failed login records a failure and successful login clears it.
+ * ConcurrentHashMap protects per-key counter updates within this JVM. Counters are not persisted
+ * or shared across servers, and this limiter is separate from a database transaction rollback.
  */
 @Service
 public class AuthenticationRateLimiter {
@@ -56,7 +56,7 @@ public class AuthenticationRateLimiter {
      */
     private final Map<String, AttemptWindow> refreshAttempts = new ConcurrentHashMap<>();
     /**
-     * Injected time source so expiry and automation boundaries can be controlled without waiting in real time.
+     * We inject time so tests can check auth-window expiry without waiting in real time.
      */
     private final Clock clock;
 

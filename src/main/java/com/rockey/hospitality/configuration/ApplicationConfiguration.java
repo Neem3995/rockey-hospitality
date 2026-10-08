@@ -20,11 +20,11 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
- * STUDY NOTE: Configuration is code that sets up Spring and application features.
- * Here, @Configuration marks this setup class; @Bean creates an object managed by Spring's application context.
- * Shared Clock and BCrypt beans give services time and password-hashing tools.
- * OpenAPI beans describe the existing controllers for API documentation; SecurityConfiguration still
- * controls access.
+ * STUDY NOTE: A bean is an object Spring manages and injects where it is needed.
+ * At startup we provide a shared Clock, BCrypt encoder, account loader and OpenAPI setup.
+ * The loader uses UserRepository to turn a stored account into RockeyUserPrincipal when asked.
+ * AuthService and token services use these tools; operational time explicitly chooses the JVM zone.
+ * OpenAPI describes the controllers. It does not authorize a request; SecurityConfiguration does.
  */
 @Configuration
 public class ApplicationConfiguration {

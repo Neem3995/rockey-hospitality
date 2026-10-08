@@ -4,11 +4,12 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 /**
- * STUDY NOTE: An entity is a Java object mapped to a stored database row; this one maps the inspections table.
- * @ManyToOne/@JoinColumn link each record to its Room, completed Task and inspecting supervisor User.
- * @Enumerated(STRING) stores PASS or FAIL as text.
- * Records are append-only history. RoomService sets inspectedAt and changes the room to READY on PASS
- * or DIRTY on FAIL. schema.sql creates the table and Hibernate only validates this mapping.
+ * STUDY NOTE: One Inspection instance represents one recorded inspections-table result.
+ * RoomService constructs it after checking the latest completed task and authenticated supervisor.
+ * Three many-to-one mappings store the room, task and inspector foreign keys; result stores PASS/FAIL.
+ * Saving the record and changing the room share a transaction. Existing records remain history;
+ * there is no inspection edit/delete API. This entity does not authorize or schedule inspections.
+ * database/schema.sql creates the table; Hibernate uses and validates this mapping.
  */
 @Entity
 @Table(name = "inspections")

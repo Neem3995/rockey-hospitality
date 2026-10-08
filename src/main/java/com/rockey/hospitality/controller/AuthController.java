@@ -33,12 +33,12 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * STUDY NOTE: A Controller is the API entry point for HTTP requests from React or another client.
- * Here, @RestController returns response data, normally JSON; @RequestMapping sets the shared /api/auth URL.
- * AuthController handles account requests and HttpOnly refresh-cookie delivery and delegates business rules
- * to AuthService.
- * DTOs describe input/output; Spring Security and service checks, not hidden frontend buttons, enforce
- * permissions.
+ * STUDY NOTE: Spring calls these methods when an /api/auth request matches a route.
+ * First we read the validated JSON, refresh cookie or authenticated principal, depending on the action.
+ * Next AuthService checks accounts and sessions. We return its safe response and set the refresh cookie
+ * in an HTTP header, not in JSON for React to read. Logout expires that same cookie.
+ * Refresh checks a present Origin against SecurityProperties. Password hashing and token rotation
+ * stay in AuthService and its helpers; controller annotations alone do not enforce those rules.
  */
 @RestController
 // Groups this controller's routes under /api/auth.

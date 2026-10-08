@@ -11,10 +11,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * STUDY NOTE: @Service holds team rules; @Transactional keeps updates and revocation atomic.
- * User is both login identity and housekeeping worker, so no second staff model is needed.
- * UserController delegates here; repositories enforce identity uniqueness and active-work guards.
- * Only safe DTOs leave this layer. ADMIN creation stays in the explicit bootstrap SQL.
+ * STUDY NOTE: UserController calls this service with the caller id and Team request/id.
+ * We check supervisor/ADMIN rules, load accounts and use AuthService to hash new passwords.
+ * For eligibility changes we lock the account and check active work before updating or deactivating.
+ * User itself clears refresh state when identity/eligibility changes; transactions keep its writes together.
+ * Responses/summaries contain safe fields, not hashes. The first ADMIN uses the explicit local bootstrap,
+ * not this API, and this service does not create a second employee model.
  */
 @Service
 public class UserService {

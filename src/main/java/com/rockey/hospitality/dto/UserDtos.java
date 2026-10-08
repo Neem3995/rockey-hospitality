@@ -4,10 +4,11 @@ import com.rockey.hospitality.entity.*;
 import jakarta.validation.constraints.*;
 
 /**
- * STUDY NOTE: DTOs (data transfer objects) are the JSON input/output shapes of the API, not database entities.
- * Bean Validation annotations such as @NotBlank, @Email, @Size and @NotNull reject bad team-account input.
- * Requests may name a role, but UserService decides which roles the caller may grant.
- * UserResponse and UserSummary never include password hashes or refresh-session data.
+ * STUDY NOTE: These objects carry Team form input and safe account output.
+ * UserController receives validated requests; UserService checks which role and target are allowed.
+ * Requesting a role does not grant it. UserResponse and UserSummary omit password and refresh hashes.
+ * The grouping class keeps related DTOs together; none of these classes creates a database table
+ * or substitutes for the account rules in UserService.
  */
 public final class UserDtos {
     private UserDtos() { }

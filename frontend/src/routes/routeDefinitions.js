@@ -1,3 +1,8 @@
+/*
+ * STUDY NOTE: AppLayout reads this shared route metadata for titles and role-filtered navigation.
+ * Each object holds a path, label and role list; USER can display as Housekeeper without renaming it.
+ * This data does not register App's routes or grant API permission. There is no fetch or mutable session here.
+ */
 /** Backend USER is shown as Housekeeper; labels never grant permissions. */
 /** @typedef {'USER' | 'MANAGER' | 'ADMIN'} Role */
 /** @typedef {{path: string, title: string, access: 'public' | 'protected', roles: Role[]}} RouteDefinition */

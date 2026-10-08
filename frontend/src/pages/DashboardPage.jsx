@@ -1,3 +1,10 @@
+/*
+ * STUDY NOTE: App/AuthGuard render this page; useAuth gives the role and session scope.
+ * useRead loads authorized task rows, plus rooms for supervisors, through housekeepingService.
+ * useMemo derives simple counts from those returned rows; it does not fetch a separate analytics API.
+ * Card renders the profile/counts, with loading/error/retry states. useRead cancels old reads
+ * and AuthGuard remounts on session changes. No UI count expands the backend's authorized scope.
+ */
 import { useCallback, useMemo } from 'react';
 import useAuth from '../auth/useAuth.js';
 import useRead from '../hooks/useRead.js';

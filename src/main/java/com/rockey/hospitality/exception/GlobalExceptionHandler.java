@@ -25,14 +25,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /**
- * STUDY NOTE: A global exception handler converts controller/service failures into consistent HTTP error
- * responses.
- * Here, @RestControllerAdvice applies these mappings across REST controllers; @ExceptionHandler selects a method
- * for listed failure types.
- * AuthDtos.ApiError carries safe status, message, path and optional field errors rather than a stack
- * trace.
- * Unexpected and persistence failures receive generic messages so private implementation details stay out
- * of the response.
+ * STUDY NOTE: When controller/service work fails, Spring uses this advice to build an API error.
+ * First @ExceptionHandler selects a mapping by failure type. Next we build AuthDtos.ApiError
+ * with status, safe message, request path and optional validation fields for the HTTP response.
+ * Unexpected/persistence errors get generic text rather than raw exceptions or stack traces.
+ * Security-chain failures use SecurityHandlers instead. This handler does not repair or retry a write.
  */
 // Applies these exception mappings across REST controllers.
 @RestControllerAdvice

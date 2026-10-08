@@ -1,3 +1,10 @@
+/*
+ * STUDY NOTE: App renders this public form with registration selecting sign-up or sign-in.
+ * Controlled field state collects input; submit prevents native navigation and calls auth actions.
+ * Refs prevent double submission and ignore feedback after unmount. Effects focus errors.
+ * Successful auth updates Context and AuthGuard changes the view; failures show safe feedback.
+ * We clear the password after completion. Client validation helps the form, not backend authorization.
+ */
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import Button from '../../components/ui/Button.jsx';

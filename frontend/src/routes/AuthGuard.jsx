@@ -1,3 +1,9 @@
+/*
+ * STUDY NOTE: App wraps route content here; useAuth supplies status, safe profile and sessionKey.
+ * On render we show recovery/checking, redirect, deny a role or render the permitted children.
+ * The keyed wrapper remounts private content when sessionKey changes, clearing page state.
+ * This is a UI guard, not API authorization. It does not fetch credentials or store a JWT.
+ */
 import { Navigate } from 'react-router';
 import useAuth from '../auth/useAuth.js';
 import SessionStatus from '../pages/auth/SessionStatus.jsx';

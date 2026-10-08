@@ -7,11 +7,12 @@ import org.springframework.data.repository.query.Param;
 import java.util.*;
 
 /**
- * STUDY NOTE: A repository is the service's database-access interface; Spring Data generates this implementation.
- * JpaRepository supplies save/find operations; method names such as findByEmailIgnoreCase become queries.
- * @Query gives fixed JPQL, and @Param binds a value into it instead of pasting text into the query.
- * @Lock(PESSIMISTIC_WRITE) holds the user row until the transaction ends.
- * It serializes refresh rotation and account changes, such as deactivating a worker while work is assigned.
+ * STUDY NOTE: The auth/team services and account loader use this interface to find User entities.
+ * Spring Data turns method names into queries; our explicit JPQL uses bound ids, not pasted input.
+ * findForUpdate locks an account for assignment/account changes. The refresh-hash lookup is also
+ * a locking read, so competing refresh rotations take turns inside their service transactions.
+ * The database supplies rows/uniqueness constraints; this interface does not hash passwords
+ * or decide what account role a caller can grant.
  */
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmailIgnoreCase(String email);

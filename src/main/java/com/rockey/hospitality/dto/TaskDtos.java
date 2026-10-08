@@ -5,10 +5,11 @@ import jakarta.validation.constraints.*;
 import java.time.LocalDateTime;
 
 /**
- * STUDY NOTE: DTOs (data transfer objects) are the JSON input/output shapes of the API, not database entities.
- * Bean Validation annotations such as @NotBlank, @Size, @NotNull and @Positive check task input.
- * TaskStatusRequest carries only the requested next status; TaskService decides whether that move is allowed.
- * TaskResponse nests a safe assignee summary and the room's current state for the task list.
+ * STUDY NOTE: These are the task API's input/output classes, not database mappings.
+ * Jackson fills TaskRequest or TaskStatusRequest from JSON; @Valid checks required fields and ranges.
+ * TaskService checks the referenced room/worker and the requested move, then builds TaskResponse.
+ * The response includes a safe assignee summary and the room's current data, not a whole User.
+ * A positive id only passes a shape check; it does not prove that row exists or belongs to the caller.
  */
 public final class TaskDtos {
     private TaskDtos() { }
@@ -22,6 +23,8 @@ public final class TaskDtos {
         private Task.Priority priority;
         @NotNull @Positive
         private Long assignedUserId;
+        // Required and positive checks run through controller @Valid. A supplied room id can
+        // still be missing/inactive; TaskService must load the entity and check those rules next.
         @NotNull @Positive
         private Long roomId;
         private LocalDateTime dueAt;

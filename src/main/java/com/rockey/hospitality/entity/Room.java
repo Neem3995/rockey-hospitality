@@ -4,12 +4,13 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 /**
- * STUDY NOTE: An entity is a Java object mapped to a stored database row; this one maps the rooms table.
- * @Entity/@Table select the table, @Id/@GeneratedValue use the MySQL-generated key, @Column describes fields,
- * and @Enumerated(STRING) stores status names such as DIRTY rather than numeric positions.
- * Status follows the housekeeping cycle READY, DIRTY, CLEANING, INSPECTION or OUT_OF_SERVICE.
- * RoomService and TaskService decide which transitions are allowed. Deactivation keeps the row and its history.
- * @PrePersist/@PreUpdate stamp server-local timestamps; schema.sql creates the table and Hibernate validates it.
+ * STUDY NOTE: Room is the class; a Room instance holds the values for one rooms-table row.
+ * The services create/change instances, and Hibernate uses these annotations when reading or saving.
+ * First @Id identifies the key; @GeneratedValue uses MySQL's generated id. Status is stored as text.
+ * RoomService and TaskService decide allowed moves before calling updateStatus; this entity
+ * does not check the caller's role. deactivate keeps the row for task and inspection history.
+ * The callbacks set local timestamps with no stored offset. database/schema.sql creates the
+ * table; Hibernate validates the mapping rather than building or migrating the schema.
  */
 @Entity
 @Table(name = "rooms")
@@ -23,6 +24,8 @@ public class Room {
     @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.SMALLINT)
     @Column(nullable = false)
     private Integer floor;
+    // STRING stores READY/DIRTY/etc., not enum positions. The field is this instance's current value;
+    // RoomService/TaskService check transitions before changing it, and Hibernate persists it later.
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 30)
     private Status status = Status.READY;
     @Column(nullable = false)

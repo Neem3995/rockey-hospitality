@@ -1,3 +1,10 @@
+/*
+ * STUDY NOTE: App renders this shared shell; Outlet renders the matched page inside main.
+ * useAuth supplies navigation/profile data; a route effect updates the title and moves focus
+ * only on a pathname change. Theme state changes document attributes and a non-sensitive preference.
+ * Sign-out calls apiClient through auth and shows confirmation failures rather than claiming success.
+ * This layout does not load housekeeping rows or make backend permission decisions.
+ */
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import useAuth from '../../auth/useAuth.js';

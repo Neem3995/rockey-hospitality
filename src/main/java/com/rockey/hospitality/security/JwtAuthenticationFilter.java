@@ -18,13 +18,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * STUDY NOTE: A Filter runs before protected controllers; authentication verifies identity and
- * authorization decides access.
- * Here, @Component lets SecurityConfiguration inject this filter into Spring Security's request chain.
- * It verifies the signed Bearer access JWT with JwtService, then reloads the User through
- * UserDetailsService.
- * Current database ID, role and active state remain authoritative before a principal is placed in the
- * security context.
+ * STUDY NOTE: SecurityConfiguration installs this shared filter before controller handling.
+ * For a request with Authorization, first JwtService checks the Bearer JWT signature and expiry.
+ * Next the UserDetailsService reloads the account; id, role and active state must still match.
+ * We put that principal in Spring's security context or send a safe 401 through SecurityHandlers.
+ * No header leaves the request unauthenticated for later route rules to decide. A valid principal
+ * is not permission to access any task; SecurityConfiguration and services check authorization.
  */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {

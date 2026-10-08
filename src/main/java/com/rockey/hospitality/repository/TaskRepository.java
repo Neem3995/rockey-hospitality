@@ -7,11 +7,12 @@ import org.springframework.data.repository.query.Param;
 import java.util.*;
 
 /**
- * STUDY NOTE: A repository is the service's database-access interface; Spring Data generates this implementation.
- * JpaRepository supplies save/find operations; derived names such as findByAssignedUserIdOrderByIdDesc become queries.
- * @Lock(PESSIMISTIC_WRITE) makes active-work checks locking reads.
- * They see the latest committed rows inside the caller's transaction, not an older snapshot.
- * @Query/@Param supply fixed JPQL with bound values.
+ * STUDY NOTE: TaskService and work guards call this interface to load Task entities or a room id.
+ * Spring Data implements the derived query names; explicit JPQL binds values with @Param.
+ * findRoomId locates the room before we lock it, while findForUpdate locks the task afterward.
+ * The active-work guard methods also request write locks: in our MySQL setup these are current
+ * reads, not older snapshot checks. Locks belong to the calling transaction.
+ * This layer fetches work; TaskService still decides ownership and allowed transitions.
  */
 public interface TaskRepository extends JpaRepository<Task, Long> {
     List<Task> findAllByOrderByIdDesc();

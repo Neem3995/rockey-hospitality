@@ -4,12 +4,12 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 /**
- * STUDY NOTE: An entity is a Java object mapped to a stored database row; this one maps the tasks table.
- * @ManyToOne/@JoinColumn link each Task to one assigned User and one Room through foreign keys.
- * @Enumerated(STRING) stores status and priority names rather than numeric positions.
- * Status moves ASSIGNED, IN_PROGRESS, COMPLETED, with CANCELLED as a supervisor-only end state.
- * TaskService checks each change first. @PrePersist/@PreUpdate stamp server-local timestamps.
- * schema.sql creates the table and Hibernate only validates this mapping.
+ * STUDY NOTE: Task is the class for one tasks-table row, with one assigned User and one Room.
+ * TaskService constructs or changes an instance after checking ownership, eligibility and lifecycle.
+ * JPA maps the foreign keys and text enums. start/complete/cancel change this object's state;
+ * TaskService coordinates the matching room change and decides whether the action is allowed.
+ * The callbacks stamp local times. Terminal tasks stay as history, not deleted records.
+ * database/schema.sql creates the table; this mapping is not a migration or an authorization check.
  */
 @Entity
 @Table(name = "tasks")

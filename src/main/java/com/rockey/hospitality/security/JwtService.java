@@ -15,13 +15,11 @@ import javax.crypto.SecretKey;
 import org.springframework.stereotype.Service;
 
 /**
- * STUDY NOTE: A JWT is a signed token used to identify authenticated API requests; an access JWT is
- * short-lived and sent in the Authorization header.
- * Here, @Service lets AuthService and JwtAuthenticationFilter share this signing/verification component.
- * It uses the private configured key and injected Clock; java.util.Date conversion occurs only at the JJWT
- * API boundary.
- * A valid signature does not replace the filter's current-database identity checks or service
- * authorization.
+ * STUDY NOTE: AuthService asks this bean to issue an access JWT; the JWT filter asks it to parse one.
+ * User fields, a private signing key and Clock produce signed claims and an expiry Instant.
+ * Parsing verifies the signature/expiry and required claims before returning AccessTokenClaims.
+ * Signing detects tampering; it does not encrypt the payload. Do not put private secrets in claims.
+ * Date conversion is only at the JJWT API boundary. Account revalidation and ownership happen elsewhere.
  */
 @Service
 public class JwtService {

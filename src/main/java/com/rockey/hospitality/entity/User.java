@@ -4,12 +4,12 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 /**
- * STUDY NOTE: An entity is a Java object mapped to a stored database row; this one maps the users table.
- * @Entity/@Table select the table, @Id/@GeneratedValue use the MySQL-generated key, @Column describes fields,
- * and @Enumerated(STRING) stores role names such as USER rather than numeric positions.
- * User is both the login identity and the housekeeping worker; role USER/MANAGER/ADMIN is the only permission.
- * It also holds the refresh-session hash. @PrePersist/@PreUpdate stamp server-local timestamps.
- * schema.sql creates the table and Hibernate only validates that this mapping matches it.
+ * STUDY NOTE: A User instance stores one login identity, which can also be a housekeeping worker.
+ * AuthService/UserService create or update it; Hibernate maps it to users and stamps local times.
+ * Role USER means Housekeeper. Permissions also depend on active state, ownership and service rules,
+ * not just the enum. This row holds BCrypt password data and one refresh hash/expiry pair.
+ * Identity/eligibility changes clear refresh state; safe DTOs leave those private fields out.
+ * database/schema.sql creates the table. This class does not verify JWTs or grant route access.
  */
 @Entity
 @Table(name = "users")

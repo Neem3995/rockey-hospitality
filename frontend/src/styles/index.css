@@ -1,3 +1,9 @@
+/*
+ * STUDY NOTE: main.jsx imports these shared presentation rules for pages and UI components.
+ * AppLayout's data-theme attribute selects light/dark variables; class names select layout/control rules.
+ * Focus, table scrolling and reduced-motion rules help accessibility without changing API behavior.
+ * CSS reacts to markup, viewport and preferences; it does not read auth state or enforce access.
+ */
 :root {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color-scheme: light;

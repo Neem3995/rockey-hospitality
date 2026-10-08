@@ -8,9 +8,11 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 /**
- * STUDY NOTE: A principal adapts the current database account to Spring's UserDetails contract.
- * USER means housekeeper; MANAGER and ADMIN are authorization roles, not browser-selected labels.
- * The JWT filter reloads these fields for every request; hashes never enter response DTOs.
+ * STUDY NOTE: This object adapts a stored User to Spring Security's UserDetails contract.
+ * The account loader constructs it for JWT verification, copying id, email, role, active and hash.
+ * getAuthorities adds ROLE_ to the enum for SecurityConfiguration's role matchers.
+ * Controllers receive this authenticated principal, not a user id chosen in the JSON body.
+ * This is an internal identity object, not a response DTO; its password hash must not reach the UI.
  */
 public class RockeyUserPrincipal implements UserDetails {
     private final Long id;

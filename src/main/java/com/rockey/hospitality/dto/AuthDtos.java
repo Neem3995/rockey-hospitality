@@ -7,11 +7,11 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 /**
- * STUDY NOTE: DTOs (data transfer objects) are the JSON input/output shapes of the API, not database entities.
- * Bean Validation annotations such as @NotBlank, @Email and @Size reject bad login/registration input.
- * RegisterUserRequest has no role field, so public sign-up cannot request MANAGER or ADMIN.
- * AuthResponse returns the access token and a safe profile; the refresh token travels only in its HttpOnly
- * cookie. ApiError is the shared safe error body.
+ * STUDY NOTE: A DTO is a request/response shape; it is not a stored User entity.
+ * Jackson reads login/register JSON into these request objects, and @Valid checks their annotations.
+ * RegisterUserRequest has no role field; AuthService creates USER. AuthResponse carries the access
+ * JWT and safe profile; AuthController puts the raw refresh token only in the HttpOnly cookie.
+ * ApiError is also shared by our error handlers. These classes carry data, not session or password rules.
  */
 public final class AuthDtos {
     private AuthDtos() { }

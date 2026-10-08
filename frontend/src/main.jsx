@@ -1,3 +1,9 @@
+/*
+ * STUDY NOTE: Vite loads this module to connect React to index.html's root element.
+ * First we create the root, then wrap App in BrowserRouter and AuthProvider and load our CSS.
+ * StrictMode adds development checks, including effect setup/cleanup checks; it is not authorization.
+ * This entry point renders the application. Pages and apiClient handle requests and session state.
+ */
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';

@@ -1,3 +1,11 @@
+/*
+ * STUDY NOTE: A management page controls this dialog through isOpen, onClose and content props.
+ * The effect opens the native dialog, remembers focus and closes/restores focus on cleanup.
+ * Tab handling stays within usable controls. If the opener disappears, fallbackFocusRef provides
+ * a stable page heading; an observer handles removal after a background refresh.
+ * The parent can refuse closing during a save; the close listener keeps native browser behavior
+ * aligned with isOpen. This dialog does not submit data or decide if a write succeeded.
+ */
 import { useEffect, useId, useRef } from 'react';
 import Button from './Button.jsx';
 

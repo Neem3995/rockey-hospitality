@@ -16,13 +16,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
- * STUDY NOTE: A refresh token is a longer-lived random secret used to obtain another short-lived access
- * JWT.
- * Here, @Service lets AuthService inject this generator, hash function and Clock-based expiry calculations.
- * The raw value travels in an HttpOnly cookie, which browser JavaScript cannot directly read; User stores
- * only its SHA-256 hash and UTC expiry.
- * AuthService owns rotation and logout revocation; this component does not create another authentication
- * mechanism.
+ * STUDY NOTE: AuthService uses this bean to create a random refresh secret and its hash/expiry.
+ * SecureRandom supplies the bytes; SHA-256 hashes the raw value. Only that hash goes in User.
+ * AuthController sends the raw value in an HttpOnly cookie, not a JavaScript-readable response.
+ * Clock computes expiry as an Instant, then converts it to UTC LocalDateTime for database comparison.
+ * This helper does not load accounts or rotate stored state; AuthService owns that transaction.
  */
 @Service
 public class RefreshTokenService {

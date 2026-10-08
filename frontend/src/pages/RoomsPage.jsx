@@ -1,3 +1,11 @@
+/*
+ * STUDY NOTE: App/AuthGuard render this supervisor page; useAuth supplies the session key.
+ * useRead loads rooms/tasks and selected-room inspection history through housekeepingService.
+ * Clicks open a Modal or write an action; state renders the draft, progress, safe errors and refreshed rows.
+ * Refs block double submission and require a successful reconciliation after uncertain writes.
+ * Reads cancel on scope changes; the heading is the dialog focus fallback. RoomService, not this
+ * page, validates the latest task, derives inspector identity and changes readiness.
+ */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import useAuth from '../auth/useAuth.js';
 import useRead from '../hooks/useRead.js';

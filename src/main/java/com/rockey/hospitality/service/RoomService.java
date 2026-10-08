@@ -12,11 +12,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * STUDY NOTE: @Service holds room/readiness rules, including the small inspection use case.
- * @Transactional makes inspection history and PASS/FAIL room changes succeed or roll back together.
- * Controllers pass authenticated identity; locked room rows serialize competing work and inspection changes.
- * Inspection time is hotel-local LocalDateTime; the UTC Clock is viewed in the configured JVM hotel zone.
- * DTOs expose safe fields while repositories reach the four-table MySQL schema.
+ * STUDY NOTE: RoomController asks this service to manage a room or record an inspection.
+ * First we check the authenticated supervisor, then use repositories to read/lock the needed rows.
+ * inspect requires the latest completed task and a room awaiting inspection. It appends an Inspection
+ * and sets READY for PASS or DIRTY for FAIL in one transaction; runtime failures roll both back.
+ * We return safe DTOs, using hotel-local operational time. TaskService starts/completes cleaning;
+ * this service does not let supervisors skip that execution or replace history.
  */
 @Service
 public class RoomService {
@@ -112,6 +113,9 @@ public class RoomService {
         Task latest = tasks.findFirstByRoomIdAndStatusOrderByIdDesc(roomId, Task.Status.COMPLETED)
                 .orElseThrow(() -> new ConflictException("No completed cleaning task exists."));
         if (!latest.getId().equals(task.getId())) throw new ConflictException("Inspect the latest completed cleaning task.");
+        // supervisor comes from actorId, not an inspection form field. The Clock supplies now;
+        // viewing it in the JVM zone produces the offset-free hotel time we store.
+        // Append the result and change readiness together, so rollback cannot leave half an inspection.
         Inspection inspection = new Inspection(room, task, supervisor, request.getResult(), request.getNotes(),
                 LocalDateTime.now(clock.withZone(ZoneId.systemDefault())));
         inspections.save(inspection);

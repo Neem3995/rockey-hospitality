@@ -1,3 +1,9 @@
+/*
+ * STUDY NOTE: AppLayout calls these helpers to read/save light or dark preference.
+ * Only rockey-theme goes in localStorage, never auth data; denied storage safely falls back to light
+ * or leaves the current in-memory choice usable. AppLayout applies the document attributes.
+ * This module does not choose account permissions, fetch data or manage a session.
+ */
 /** @typedef {'light' | 'dark'} Theme */
 
 export const THEME_STORAGE_KEY = 'rockey-theme';

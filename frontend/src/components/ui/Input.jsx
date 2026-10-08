@@ -1,3 +1,9 @@
+/*
+ * STUDY NOTE: A form renders this labelled input with a value, change callback and optional error/hint.
+ * We connect description ids and aria-invalid to the native input, then render its feedback.
+ * The form owns state and validation; this component does not store credentials or call the API.
+ * JSDoc describes accepted props for checked JavaScript, not a runtime security check.
+ */
 /**
  * @typedef {Omit<import('react').InputHTMLAttributes<HTMLInputElement>, 'id'> & {
  *   id: string, label: string, error?: string, hint?: string

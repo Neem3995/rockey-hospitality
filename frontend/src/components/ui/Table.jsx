@@ -1,3 +1,9 @@
+/*
+ * STUDY NOTE: A page supplies rows, column render callbacks, row keys, caption and empty text.
+ * First we render headings, then call each column's render function for each row, or show an empty cell.
+ * The scroll region supports keyboard access. The page owns filters, requests and row actions;
+ * this table does not fetch, paginate or authorize data.
+ */
 /**
  * @template {object} T
  * @typedef {{key: string, label: string, render: (row: T) => import('react').ReactNode}} TableColumn

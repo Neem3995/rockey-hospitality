@@ -4,13 +4,11 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
- * STUDY NOTE: This is the entry point that starts the Spring Boot backend.
- * Here, @SpringBootApplication combines configuration, automatic framework setup and component scanning below
- * this package.
- * SpringApplication creates Spring's application context (its managed objects) and starts the embedded HTTP
- * server.
- * The discovered controllers, services, repositories and configuration then work together to handle
- * requests.
+ * STUDY NOTE: This is where we start the backend, before any browser request arrives.
+ * main receives launch arguments and SpringApplication.run builds the application context and HTTP server.
+ * The @SpringBootApplication annotation finds our configuration and components under this package.
+ * Spring wires those shared objects together; it does not rebuild them for each request.
+ * This entry point starts the app. Services, not main, decide housekeeping rules.
  */
 @SpringBootApplication
 public class RockeyHospitalityApplication {
