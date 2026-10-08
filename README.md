@@ -22,6 +22,7 @@ No new dependency was introduced.
 - [Fresh local setup and first ADMIN](docs/LOCAL_SETUP.md)
 - [Model, permissions, API and study guide](docs/BACKEND_GUIDE.md)
 - [Security and quality evidence](docs/SECURITY_AND_QUALITY.md)
+- [Current capstone submission draft and pending gates](docs/CAPSTONE_SUBMISSION.md)
 - [Frontend routes and setup](frontend/README.md)
 - [Generated OpenAPI snapshot](docs/rockey-openapi.json)
 - [Postman workflow collection](postman/Rockey-Housekeeping.postman_collection.json)
@@ -36,8 +37,8 @@ No credentials/auth tokens are stored in localStorage/sessionStorage. Only a non
 Lists return complete arrays, not pagination wrappers. Dashboard counts use authorized lists, not a separate analytics domain.
 Maven verify enforces **≥70% production line coverage** (≥80% target), without exclusions.
 Opt-in live checks reset only disposable rockey_hospitality_hardening; skips are not passes.
-AWS/CI-CD, deployment, presentation and remaining submission gates are separate, not implemented or waived here.
+AWS is explicitly instructor-waived because of insufficient training. This does not waive CI/CD, deployment, accessible URLs or branch protection; those expectations remain pending clarification.
 
 ## Current local checks
 
-151/151 backend tests (including 12 live MySQL), 149/149 frontend tests, 24/24 operations via 62 Postman requests/139 assertions; no failures. JaCoCo line 95.11%; frontend line 97.34%; lint/typecheck/build passed. Independent Claude review, fresh Sonar and real-browser UI checks remain separate; see the security/quality guide for limitations.
+The [canonical dated verification record](docs/SECURITY_AND_QUALITY.md#current-verification--2026-10-08) contains executed/skipped test totals, coverage, commands and limitations. Historical live evidence is labeled separately; it is not a claim that live checks ran in the current pass.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Outlet } from 'react-router';
+import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import useAuth from '../../hooks/useAuth.js';
 import Button from '../ui/Button.jsx';
 import { routeDefinitions } from '../../routes/routeDefinitions.js';
@@ -11,12 +11,21 @@ import darkLogo from '../../assets/brand/Dark_Mode_Logo.png';
 
 export default function AppLayout() {
   const auth = useAuth();
+  const { pathname } = useLocation();
+  const mainRef = useRef(/** @type {HTMLElement|null} */ (null));
+  const previousPath = useRef(pathname);
   const [theme, setTheme] = useState(readThemePreference);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const errorRef = useRef(/** @type {HTMLParagraphElement|null} */ (null));
   useEffect(() => { document.documentElement.dataset.theme = theme; document.documentElement.style.colorScheme = theme; }, [theme]);
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
+  useEffect(() => {
+    const title = routeDefinitions.find(route => route.path === pathname)?.title || 'Page not found';
+    document.title = title + ' | Rockey | Housekeeping Operations';
+    if (previousPath.current !== pathname) mainRef.current?.focus();
+    previousPath.current = pathname;
+  }, [pathname]);
   async function signOut() {
     setPending(true); setError('');
     try { await auth.logout(); } catch (failure) { setError('Sign-out could not be confirmed. ' + (failure instanceof ApiError ? failure.message : 'Retry.')); }
@@ -34,7 +43,7 @@ export default function AppLayout() {
     </header>
     {error && <p className="auth-error" role="alert" ref={errorRef} tabIndex={-1}>{error}</p>}
     {auth.user && <nav className="main-nav" aria-label="Housekeeping navigation">{links.map(route => <NavLink key={route.path} to={route.path}>{route.path === '/tasks' && auth.user?.role === 'USER' ? 'My Tasks' : route.title}</NavLink>)}<span>{roleLabel(auth.user.role)}</span></nav>}
-    <main id="main" tabIndex={-1}><Outlet /></main>
+    <main id="main" ref={mainRef} tabIndex={-1}><Outlet /></main>
     <footer>Rockey · Housekeeping · America/New_York</footer>
   </div>;
 }

@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
  * STUDY NOTE: @Service holds room/readiness rules, including the small inspection use case.
  * @Transactional makes inspection history and PASS/FAIL room changes succeed or roll back together.
  * Controllers pass authenticated identity; locked room rows serialize competing work and inspection changes.
+ * Inspection time is hotel-local LocalDateTime; the UTC Clock is viewed in the configured JVM hotel zone.
  * DTOs expose safe fields while repositories reach the four-table MySQL schema.
  */
 @Service

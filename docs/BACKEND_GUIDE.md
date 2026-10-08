@@ -11,6 +11,8 @@ Controllers validate DTOs and accept the trusted principal. Services enforce per
 Repositories contain ordinary JPA lookups and row locks. Entities are stored rows, never controller responses.
 There are four flat DTO grouping files and four controllers/services. Minimal Inspection behavior stays in RoomService/RoomController/RoomDtos; no separate inspection service, controller, engine, analytics or alerts.
 
+The [submission draft](CAPSTONE_SUBMISSION.md) supplies the current architecture/component diagrams, complete ERD, requirements and decisions. Older CAPSTONE planning diagrams describe superseded branches. Use [SECURITY_AND_QUALITY.md](SECURITY_AND_QUALITY.md#current-verification--2026-10-08) for dated measured results.
+
 ## Four-table ERD
 
 | Child | Required foreign key | Parent |

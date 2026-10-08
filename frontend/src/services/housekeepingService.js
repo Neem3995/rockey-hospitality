@@ -1,4 +1,4 @@
-import { apiRequest } from './apiClient.js';
+import { apiRequest, ApiError } from './apiClient.js';
 
 /** @typedef {import('../routes/routeDefinitions.js').Role} Role */
 /** @typedef {{id:number,name:string,email:string,role:Role,active:boolean}} TeamUser */
@@ -14,14 +14,53 @@ function read(path, signal) { return apiRequest(path, { signal }); }
 function write(path, method, body) {
   return apiRequest(path, { method, headers: { 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 }
+/** These guards cover fields the UI consumes, not server-side business validation.
+ * @param {unknown} value @returns {value is Record<string, unknown>}
+ */
+function object(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
+/** @param {unknown} value */
+function id(value) { return typeof value === 'number' && Number.isSafeInteger(value) && value > 0; }
+/** @param {unknown} value */
+function optionalText(value) { return value == null || typeof value === 'string'; }
+/** @param {unknown} value */
+function person(value) { return object(value) && id(value.id) && typeof value.name === 'string'; }
+/** @param {unknown} value */
+function roomShape(value) {
+  return object(value) && id(value.id) && typeof value.roomNumber === 'string'
+    && typeof value.floor === 'number' && Number.isInteger(value.floor) && typeof value.active === 'boolean'
+    && typeof value.status === 'string' && ['READY', 'DIRTY', 'CLEANING', 'INSPECTION', 'OUT_OF_SERVICE'].includes(value.status);
+}
+/** @param {unknown} value */
+function taskShape(value) {
+  return object(value) && id(value.id) && typeof value.title === 'string' && optionalText(value.description)
+    && typeof value.status === 'string' && ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'].includes(value.status)
+    && typeof value.priority === 'string' && ['LOW', 'MEDIUM', 'HIGH', 'URGENT'].includes(value.priority)
+    && person(value.assignedUser) && roomShape(value.room) && optionalText(value.dueAt) && optionalText(value.completedAt);
+}
+/** @param {unknown} value */
+function userShape(value) {
+  return person(value) && object(value) && typeof value.email === 'string' && typeof value.active === 'boolean'
+    && typeof value.role === 'string' && ['USER', 'MANAGER', 'ADMIN'].includes(value.role);
+}
+/** @param {unknown} value */
+function inspectionShape(value) {
+  return object(value) && id(value.id) && id(value.roomId) && id(value.taskId) && person(value.inspectedBy)
+    && typeof value.result === 'string' && ['PASS', 'FAIL'].includes(value.result)
+    && optionalText(value.notes) && typeof value.inspectedAt === 'string';
+}
+/** @param {unknown} value @param {(row: unknown) => boolean} valid @returns {unknown[]} */
+function checkedList(value, valid) {
+  if (!Array.isArray(value) || !value.every(valid)) throw new ApiError(502);
+  return value;
+}
 /** @param {AbortSignal} [signal] @returns {Promise<Task[]>} */
-export async function listTasks(signal) { return /** @type {Task[]} */ (await read('/tasks', signal)); }
+export async function listTasks(signal) { return /** @type {Task[]} */ (checkedList(await read('/tasks', signal), taskShape)); }
 /** @param {AbortSignal} [signal] @returns {Promise<Room[]>} */
-export async function listRooms(signal) { return /** @type {Room[]} */ (await read('/rooms', signal)); }
+export async function listRooms(signal) { return /** @type {Room[]} */ (checkedList(await read('/rooms', signal), roomShape)); }
 /** @param {AbortSignal} [signal] @returns {Promise<TeamUser[]>} */
-export async function listUsers(signal) { return /** @type {TeamUser[]} */ (await read('/users', signal)); }
+export async function listUsers(signal) { return /** @type {TeamUser[]} */ (checkedList(await read('/users', signal), userShape)); }
 /** @param {number} id @param {AbortSignal} [signal] @returns {Promise<Inspection[]>} */
-export async function listInspections(id, signal) { return /** @type {Inspection[]} */ (await read('/rooms/' + id + '/inspections', signal)); }
+export async function listInspections(id, signal) { return /** @type {Inspection[]} */ (checkedList(await read('/rooms/' + id + '/inspections', signal), inspectionShape)); }
 /** @param {'tasks'|'rooms'|'users'} domain @param {number|null} id @param {unknown} body */
 export function save(domain, id, body) { return write('/' + domain + (id === null ? '' : '/' + id), id === null ? 'POST' : 'PUT', body); }
 /** @param {'tasks'|'rooms'|'users'} domain @param {number} id */

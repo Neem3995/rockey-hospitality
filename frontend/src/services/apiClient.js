@@ -29,6 +29,28 @@ export class StaleRequestError extends Error {
   constructor() { super('The session changed.'); this.name = 'StaleRequestError'; }
 }
 
+export const UNCERTAIN_WRITE_MESSAGE = 'The result could not be confirmed. Refresh the list or history before submitting again.';
+
+/** Presentation only: never echo error text supplied by a server or an unknown exception.
+ * @param {unknown} failure @param {string[]} allowedFields @returns {Record<string, string>}
+ */
+export function formFieldErrors(failure, allowedFields) {
+  const fields = /** @type {Record<string, string>} */ ({});
+  if (failure instanceof ApiError) {
+    for (const key of allowedFields) {
+      if (typeof failure.fieldErrors[key] === 'string') fields[key] = 'Check this value.';
+    }
+  }
+  return fields;
+}
+
+/** A lost response or server failure does not prove that a write rolled back.
+ * @param {unknown} failure
+ */
+export function isUncertainWriteFailure(failure) {
+  return !(failure instanceof StaleRequestError) && (!(failure instanceof ApiError) || failure.status === 0 || failure.status >= 500);
+}
+
 // The only access-token variable. Never exported, persisted, logged or put in Context.
 let accessToken = '';
 let expiresAt = 0;

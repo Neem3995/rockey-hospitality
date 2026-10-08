@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
@@ -16,6 +16,22 @@ vi.mock('../services/housekeepingService.js', async (original) => ({
 function renderApp(path, value = {}) {
   return render(<MemoryRouter initialEntries={[path]}><TestAuth value={value}><App /></TestAuth></MemoryRouter>);
 }
+
+it.each([false,true])('synchronously guards same-tick authentication submissions (registration=%s)', async registration => {
+  /** @type {() => void} */ let finish = () => {};
+  const pending = new Promise(resolve => { finish = () => resolve(undefined); });
+  const action = vi.fn(() => pending);
+  renderApp(registration ? '/register' : '/login', registration ? {register:action} : {login:action});
+  if (registration) await userEvent.type(screen.getByLabelText('Name (required)'),'Synthetic worker');
+  await userEvent.type(screen.getByLabelText('Email (required)'),'worker@example.test');
+  await userEvent.type(screen.getByLabelText('Password (required)'),crypto.randomUUID());
+  const form = screen.getByLabelText('Password (required)').closest('form');
+  if (!form) throw new Error('Missing authentication form');
+  act(() => { fireEvent.submit(form); fireEvent.submit(form); });
+  expect(action).toHaveBeenCalledTimes(1);
+  await act(async () => { finish(); });
+  expect(screen.getByLabelText('Password (required)')).toHaveProperty('value','');
+});
 
 describe('FE-02 forms and guards', () => {
   it('blocks protected content during bootstrap without mounting private children', () => {

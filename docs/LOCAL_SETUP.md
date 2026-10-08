@@ -4,6 +4,7 @@
 
 Java **17**, MySQL **8**, Maven Wrapper **3.9.16**; Node compatible with frontend/package.json (verified 22.18.0).
 Use process-local JAVA_HOME; no system PATH change is needed.
+Actual executed results, skips and live-check limitations are recorded in [SECURITY_AND_QUALITY.md](SECURITY_AND_QUALITY.md#current-verification--2026-10-08), not inferred from the setup instructions below.
 
 ```powershell
 $env:JAVA_HOME = 'YOUR_JDK17_DIRECTORY'

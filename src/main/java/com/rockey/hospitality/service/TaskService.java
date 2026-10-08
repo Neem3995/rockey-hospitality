@@ -14,6 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * STUDY NOTE: @Service enforces task ownership, assignment and housekeeping transitions.
  * @Transactional keeps task and room state atomic; all mutations lock the room before loading the task.
+ * When assignment also locks a User, the order is User -> Room -> Task to avoid competing lock orders.
+ * Authentication uses UTC instants; operational LocalDateTime uses the configured JVM hotel zone.
  * USER reads only own assigned work; supervisor management is checked against the current database identity.
  * Repositories load entities and this service returns DTOs, including only safe worker/room summaries.
  */

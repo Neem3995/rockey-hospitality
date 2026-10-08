@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
  * @Service makes this injectable; @Transactional groups account/session writes with rollback.
  * AuthController delegates here, and UserRepository/token helpers provide persistence and secure tokens.
  * Registration creates USER only; refresh rotation stores a hash and logout clears refresh capability.
+ * Each User stores one refresh session: a new login replaces it, including sessions in other tabs/devices.
  */
 @Service
 public class AuthService {

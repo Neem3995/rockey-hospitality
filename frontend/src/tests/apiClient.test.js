@@ -32,6 +32,29 @@ async function authenticated(user = testUser()) {
   await client.bootstrapAuth();
 }
 
+it.each([0,500,502])('classifies uncertain %s without replaying a business write', async status => {
+  await authenticated(); fetchMock.mockClear();
+  if (status === 0) fetchMock.mockRejectedValueOnce(new TypeError('Network lost'));
+  else if (status === 502) fetchMock.mockResolvedValueOnce(new Response('unreadable success',{status:201}));
+  else fetchMock.mockResolvedValueOnce(reply({},status));
+  const failure = await client.apiRequest('/rooms',{method:'POST',body:JSON.stringify({roomNumber:'101',floor:1})}).catch(error => error);
+  expect(failure).toBeInstanceOf(client.ApiError); expect(client.isUncertainWriteFailure(failure)).toBe(true);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+it('preserves one-time 401 refresh/retry for a rejected business write', async () => {
+  await authenticated(); fetchMock.mockClear();
+  fetchMock.mockResolvedValueOnce(reply({},401)).mockResolvedValueOnce(reply(session())).mockResolvedValueOnce(reply(testUser())).mockResolvedValueOnce(reply({id:1},201));
+  await expect(client.apiRequest('/rooms',{method:'POST',body:'{}'})).resolves.toEqual({id:1});
+  expect(fetchMock.mock.calls.map(call => String(call[0]).split('/api')[1])).toEqual(['/rooms','/auth/refresh','/auth/me','/rooms']);
+});
+it('keeps confirmed rejections distinct and sanitizes a local form allowlist', () => {
+  for (const status of [400,401,403,404,409,429]) expect(client.isUncertainWriteFailure(new client.ApiError(status))).toBe(false);
+  expect(client.isUncertainWriteFailure(new client.StaleRequestError())).toBe(false);
+  expect(client.isUncertainWriteFailure(new Error('unknown'))).toBe(true);
+  expect(client.formFieldErrors(new client.ApiError(400,{floor:'Do not echo',password:'Do not echo'}),['floor'])).toEqual({floor:'Check this value.'});
+  expect(client.formFieldErrors(new Error('unknown'),['floor'])).toEqual({});
+});
+
 describe('FE-02 API client', () => {
   it('shares initial bootstrap, sends only cookie credentials and initializes the safe /me profile', async () => {
     const token = session();

@@ -1,9 +1,38 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as service from '../services/housekeepingService.js';
-import { apiRequest } from '../services/apiClient.js';
-vi.mock('../services/apiClient.js', () => ({apiRequest: vi.fn()}));
+import { apiRequest, ApiError } from '../services/apiClient.js';
+vi.mock('../services/apiClient.js', async original => ({...await original(), apiRequest: vi.fn()}));
 beforeEach(() => vi.clearAllMocks());
 describe('Small housekeeping API adapter', () => {
+  const room = { id: 1, roomNumber: '101', floor: 1, status: 'DIRTY', active: true };
+  const worker = { id: 1, name: 'Synthetic worker', email: 'worker@example.test', role: 'USER', active: true };
+  const task = { id: 1, title: 'Clean 101', status: 'ASSIGNED', priority: 'HIGH', assignedUser: worker, room, dueAt: null, completedAt: null };
+  const inspection = { id: 1, roomId: 1, taskId: 1, inspectedBy: worker, result: 'PASS', inspectedAt: '2026-07-01T12:00:00' };
+  const readers = [service.listTasks, service.listRooms, service.listUsers, () => service.listInspections(1)];
+  it.each(readers.flatMap((read, index) => [null, {}, 'not an array'].map(value => ({read, index, value}))))('rejects non-array response $index / $value safely', async ({read,value}) => {
+    vi.mocked(apiRequest).mockResolvedValue(value);
+    await expect(read()).rejects.toBeInstanceOf(ApiError);
+    await expect(read()).rejects.toMatchObject({status:502});
+  });
+  it.each([
+    {read:service.listTasks,value:{...task,room:null}},
+    {read:service.listTasks,value:{...task,assignedUser:undefined}},
+    {read:service.listTasks,value:{...task,dueAt:42}},
+    {read:service.listTasks,value:{...task,priority:'INVALID'}},
+    {read:service.listRooms,value:{...room,floor:'1'}},
+    {read:service.listRooms,value:{...room,active:'true'}},
+    {read:service.listUsers,value:{...worker,name:null}},
+    {read:service.listUsers,value:{...worker,role:'STAFF'}},
+    {read:()=>service.listInspections(1),value:{...inspection,inspectedBy:null}},
+    {read:()=>service.listInspections(1),value:{...inspection,inspectedAt:42}},
+  ])('rejects malformed essential fields %# without echoing data', async ({read,value}) => {
+    vi.mocked(apiRequest).mockResolvedValue([value]);
+    await expect(read()).rejects.toMatchObject({status:502,message:'The service is unavailable. Please try again.'});
+  });
+  it.each([{read:service.listTasks,value:task},{read:service.listRooms,value:room},{read:service.listUsers,value:worker},{read:()=>service.listInspections(1),value:inspection}])('accepts valid essential response %#', async ({read,value}) => {
+    vi.mocked(apiRequest).mockResolvedValue([value]);
+    expect(await read()).toEqual([value]);
+  });
   it('reads only frozen list/history routes with a cancellable request', async () => {
     vi.mocked(apiRequest).mockResolvedValue([]); const signal = new AbortController().signal;
     await service.listTasks(signal); await service.listRooms(signal); await service.listUsers(signal); await service.listInspections(1,signal);

@@ -17,13 +17,14 @@ export default function AuthPage({ registration = false }) {
   const [fieldErrors, setFieldErrors] = useState(/** @type {Record<string, string>} */ ({}));
   const errorRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const active = useRef(true);
+  const submitting = useRef(false);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
 
   /** @param {import('react').FormEvent<HTMLFormElement>} event */
   async function submit(event) {
     event.preventDefault();
-    if (pending) return;
+    if (submitting.current) return;
     /** @type {Record<string, string>} */
     const fields = {};
     if (registration && (name.trim().length < 2 || name.length > 100)) fields.name = 'Enter a name between 2 and 100 characters.';
@@ -34,6 +35,7 @@ export default function AuthPage({ registration = false }) {
     setFieldErrors(fields);
     setError('');
     if (Object.keys(fields).length) { setError('Check the highlighted fields.'); return; }
+    submitting.current = true;
     setPending(true);
     try {
       if (registration) await auth.register({ name, email, password });
@@ -44,6 +46,7 @@ export default function AuthPage({ registration = false }) {
         setFieldErrors(failure instanceof ApiError ? failure.fieldErrors : {});
       }
     } finally {
+      submitting.current = false;
       if (active.current) { setPending(false); setPassword(''); }
     }
   }

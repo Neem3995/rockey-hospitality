@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App.jsx';
 import { TestAuth, testUser } from './authTestHelpers.jsx';
-import { ApiError } from '../services/apiClient.js';
+import { ApiError, StaleRequestError, UNCERTAIN_WRITE_MESSAGE } from '../services/apiClient.js';
 import * as service from '../services/housekeepingService.js';
 
 vi.mock('../services/housekeepingService.js', async original => ({
@@ -244,4 +244,198 @@ it('keeps a logical focus fallback when inspection success removes the opener af
   expect(document.activeElement).toBe(opener);
   await act(async () => { pending.resolve([{...room,status:'READY'}]); });
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading',{name:'Rooms',level:1})));
+});
+
+describe('Verified form and write safeguards', () => {
+  const forms = [
+    {path:'/rooms',open:'Edit room 101',save:'Save room',field:'floor',label:'Floor (required)',value:'2'},
+    {path:'/tasks',open:'Edit Clean 101',save:'Save task',field:'title',label:'Title (required)',value:'Recheck room'},
+    {path:'/team',open:'Edit Synthetic housekeeper',save:'Save team member',field:'name',label:'Name (required)',value:'Updated worker'},
+  ];
+  it.each(forms)('$path associates safe 400 field errors, preserves input and accepts a correction', async config => {
+    vi.mocked(service.save).mockRejectedValueOnce(new ApiError(400,{[config.field]:'INTERNAL DETAILS',unexpected:'Do not display'}));
+    page(config.path,'ADMIN'); await userEvent.click(await screen.findByRole('button',{name:config.open}));
+    const input = screen.getByLabelText(config.label);
+    const original = /** @type {HTMLInputElement} */ (input).value;
+    await userEvent.click(screen.getByRole('button',{name:config.save}));
+    await waitFor(() => expect(input.getAttribute('aria-invalid')).toBe('true'));
+    expect(/** @type {HTMLInputElement} */ (input).value).toBe(original);
+    const errorId = input.getAttribute('aria-describedby') || '';
+    expect(document.getElementById(errorId)?.textContent).toBe('Check this value.');
+    expect(screen.queryByText('INTERNAL DETAILS')).toBeNull(); expect(screen.queryByText('Do not display')).toBeNull();
+    fireEvent.change(input,{target:{value:config.value}});
+    expect(input.getAttribute('aria-invalid')).not.toBe('true');
+    expect(document.getElementById(errorId)).toBeNull();
+    await userEvent.click(screen.getByRole('button',{name:config.save}));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(service.save).toHaveBeenCalledTimes(2);
+  });
+  it('associates task textarea and select errors without losing the draft', async () => {
+    vi.mocked(service.save).mockRejectedValueOnce(new ApiError(400,{description:'unsafe',assignedUserId:'unsafe'}));
+    page('/tasks'); await userEvent.click(await screen.findByRole('button',{name:'Edit Clean 101'}));
+    await userEvent.click(screen.getByRole('button',{name:'Save task'}));
+    for (const label of ['Description','Housekeeper (required)']) {
+      const field = screen.getByLabelText(label);
+      await waitFor(() => expect(field.getAttribute('aria-invalid')).toBe('true'));
+      expect(document.getElementById(field.getAttribute('aria-describedby') || '')?.textContent).toBe('Check this value.');
+    }
+    fireEvent.change(screen.getByLabelText('Description'),{target:{value:'Corrected description'}});
+    expect(screen.getByLabelText('Description').getAttribute('aria-invalid')).toBe('false');
+  });
+  it('associates room checkbox and inspection notes errors', async () => {
+    vi.mocked(service.save).mockRejectedValueOnce(new ApiError(400,{active:'unsafe'}));
+    page('/rooms'); await userEvent.click(await screen.findByRole('button',{name:'Edit room 101'}));
+    await userEvent.click(screen.getByRole('button',{name:'Save room'}));
+    const active = screen.getByLabelText('Active room');
+    await waitFor(() => expect(active.getAttribute('aria-invalid')).toBe('true'));
+    expect(document.getElementById(active.getAttribute('aria-describedby') || '')?.textContent).toBe('Check this value.');
+    await userEvent.click(active); expect(active.getAttribute('aria-invalid')).toBe('false');
+  });
+  it('associates inspection textarea errors and clears them when corrected', async () => {
+    vi.mocked(service.listRooms).mockResolvedValue([{...room,status:'INSPECTION'}]);
+    vi.mocked(service.listTasks).mockResolvedValue([{...task,status:'COMPLETED',completedAt:time}]);
+    vi.mocked(service.inspect).mockRejectedValueOnce(new ApiError(400,{notes:'unsafe',result:'unsafe'}));
+    page('/rooms'); await userEvent.click(await screen.findByRole('button',{name:'Inspect room 101'}));
+    await userEvent.click(screen.getByRole('button',{name:'Record inspection'}));
+    const notes = screen.getByLabelText('Inspection notes');
+    await waitFor(() => expect(notes.getAttribute('aria-invalid')).toBe('true'));
+    expect(document.getElementById(notes.getAttribute('aria-describedby') || '')?.textContent).toBe('Check this value.');
+    fireEvent.change(notes,{target:{value:'Corrected notes'}});
+    expect(notes.getAttribute('aria-invalid')).toBe('false');
+    expect(screen.getByLabelText('Result').getAttribute('aria-invalid')).toBe('true');
+    await userEvent.selectOptions(screen.getByLabelText('Result'),'FAIL');
+    expect(screen.getByLabelText('Result').getAttribute('aria-invalid')).toBe('false');
+  });
+  it.each(forms)('$path synchronously blocks two same-tick submissions', async config => {
+    const pending = deferred(); vi.mocked(service.save).mockReturnValueOnce(pending.promise);
+    page(config.path,'ADMIN'); await userEvent.click(await screen.findByRole('button',{name:config.open}));
+    const form = screen.getByRole('button',{name:config.save}).closest('form');
+    if (!form) throw new Error('Missing form');
+    act(() => { fireEvent.submit(form); fireEvent.submit(form); });
+    expect(service.save).toHaveBeenCalledTimes(1);
+    await act(async () => { pending.resolve({}); });
+  });
+  it.each(forms)('$path permits an explicit retry after confirmed 409 without read reconciliation', async config => {
+    vi.mocked(service.save).mockRejectedValueOnce(new ApiError(409));
+    page(config.path,'ADMIN'); await userEvent.click(await screen.findByRole('button',{name:config.open}));
+    await userEvent.click(screen.getByRole('button',{name:config.save}));
+    expect(await screen.findByText('The request conflicts with the current account or housekeeping workflow.')).toBeTruthy();
+    expect(screen.queryByRole('button',{name:'Refresh before retrying'})).toBeNull();
+    await userEvent.click(screen.getByRole('button',{name:config.save}));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(service.save).toHaveBeenCalledTimes(2);
+  });
+  it('associates team checkbox errors and clears them on edit', async () => {
+    vi.mocked(service.save).mockRejectedValueOnce(new ApiError(400,{active:'unsafe'}));
+    page('/team','ADMIN'); await userEvent.click(await screen.findByRole('button',{name:'Edit Synthetic housekeeper'}));
+    await userEvent.click(screen.getByRole('button',{name:'Save team member'}));
+    const active = screen.getByLabelText('Active account');
+    await waitFor(() => expect(active.getAttribute('aria-invalid')).toBe('true'));
+    expect(document.getElementById(active.getAttribute('aria-describedby') || '')?.textContent).toBe('Check this value.');
+    await userEvent.click(active); expect(active.getAttribute('aria-invalid')).toBe('false');
+  });
+  it.each(forms.flatMap(config => [0,500,502].map(code => ({...config,code}))))('$path blocks uncertain $code resubmission until a successful read', async config => {
+    vi.mocked(service.save).mockRejectedValueOnce(new ApiError(config.code));
+    page(config.path,'ADMIN'); await userEvent.click(await screen.findByRole('button',{name:config.open}));
+    await userEvent.click(screen.getByRole('button',{name:config.save}));
+    expect(await screen.findByText(UNCERTAIN_WRITE_MESSAGE)).toBeTruthy();
+    const saveButton = screen.getByRole('button',{name:config.save});
+    expect(saveButton).toHaveProperty('disabled',true);
+    const form = saveButton.closest('form'); if (!form) throw new Error('Missing form');
+    fireEvent.submit(form); expect(service.save).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByRole('button',{name:'Refresh before retrying'}));
+    await waitFor(() => expect(saveButton).toHaveProperty('disabled',false));
+    expect(service.save).toHaveBeenCalledTimes(1);
+    await userEvent.click(saveButton); expect(service.save).toHaveBeenCalledTimes(2);
+  });
+  it('failed reconciliation cannot unlock a task write; a later successful read can', async () => {
+    vi.mocked(service.save).mockRejectedValueOnce(new ApiError(0));
+    page('/tasks'); await userEvent.click(await screen.findByRole('button',{name:'Edit Clean 101'}));
+    await userEvent.click(screen.getByRole('button',{name:'Save task'}));
+    await screen.findByText(UNCERTAIN_WRITE_MESSAGE);
+    vi.mocked(service.listTasks).mockRejectedValueOnce(new ApiError(500));
+    await userEvent.click(screen.getByRole('button',{name:'Refresh before retrying'}));
+    await screen.findByText('Tasks unavailable');
+    expect(screen.getByRole('button',{name:'Save task'})).toHaveProperty('disabled',true);
+    expect(service.save).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByRole('button',{name:'Refresh before retrying'}));
+    await waitFor(() => expect(screen.getByRole('button',{name:'Save task'})).toHaveProperty('disabled',false));
+  });
+  it('reconciles a lost inspection success through history without submitting again', async () => {
+    vi.mocked(service.listRooms).mockResolvedValue([{...room,status:'INSPECTION'}]);
+    vi.mocked(service.listTasks).mockResolvedValue([{...task,status:'COMPLETED',completedAt:time}]);
+    vi.mocked(service.inspect).mockRejectedValueOnce(new ApiError(502));
+    page('/rooms'); await userEvent.click(await screen.findByRole('button',{name:'Inspect room 101'}));
+    await screen.findByText('No inspections recorded.');
+    await userEvent.click(screen.getByRole('button',{name:'Record inspection'}));
+    await within(screen.getByRole('dialog')).findByText(UNCERTAIN_WRITE_MESSAGE);
+    vi.mocked(service.listInspections).mockResolvedValue([{id:1,roomId:1,taskId:1,inspectedBy:{id:2,name:'Supervisor'},result:'PASS',notes:'Recorded',inspectedAt:time}]);
+    vi.mocked(service.listRooms).mockResolvedValue([{...room,status:'READY'}]);
+    await userEvent.click(screen.getByRole('button',{name:'Refresh before retrying'}));
+    expect(await screen.findByRole('dialog',{name:'Inspection history room 101'})).toBeTruthy();
+    expect(screen.queryByRole('button',{name:'Record inspection'})).toBeNull(); expect(service.inspect).toHaveBeenCalledTimes(1);
+  });
+  it('requires successful inspection history reconciliation, not only a room-list read', async () => {
+    vi.mocked(service.listRooms).mockResolvedValue([{...room,status:'INSPECTION'}]);
+    vi.mocked(service.listTasks).mockResolvedValue([{...task,status:'COMPLETED',completedAt:time}]);
+    vi.mocked(service.inspect).mockRejectedValueOnce(new ApiError(0));
+    page('/rooms'); await userEvent.click(await screen.findByRole('button',{name:'Inspect room 101'}));
+    await screen.findByText('No inspections recorded.');
+    await userEvent.click(screen.getByRole('button',{name:'Record inspection'}));
+    await within(screen.getByRole('dialog')).findByText(UNCERTAIN_WRITE_MESSAGE);
+    vi.mocked(service.listInspections).mockRejectedValueOnce(new ApiError(500));
+    await userEvent.click(screen.getByRole('button',{name:'Refresh before retrying'}));
+    await screen.findByText('History unavailable');
+    expect(screen.getByRole('button',{name:'Record inspection'})).toHaveProperty('disabled',true);
+    expect(service.inspect).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByRole('button',{name:'Refresh before retrying'}));
+    await waitFor(() => expect(screen.getByRole('button',{name:'Record inspection'})).toHaveProperty('disabled',false));
+  });
+  it.each(['/rooms','/team'])('%s prevents switching dialogs during an outside pending write', async path => {
+    const pending = deferred(); vi.mocked(service.deactivate).mockReturnValueOnce(pending.promise);
+    page(path,'ADMIN');
+    const target = path === '/rooms' ? 'Deactivate room 101' : 'Deactivate Synthetic housekeeper';
+    await userEvent.click(await screen.findByRole('button',{name:target}));
+    const opener = screen.getByRole('button',{name:path === '/rooms' ? 'Create room' : 'Create housekeeper or manager'});
+    expect(opener).toHaveProperty('disabled',true);
+    await act(async () => { pending.resolve(undefined); });
+    expect(opener).toHaveProperty('disabled',false);
+  });
+  it('ignores a late pending write after logout', async () => {
+    const pending = deferred(); vi.mocked(service.save).mockReturnValueOnce(pending.promise);
+    const view = page('/tasks'); await userEvent.click(await screen.findByRole('button',{name:'Edit Clean 101'}));
+    await userEvent.click(screen.getByRole('button',{name:'Save task'}));
+    view.rerender(<MemoryRouter><TestAuth><App /></TestAuth></MemoryRouter>);
+    await act(async () => { pending.resolve({}); });
+    expect(screen.getByRole('heading',{name:'Sign in',level:1})).toBeTruthy();
+    expect(screen.queryByText('Clean 101')).toBeNull(); expect(screen.queryByRole('dialog')).toBeNull();
+  });
+  it('does not turn a stale-session write into an uncertain-write notice', async () => {
+    vi.mocked(service.save).mockRejectedValueOnce(new StaleRequestError());
+    page('/tasks'); await userEvent.click(await screen.findByRole('button',{name:'Edit Clean 101'}));
+    await userEvent.click(screen.getByRole('button',{name:'Save task'}));
+    expect(screen.queryByText(UNCERTAIN_WRITE_MESSAGE)).toBeNull();
+    expect(screen.getByRole('button',{name:'Save task'})).toHaveProperty('disabled',false);
+  });
+});
+
+describe('Route focus and titles', () => {
+  it('changes title and focuses main only after pathname navigation, not refresh/theme', async () => {
+    page('/dashboard'); await screen.findByRole('heading',{name:'DIRTY rooms'});
+    expect(document.title).toBe('Dashboard | Rockey | Housekeeping Operations');
+    await userEvent.click(screen.getByRole('link',{name:'Rooms'}));
+    await screen.findByRole('table');
+    expect(document.title).toBe('Rooms | Rockey | Housekeeping Operations');
+    expect(document.activeElement).toBe(screen.getByRole('main'));
+    const refresh = screen.getByRole('button',{name:'Refresh rooms'});
+    await userEvent.click(refresh); await waitFor(() => expect(service.listRooms).toHaveBeenCalledTimes(3));
+    expect(document.activeElement).toBe(refresh);
+    const toggle = screen.getByRole('button',{name:/Switch to .* mode/});
+    await userEvent.click(toggle); expect(document.activeElement).toBe(toggle);
+    expect(screen.getByRole('link',{name:'Skip to content'}).getAttribute('href')).toBe('#main');
+  });
+  it('preserves not-found UI and gives it a meaningful title', () => {
+    page('/unknown'); expect(screen.getByRole('heading',{name:'Page not found'})).toBeTruthy();
+    expect(document.title).toBe('Page not found | Rockey | Housekeeping Operations');
+  });
 });
