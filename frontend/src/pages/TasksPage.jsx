@@ -10,13 +10,14 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import useAuth from '../auth/useAuth.js';
 import useRead from '../hooks/useRead.js';
-import { listTasks, listRooms, listUsers, save, deactivate, taskStatus, overdue, displayTime } from '../services/housekeepingService.js';
+import { listTaskPage, listRooms, listUsers, save, deactivate, taskStatus, overdue, displayTime } from '../services/housekeepingService.js';
 import { ApiError, StaleRequestError, formFieldErrors, isUncertainWriteFailure, UNCERTAIN_WRITE_MESSAGE } from '../services/apiClient.js';
 import Button from '../components/ui/Button.jsx';
 import Input from '../components/ui/Input.jsx';
 import Select from '../components/ui/Select.jsx';
 import Modal from '../components/ui/Modal.jsx';
 import Table from '../components/ui/Table.jsx';
+import Pagination from '../components/ui/Pagination.jsx';
 import ErrorNotice from '../components/ui/ErrorNotice.jsx';
 import Skeleton from '../components/ui/Skeleton.jsx';
 import Spinner from '../components/ui/Spinner.jsx';
@@ -34,13 +35,14 @@ export default function TasksPage() {
   const heading = useRef(/** @type {HTMLHeadingElement|null} */ (null));
   // Keep the same load function until supervisor changes, rather than re-triggering reads every render.
   // await pauses this async function between calls; the browser can still process input and render.
+  const [page, setPage] = useState(0);
+  const [filter, setFilter] = useState('');
   const load = useCallback(async (/** @type {AbortSignal} */ signal) => ({
-    tasks: await listTasks(signal),
+    tasks: await listTaskPage(signal, page, filter),
     rooms: supervisor ? await listRooms(signal) : [],
     users: supervisor ? await listUsers(signal) : [],
-  }), [supervisor]);
-  const view = useRead(String(auth.sessionKey), load, true);
-  const [filter, setFilter] = useState('');
+  }), [supervisor, page, filter]);
+  const view = useRead(auth.sessionKey + ':' + page + ':' + filter, load, true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(/** @type {Task|null} */ (null));
   const [draft, dispatch] = useReducer(draftReducer, undefined, blank);
@@ -103,7 +105,7 @@ export default function TasksPage() {
     void act(() => save('tasks', editing?.id ?? null, { ...draft, priority: draft.priority,
       roomId: Number(draft.roomId), assignedUserId: Number(draft.assignedUserId), dueAt: draft.dueAt || null }));
   }
-  const rows = (view.data?.tasks || []).filter(task => !filter || task.status === filter);
+  const rows = view.data?.tasks.items || [];
   /** @type {import('../components/ui/Table.jsx').TableColumn<Task>[]} */
   const columns = [
     { key: 'title', label: 'Work', render: t => <><strong>{t.title}</strong><p>{t.description}</p></> },
@@ -123,12 +125,14 @@ export default function TasksPage() {
     <p>{supervisor ? 'Assign and manage cleaning work; housekeepers start and complete it. Inspect completed rooms from Rooms.' : 'Start your assigned work, complete cleaning, then let a supervisor record the inspection.'}</p>
     {supervisor && <Button disabled={pending || uncertain} onClick={() => edit(null)}>Create task</Button>}
     <Button variant="secondary" disabled={pending || reconciling} onClick={refresh}>Refresh tasks</Button>
-    <Select id="task-filter" label="Task status filter" value={filter} onChange={e => setFilter(e.target.value)}>
+    <Select id="task-filter" label="Task status filter" value={filter} disabled={pending || reconciling || uncertain} onChange={e => { setFilter(e.target.value); setPage(0); }}>
       <option value="">All statuses</option>{['ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'].map(s => <option key={s}>{s}</option>)}</Select>
     {view.refreshing && <p role="status">Refreshing tasks…</p>}
     {error && !open && <p role="alert" className="status-danger">{error}</p>}
     {view.error ? <ErrorNotice title="Tasks unavailable" message={view.error.message} onRetry={refresh} />
       : !view.data ? <><Spinner label="Loading tasks…" /><Skeleton /></> : <Table caption="Housekeeping tasks" rows={rows} columns={columns} getRowKey={t => t.id} emptyMessage="No tasks in this view." />}
+    {view.data && <Pagination page={page} totalPages={view.data.tasks.totalPages} totalElements={view.data.tasks.totalElements}
+      onPage={setPage} disabled={view.loading || pending || reconciling || uncertain} label="Task pages" />}
     <Modal isOpen={open} onClose={() => { if (!pending) setOpen(false); }} title={editing ? 'Edit task' : 'Create task'} fallbackFocusRef={heading}>
       <form onSubmit={submit} aria-busy={pending}>
         {error && <p role="alert" className="status-danger">{error}</p>}

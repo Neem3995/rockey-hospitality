@@ -15,6 +15,8 @@ import java.util.*;
  * or decide what account role a caller can grant.
  */
 public interface UserRepository extends JpaRepository<User, Long> {
+    org.springframework.data.domain.Page<User> findByRole(User.Role role, org.springframework.data.domain.Pageable pageable);
+
     Optional<User> findByEmailIgnoreCase(String email);
     /** Session writes must serialize with account edits; ordinary identity reads remain unlocked. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)

@@ -1,6 +1,6 @@
 {
   "info": {
-    "name": "Rockey Housekeeping — API verification",
+    "name": "Rockey Housekeeping â€” API verification",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "description": "Disposable four-table housekeeping workflow. Supply adminEmail/adminPassword privately, never export environment/results containing tokens. This collection intentionally preserves test history."
   },
@@ -452,7 +452,7 @@
             "value": "Bearer {{managerToken}}"
           }
         ],
-        "url": "{{baseUrl}}/users"
+        "url": "{{baseUrl}}/users?page=0&size=20"
       },
       "event": [
         {
@@ -483,7 +483,8 @@
               "    }",
               "  } check(resultBody);",
               "});",
-              "pm.test('Housekeepers only',()=>pm.expect(resultBody.every(u=>u.role==='USER')).to.be.true);"
+              "pm.test('Housekeepers only',()=>pm.expect(resultBody.items.every(u=>u.role==='USER')).to.be.true);",
+              "pm.test('Bounded page with scoped totals',()=> { pm.expect(resultBody.page).to.equal(0); pm.expect(resultBody.size).to.equal(20); pm.expect(Array.isArray(resultBody.items)).to.be.true; pm.expect(resultBody.totalPages).to.equal(Math.ceil(resultBody.totalElements/20)); pm.expect(resultBody.items.length).to.be.at.most(20); });"
             ]
           }
         }
@@ -618,7 +619,7 @@
             "value": "Bearer {{workerToken}}"
           }
         ],
-        "url": "{{baseUrl}}/users"
+        "url": "{{baseUrl}}/users?page=0&size=20"
       },
       "event": [
         {
@@ -784,7 +785,7 @@
       ]
     },
     {
-      "name": "List rooms is an array",
+      "name": "List rooms is a bounded page",
       "request": {
         "method": "GET",
         "header": [
@@ -797,7 +798,7 @@
             "value": "Bearer {{managerToken}}"
           }
         ],
-        "url": "{{baseUrl}}/rooms"
+        "url": "{{baseUrl}}/rooms?page=0&size=20"
       },
       "event": [
         {
@@ -828,7 +829,7 @@
               "    }",
               "  } check(resultBody);",
               "});",
-              "pm.test('Plain list',()=>pm.expect(Array.isArray(resultBody)).to.be.true);"
+              "pm.test('Bounded page with scoped totals',()=> { pm.expect(resultBody.page).to.equal(0); pm.expect(resultBody.size).to.equal(20); pm.expect(Array.isArray(resultBody.items)).to.be.true; pm.expect(resultBody.totalPages).to.equal(Math.ceil(resultBody.totalElements/20)); pm.expect(resultBody.items.length).to.be.at.most(20); });"
             ]
           }
         }
@@ -899,7 +900,7 @@
             "value": "Bearer {{workerToken}}"
           }
         ],
-        "url": "{{baseUrl}}/rooms"
+        "url": "{{baseUrl}}/rooms?page=0&size=20"
       },
       "event": [
         {
@@ -1180,7 +1181,7 @@
             "value": "Bearer {{workerToken}}"
           }
         ],
-        "url": "{{baseUrl}}/tasks"
+        "url": "{{baseUrl}}/tasks?page=0&size=20"
       },
       "event": [
         {
@@ -1211,7 +1212,8 @@
               "    }",
               "  } check(resultBody);",
               "});",
-              "pm.test('Owned tasks only',()=>pm.expect(resultBody.every(t=>t.assignedUser.id===Number(pm.variables.get('workerId')))).to.be.true);"
+              "pm.test('Owned tasks only',()=>pm.expect(resultBody.items.every(t=>t.assignedUser.id===Number(pm.variables.get('workerId')))).to.be.true);",
+              "pm.test('Bounded page with scoped totals',()=> { pm.expect(resultBody.page).to.equal(0); pm.expect(resultBody.size).to.equal(20); pm.expect(Array.isArray(resultBody.items)).to.be.true; pm.expect(resultBody.totalPages).to.equal(Math.ceil(resultBody.totalElements/20)); pm.expect(resultBody.items.length).to.be.at.most(20); });"
             ]
           }
         }
@@ -2395,7 +2397,7 @@
             "value": "Bearer {{managerToken}}"
           }
         ],
-        "url": "{{baseUrl}}/rooms/{{roomId}}/inspections"
+        "url": "{{baseUrl}}/rooms/{{roomId}}/inspections?page=0&size=20"
       },
       "event": [
         {
@@ -2426,7 +2428,8 @@
               "    }",
               "  } check(resultBody);",
               "});",
-              "pm.test('Both inspections retained',()=>pm.expect(resultBody.map(i=>i.result)).to.deep.equal(['PASS','FAIL']));"
+              "pm.test('Both inspections retained',()=>pm.expect(resultBody.items.map(i=>i.result)).to.deep.equal(['PASS','FAIL']));",
+              "pm.test('Bounded page with scoped totals',()=> { pm.expect(resultBody.page).to.equal(0); pm.expect(resultBody.size).to.equal(20); pm.expect(Array.isArray(resultBody.items)).to.be.true; pm.expect(resultBody.totalPages).to.equal(Math.ceil(resultBody.totalElements/20)); pm.expect(resultBody.items.length).to.be.at.most(20); });"
             ]
           }
         }
@@ -3215,7 +3218,7 @@
             "value": "Bearer {{otherToken}}"
           }
         ],
-        "url": "{{baseUrl}}/tasks"
+        "url": "{{baseUrl}}/tasks?page=0&size=20"
       },
       "event": [
         {
@@ -3796,7 +3799,7 @@
             "value": "application/json"
           }
         ],
-        "url": "{{baseUrl}}/tasks"
+        "url": "{{baseUrl}}/tasks?page=0&size=20"
       },
       "event": [
         {

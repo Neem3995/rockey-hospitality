@@ -9,13 +9,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import useAuth from '../auth/useAuth.js';
 import useRead from '../hooks/useRead.js';
-import { listRooms, listTasks, listInspections, save, deactivate, roomStatus, inspect, displayTime } from '../services/housekeepingService.js';
+import { listRoomPage, listTasks, listInspections, save, deactivate, roomStatus, inspect, displayTime } from '../services/housekeepingService.js';
 import { ApiError, StaleRequestError, formFieldErrors, isUncertainWriteFailure, UNCERTAIN_WRITE_MESSAGE } from '../services/apiClient.js';
 import Button from '../components/ui/Button.jsx';
 import Input from '../components/ui/Input.jsx';
 import Select from '../components/ui/Select.jsx';
 import Modal from '../components/ui/Modal.jsx';
 import Table from '../components/ui/Table.jsx';
+import Pagination from '../components/ui/Pagination.jsx';
 import ErrorNotice from '../components/ui/ErrorNotice.jsx';
 import Skeleton from '../components/ui/Skeleton.jsx';
 import Spinner from '../components/ui/Spinner.jsx';
@@ -24,8 +25,10 @@ import Spinner from '../components/ui/Spinner.jsx';
 export default function RoomsPage() {
   const auth = useAuth();
   const heading = useRef(/** @type {HTMLHeadingElement|null} */ (null));
-  const load = useCallback(async (/** @type {AbortSignal} */ signal) => ({ rooms: await listRooms(signal), tasks: await listTasks(signal) }), []);
-  const view = useRead(String(auth.sessionKey), load, true);
+  const [page, setPage] = useState(0);
+  const [historyPage, setHistoryPage] = useState(0);
+  const load = useCallback(async (/** @type {AbortSignal} */ signal) => ({ rooms: await listRoomPage(signal, page), tasks: await listTasks(signal) }), [page]);
+  const view = useRead(auth.sessionKey + ':' + page, load, true);
   const [mode, setMode] = useState(/** @type {'room'|'inspect'|'history'|null} */ (null));
   const [selected, setSelected] = useState(/** @type {Room|null} */ (null));
   const [draft, setDraft] = useState({ roomNumber: '', floor: '1', status: 'READY', active: true });
@@ -71,13 +74,13 @@ export default function RoomsPage() {
   /** @param {Room|null} room */
   function edit(room) {
     if (submitting.current || mustReconcile.current) return;
-    setSelected(room); setDraft(room ? { roomNumber: room.roomNumber, floor: String(room.floor), status: room.status, active: room.active } : { roomNumber: '', floor: '1', status: 'READY', active: true });
+    setHistoryPage(0); setSelected(room); setDraft(room ? { roomNumber: room.roomNumber, floor: String(room.floor), status: room.status, active: room.active } : { roomNumber: '', floor: '1', status: 'READY', active: true });
     setError(''); setFieldErrors({}); setMode('room');
   }
   /** @param {Room} room @param {'inspect'|'history'} nextMode */
   function inspection(room, nextMode) {
     if (submitting.current || mustReconcile.current) return;
-    setSelected(room); setResult('PASS'); setNotes(''); setError(''); setFieldErrors({});
+    setHistoryPage(0); setSelected(room); setResult('PASS'); setNotes(''); setError(''); setFieldErrors({});
     const latest = (view.data?.tasks || []).filter(t => t.room.id === room.id && t.status === 'COMPLETED').sort((a,b) => b.id - a.id)[0];
     setInspectionTask(latest ? String(latest.id) : '');
     setMode(nextMode);
@@ -127,7 +130,9 @@ export default function RoomsPage() {
     {view.refreshing && <p role="status">Refreshing rooms…</p>}
     {error && !mode && <p role="alert" className="status-danger">{error}</p>}
     {view.error ? <ErrorNotice title="Rooms unavailable" message={view.error.message} onRetry={refresh} /> : !view.data ?
-      <><Spinner label="Loading rooms…" /><Skeleton /></> : <Table caption="Housekeeping rooms" rows={view.data.rooms} columns={columns} getRowKey={r => r.id} emptyMessage="No rooms yet." />}
+      <><Spinner label="Loading rooms…" /><Skeleton /></> : <Table caption="Housekeeping rooms" rows={view.data.rooms.items} columns={columns} getRowKey={r => r.id} emptyMessage="No rooms yet." />}
+    {view.data && <Pagination page={page} totalPages={view.data.rooms.totalPages} totalElements={view.data.rooms.totalElements}
+      onPage={setPage} disabled={view.loading || pending || reconciling || uncertain} label="Room pages" />}
     <Modal isOpen={mode === 'room'} onClose={() => { if (!pending) setMode(null); }} title={selected ? 'Edit room' : 'Create room'} fallbackFocusRef={heading}>
       <form onSubmit={submit} aria-busy={pending}>{error && <p role="alert" className="status-danger">{error}</p>}
         {uncertain && <Button type="button" disabled={reconciling} onClick={refresh}>Refresh before retrying</Button>}
@@ -154,8 +159,10 @@ export default function RoomsPage() {
       </form>}
       <h3>Recorded inspections</h3>
       {history.error ? <ErrorNotice title="History unavailable" message={history.error.message} onRetry={history.reload} />
-        : history.loading ? <Spinner label="Loading inspections…" /> : history.data?.length ? <ul>{history.data.map(i =>
+        : history.loading ? <Spinner label="Loading inspections…" /> : history.data?.length ? <ul>{history.data.slice(historyPage * 20, (historyPage + 1) * 20).map(i =>
           <li key={i.id}>{i.result} · Task {i.taskId} · {i.inspectedBy.name} · {displayTime(i.inspectedAt)}<p>{i.notes}</p></li>)}</ul> : <p>No inspections recorded.</p>}
+      {history.data && <Pagination page={historyPage} totalPages={Math.ceil(history.data.length / 20)} totalElements={history.data.length}
+        onPage={setHistoryPage} disabled={history.loading || pending || reconciling || uncertain} label="Inspection history pages" />}
     </Modal>
   </section>;
 }

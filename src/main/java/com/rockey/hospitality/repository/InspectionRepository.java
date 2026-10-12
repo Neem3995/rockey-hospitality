@@ -12,5 +12,7 @@ import java.util.*;
  * This interface does not choose PASS/FAIL, authenticate the inspector or erase old history.
  */
 public interface InspectionRepository extends JpaRepository<Inspection, Long> {
+    org.springframework.data.domain.Page<Inspection> findByRoomId(Long roomId, org.springframework.data.domain.Pageable pageable);
+
     List<Inspection> findByRoomIdOrderByIdDesc(Long roomId);
 }

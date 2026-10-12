@@ -5,16 +5,17 @@
  * State controls the Modal/errors; refs stop overlapping or uncertain repeat writes, and read
  * cleanup/session remounts discard old data. USER/MANAGER options do not override UserService rules.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import useAuth from '../auth/useAuth.js';
 import useRead from '../hooks/useRead.js';
-import { listUsers, save, deactivate, roleLabel } from '../services/housekeepingService.js';
+import { listUserPage, save, deactivate, roleLabel } from '../services/housekeepingService.js';
 import { ApiError, StaleRequestError, formFieldErrors, isUncertainWriteFailure, UNCERTAIN_WRITE_MESSAGE } from '../services/apiClient.js';
 import Button from '../components/ui/Button.jsx';
 import Input from '../components/ui/Input.jsx';
 import Select from '../components/ui/Select.jsx';
 import Modal from '../components/ui/Modal.jsx';
 import Table from '../components/ui/Table.jsx';
+import Pagination from '../components/ui/Pagination.jsx';
 import ErrorNotice from '../components/ui/ErrorNotice.jsx';
 import Skeleton from '../components/ui/Skeleton.jsx';
 import Spinner from '../components/ui/Spinner.jsx';
@@ -24,7 +25,9 @@ export default function TeamPage() {
   const auth = useAuth();
   const admin = auth.user?.role === 'ADMIN';
   const heading = useRef(/** @type {HTMLHeadingElement|null} */ (null));
-  const view = useRead(String(auth.sessionKey), listUsers, true);
+  const [page, setPage] = useState(0);
+  const load = useCallback((/** @type {AbortSignal} */ signal) => listUserPage(signal, page), [page]);
+  const view = useRead(auth.sessionKey + ':' + page, load, true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(/** @type {TeamUser|null} */ (null));
   const [draft, setDraft] = useState({ name: '', email: '', password: '', role: 'USER', active: true });
@@ -95,7 +98,9 @@ export default function TeamPage() {
     {view.refreshing && <p role="status">Refreshing team…</p>}
     {error && !open && <p role="alert" className="status-danger">{error}</p>}
     {view.error ? <ErrorNotice title="Team unavailable" message={view.error.message} onRetry={refresh} /> : !view.data ? <><Spinner label="Loading team…" /><Skeleton /></> :
-      <Table caption="Housekeeping team" rows={view.data} columns={columns} getRowKey={u => u.id} emptyMessage="No team members found." />}
+      <Table caption="Housekeeping team" rows={view.data.items} columns={columns} getRowKey={u => u.id} emptyMessage="No team members found." />}
+    {view.data && <Pagination page={page} totalPages={view.data.totalPages} totalElements={view.data.totalElements}
+      onPage={setPage} disabled={view.loading || pending || reconciling || uncertain} label="Team pages" />}
     <Modal isOpen={open} onClose={() => { if (!pending) { setOpen(false); setDraft(previous => ({ ...previous, password: '' })); } }} title={editing ? 'Edit team member' : 'Create team member'} fallbackFocusRef={heading}>
       <form onSubmit={submit} aria-busy={pending}>{error && <p role="alert" className="status-danger">{error}</p>}
         {uncertain && <Button type="button" disabled={reconciling} onClick={refresh}>Refresh before retrying</Button>}

@@ -8,7 +8,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import java.util.List;
+import com.rockey.hospitality.dto.PageResponse;
 
 /**
  * STUDY NOTE: Spring routes /api/rooms requests here after the security checks.
@@ -25,7 +25,10 @@ public class RoomController {
     public RoomController(RoomService service) { this.service = service; }
     @GetMapping
     @Operation(description = "MANAGER/ADMIN: list rooms.")
-    public List<RoomResponse> list(@AuthenticationPrincipal RockeyUserPrincipal actor) { return service.list(actor.getId()); }
+    public PageResponse<RoomResponse> list(@AuthenticationPrincipal RockeyUserPrincipal actor,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return service.page(actor.getId(), page, size);
+    }
     @GetMapping("/{id}")
     @Operation(description = "MANAGER/ADMIN: view a room.")
     public RoomResponse get(@AuthenticationPrincipal RockeyUserPrincipal actor, @PathVariable Long id) { return service.get(actor.getId(), id); }
@@ -49,8 +52,9 @@ public class RoomController {
     public void deactivate(@AuthenticationPrincipal RockeyUserPrincipal actor, @PathVariable Long id) { service.deactivate(actor.getId(), id); }
     @GetMapping("/{id}/inspections")
     @Operation(description = "MANAGER/ADMIN: read retained room inspection history.")
-    public List<InspectionResponse> inspections(@AuthenticationPrincipal RockeyUserPrincipal actor, @PathVariable Long id) {
-        return service.inspectionHistory(actor.getId(), id);
+    public PageResponse<InspectionResponse> inspections(@AuthenticationPrincipal RockeyUserPrincipal actor, @PathVariable Long id,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return service.inspectionPage(actor.getId(), id, page, size);
     }
     @PostMapping("/{id}/inspections") @ResponseStatus(HttpStatus.CREATED)
     @Operation(description = "MANAGER/ADMIN: inspect completed cleaning work; PASS makes READY, FAIL makes DIRTY.")

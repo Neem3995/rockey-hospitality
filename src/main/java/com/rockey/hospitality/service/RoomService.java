@@ -8,6 +8,8 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import com.rockey.hospitality.dto.PageResponse;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +31,14 @@ public class RoomService {
     public RoomService(RoomRepository rooms, TaskRepository tasks, InspectionRepository inspections,
                        UserService users, Clock clock) {
         this.rooms = rooms; this.tasks = tasks; this.inspections = inspections; this.users = users; this.clock = clock;
+    }
+
+    /** Bounded list: authorization is established before the repository count and content query. */
+    @Transactional(readOnly = true)
+    public PageResponse<RoomResponse> page(Long actorId, int page, int size) {
+        users.requireSupervisor(actorId);
+        var request = PageResponse.request(page, size, Sort.by("roomNumber").ascending().and(Sort.by("id")));
+        return PageResponse.from(rooms.findAll(request).map(RoomService::response));
     }
 
     @Transactional(readOnly = true)
@@ -90,6 +100,14 @@ public class RoomService {
         guardWork(room);
         room.deactivate();
         rooms.save(room);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<InspectionResponse> inspectionPage(Long actorId, Long roomId, int page, int size) {
+        users.requireSupervisor(actorId);
+        room(roomId);
+        return PageResponse.from(inspections.findByRoomId(roomId, PageResponse.request(page, size, Sort.by("id").descending()))
+                .map(this::inspectionResponse));
     }
 
     @Transactional(readOnly = true)

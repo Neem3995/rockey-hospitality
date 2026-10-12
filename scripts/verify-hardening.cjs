@@ -4,7 +4,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const collection = JSON.parse(fs.readFileSync(path.join(root,'postman/Rockey-Housekeeping.postman_collection.json'),'utf8'));
 const snapshot = JSON.parse(fs.readFileSync(path.join(root,'docs/rockey-openapi.json'),'utf8'));
-const normalize = value => value.replace('{{baseUrl}}','').replace('/api/','/').replace(/\{\{\w+\}\}|\{\w+\}/g,'{id}');
+const normalize = value => value.split('?')[0].replace('{{baseUrl}}','').replace('/api/','/').replace(/\{\{\w+\}\}|\{\w+\}/g,'{id}');
 const expected = new Set(Object.entries(snapshot.paths).flatMap(([url,value]) =>
   Object.keys(value).filter(method=>['get','post','put','delete'].includes(method)).map(method=>method.toUpperCase()+' '+normalize(url))));
 const covered = new Set(collection.item.map(item=>item.request.method+' '+normalize(item.request.url)));
@@ -26,7 +26,7 @@ newman.run({ collection, reporters: [], environment: {values:[
       const codes={};
       for (const execution of summary.run.executions) { const code=execution.response?.code || 'NO_RESPONSE'; codes[code]=(codes[code]||0)+1; }
       console.error('HTTP status counts: '+JSON.stringify(codes));
-      for (const failure of summary.run.failures.slice(0,5)) console.error((failure.source?.name || 'Unnamed assertion')+' — '+(failure.error?.name || 'request failure'));
+      for (const failure of summary.run.failures.slice(0,5)) console.error((failure.source?.name || 'Unnamed assertion')+' â€” '+(failure.error?.name || 'request failure'));
     }
     process.exitCode=1; return;
   }

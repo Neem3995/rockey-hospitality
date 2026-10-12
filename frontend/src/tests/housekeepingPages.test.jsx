@@ -9,7 +9,7 @@ import * as service from '../services/housekeepingService.js';
 
 vi.mock('../services/housekeepingService.js', async original => ({
   ...await original(), listTasks: vi.fn(), listRooms: vi.fn(), listUsers: vi.fn(),
-  listInspections: vi.fn(), save: vi.fn(), deactivate: vi.fn(), taskStatus: vi.fn(), roomStatus: vi.fn(), inspect: vi.fn(),
+  listTaskPage: vi.fn(), listRoomPage: vi.fn(), listUserPage: vi.fn(), listInspections: vi.fn(), save: vi.fn(), deactivate: vi.fn(), taskStatus: vi.fn(), roomStatus: vi.fn(), inspect: vi.fn(),
 }));
 const time = '2026-07-01T08:30:00';
 /** @type {import('../services/housekeepingService.js').Room} */
@@ -19,6 +19,11 @@ const task = { id: 1, title: 'Clean 101', description: 'Clean all surfaces', sta
   assignedUser: { id: 1, name: 'Synthetic housekeeper' }, room, dueAt: '2020-07-01T08:00:00', completedAt: null, createdAt: time, updatedAt: time };
 beforeEach(() => {
   vi.clearAllMocks();
+  const wrap=(/** @type {any[]} */ rows, page=0) => ({items:rows.slice(page*20,(page+1)*20),page,size:20,totalElements:rows.length,totalPages:Math.ceil(rows.length/20)});
+  vi.mocked(service.listTaskPage).mockImplementation(async (signal,page=0,status='') => wrap((await service.listTasks(signal)).filter(t=>!status || t.status===status),page));
+  vi.mocked(service.listRoomPage).mockImplementation(async (signal,page=0) => wrap(await service.listRooms(signal),page));
+  vi.mocked(service.listUserPage).mockImplementation(async (signal,page=0) => wrap(await service.listUsers(signal),page));
+
   vi.mocked(service.listTasks).mockResolvedValue([task]);
   vi.mocked(service.listRooms).mockResolvedValue([room]);
   vi.mocked(service.listUsers).mockResolvedValue([{ ...testUser(), name: 'Synthetic housekeeper' }]);
@@ -437,5 +442,28 @@ describe('Route focus and titles', () => {
   it('preserves not-found UI and gives it a meaningful title', () => {
     page('/unknown'); expect(screen.getByRole('heading',{name:'Page not found'})).toBeTruthy();
     expect(document.title).toBe('Page not found | Rockey | Housekeeping Operations');
+  });
+});
+
+
+describe('List page navigation', () => {
+  it('navigates server task pages and resets to page zero when status changes', async () => {
+    vi.mocked(service.listTasks).mockResolvedValue(Array.from({length:21},(_,i)=>({...task,id:i+1,title:'Clean '+(i+1)})));
+    page('/tasks','USER');
+    await screen.findByRole('button',{name:'Next page'});
+    expect(screen.queryByText('Clean 21')).toBeNull();
+    await userEvent.click(screen.getByRole('button',{name:'Next page'}));
+    await screen.findByText('Clean 21');
+    expect(service.listTaskPage).toHaveBeenLastCalledWith(expect.any(AbortSignal),1,'');
+    await userEvent.selectOptions(screen.getByLabelText('Task status filter'),'COMPLETED');
+    await screen.findByText('No tasks in this view.');
+    expect(service.listTaskPage).toHaveBeenLastCalledWith(expect.any(AbortSignal),0,'COMPLETED');
+  });
+  it('navigates team pages without exposing omitted rows', async () => {
+    vi.mocked(service.listUsers).mockResolvedValue(Array.from({length:21},(_,i)=>({...testUser(),id:i+1,name:'Worker '+(i+1)})));
+    page('/team'); await screen.findByText('Worker 1');
+    expect(screen.queryByText('Worker 21')).toBeNull();
+    await userEvent.click(screen.getByRole('button',{name:'Next page'})); await screen.findByText('Worker 21');
+    expect(service.listUserPage).toHaveBeenLastCalledWith(expect.any(AbortSignal),1);
   });
 });

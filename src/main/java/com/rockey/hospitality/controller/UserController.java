@@ -8,7 +8,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import java.util.List;
+import com.rockey.hospitality.dto.PageResponse;
 
 /**
  * STUDY NOTE: This is the Team API entry point for matching /api/users requests.
@@ -24,7 +24,10 @@ public class UserController {
     public UserController(UserService service) { this.service = service; }
     @GetMapping
     @Operation(description = "MANAGER: USER accounts only. ADMIN: all accounts.")
-    public List<UserResponse> list(@AuthenticationPrincipal RockeyUserPrincipal actor) { return service.list(actor.getId()); }
+    public PageResponse<UserResponse> list(@AuthenticationPrincipal RockeyUserPrincipal actor,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return service.page(actor.getId(), page, size);
+    }
     @GetMapping("/{id}")
     @Operation(description = "MANAGER: USER accounts only. ADMIN: any account.")
     public UserResponse get(@AuthenticationPrincipal RockeyUserPrincipal actor, @PathVariable Long id) { return service.get(actor.getId(), id); }

@@ -3,6 +3,8 @@ import * as service from '../services/housekeepingService.js';
 import { apiRequest, ApiError } from '../services/apiClient.js';
 vi.mock('../services/apiClient.js', async original => ({...await original(), apiRequest: vi.fn()}));
 beforeEach(() => vi.clearAllMocks());
+const envelope = (/** @type {any[]} */ items, page = 0, size = 100, totalElements = items.length) =>
+  ({items,page,size,totalElements,totalPages:Math.ceil(totalElements/size)});
 describe('Small housekeeping API adapter', () => {
   const room = { id: 1, roomNumber: '101', floor: 1, status: 'DIRTY', active: true };
   const worker = { id: 1, name: 'Synthetic worker', email: 'worker@example.test', role: 'USER', active: true };
@@ -26,18 +28,18 @@ describe('Small housekeeping API adapter', () => {
     {read:()=>service.listInspections(1),value:{...inspection,inspectedBy:null}},
     {read:()=>service.listInspections(1),value:{...inspection,inspectedAt:42}},
   ])('rejects malformed essential fields %# without echoing data', async ({read,value}) => {
-    vi.mocked(apiRequest).mockResolvedValue([value]);
+    vi.mocked(apiRequest).mockResolvedValue(envelope([value]));
     await expect(read()).rejects.toMatchObject({status:502,message:'The service is unavailable. Please try again.'});
   });
   it.each([{read:service.listTasks,value:task},{read:service.listRooms,value:room},{read:service.listUsers,value:worker},{read:()=>service.listInspections(1),value:inspection}])('accepts valid essential response %#', async ({read,value}) => {
-    vi.mocked(apiRequest).mockResolvedValue([value]);
+    vi.mocked(apiRequest).mockResolvedValue(envelope([value]));
     expect(await read()).toEqual([value]);
   });
   it('reads only frozen list/history routes with a cancellable request', async () => {
-    vi.mocked(apiRequest).mockResolvedValue([]); const signal = new AbortController().signal;
+    vi.mocked(apiRequest).mockResolvedValue(envelope([])); const signal = new AbortController().signal;
     await service.listTasks(signal); await service.listRooms(signal); await service.listUsers(signal); await service.listInspections(1,signal);
-    expect(vi.mocked(apiRequest).mock.calls.map(call => call[0])).toEqual(['/tasks','/rooms','/users','/rooms/1/inspections']);
-    expect(apiRequest).toHaveBeenLastCalledWith('/rooms/1/inspections',{signal});
+    expect(vi.mocked(apiRequest).mock.calls.map(call => call[0])).toEqual(['/tasks?page=0&size=100','/rooms?page=0&size=100','/users?page=0&size=100','/rooms/1/inspections?page=0&size=100']);
+    expect(apiRequest).toHaveBeenLastCalledWith('/rooms/1/inspections?page=0&size=100',{signal});
   });
   it('uses plain POST/PUT/DELETE and exact status/inspection bodies', async () => {
     await service.save('rooms',null,{roomNumber:'101'}); await service.save('tasks',1,{title:'Clean'}); await service.deactivate('users',2);
@@ -59,5 +61,32 @@ describe('Small housekeeping API adapter', () => {
     expect(service.roleLabel('USER')).toBe('Housekeeper'); expect(service.roleLabel('MANAGER')).toBe('Manager');
     expect(service.roleLabel('ADMIN')).toBe('Admin'); expect(service.displayTime(null)).toBe('Not set');
     expect(service.displayTime('2026-07-01T08:30:00')).toBe('2026-07-01 08:30 (hotel local time)');
+  });
+
+  it('traverses every scoped page for exact dashboard data and forwards abort signals', async () => {
+    const rows = Array.from({length:100},(_,i)=>({...task,id:i+1}));
+    vi.mocked(apiRequest).mockResolvedValueOnce(envelope(rows,0,100,101)).mockResolvedValueOnce(envelope([{...task,id:101}],1,100,101));
+    const signal=new AbortController().signal;
+    expect(await service.listTasks(signal)).toHaveLength(101);
+    expect(apiRequest).toHaveBeenLastCalledWith('/tasks?page=1&size=100',{signal});
+  });
+  it('rejects changing totals rather than displaying partial dashboard counts', async () => {
+    const rows=Array.from({length:100},(_,i)=>({...task,id:i+1}));
+    vi.mocked(apiRequest).mockResolvedValueOnce(envelope(rows,0,100,101)).mockResolvedValueOnce(envelope([{...task,id:101},{...task,id:102}],1,100,102));
+    await expect(service.listTasks()).rejects.toMatchObject({status:502});
+  });
+  it('rejects duplicate rows across pages', async () => {
+    const rows=Array.from({length:100},(_,i)=>({...task,id:i+1}));
+    vi.mocked(apiRequest).mockResolvedValueOnce(envelope(rows,0,100,101)).mockResolvedValueOnce(envelope([task],1,100,101));
+    await expect(service.listTasks()).rejects.toMatchObject({status:502});
+  });
+  it('reads a status-filtered task page and accepts empty out-of-range metadata', async () => {
+    vi.mocked(apiRequest).mockResolvedValue(envelope([],2,20,21));
+    const result=await service.listTaskPage(undefined,2,'COMPLETED');
+    expect(result).toMatchObject({page:2,totalElements:21,totalPages:2,items:[]});
+    expect(apiRequest).toHaveBeenCalledWith('/tasks?page=2&size=20&status=COMPLETED',{signal:undefined});
+  });
+  it.each([{items:[],page:0,size:100,totalElements:-1,totalPages:0},{items:[],page:0,size:100,totalElements:1,totalPages:1}, {items:[],page:1,size:100,totalElements:0,totalPages:0}])('rejects inconsistent page envelopes %#', async value => {
+    vi.mocked(apiRequest).mockResolvedValue(value); await expect(service.listTasks()).rejects.toMatchObject({status:502});
   });
 });

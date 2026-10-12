@@ -8,7 +8,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import java.util.List;
+import com.rockey.hospitality.dto.PageResponse;
 
 /**
  * STUDY NOTE: A controller connects an HTTP request to a service; it does not own the work rules.
@@ -25,7 +25,11 @@ public class TaskController {
     public TaskController(TaskService service) { this.service = service; }
     @GetMapping
     @Operation(description = "USER: own assigned tasks only. MANAGER/ADMIN: all tasks.")
-    public List<TaskResponse> list(@AuthenticationPrincipal RockeyUserPrincipal actor) { return service.list(actor.getId()); }
+    public PageResponse<TaskResponse> list(@AuthenticationPrincipal RockeyUserPrincipal actor,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) com.rockey.hospitality.entity.Task.Status status) {
+        return service.page(actor.getId(), page, size, status);
+    }
     @GetMapping("/{id}")
     @Operation(description = "USER: own assigned task only. MANAGER/ADMIN: any task.")
     public TaskResponse get(@AuthenticationPrincipal RockeyUserPrincipal actor, @PathVariable Long id) { return service.get(actor.getId(), id); }

@@ -82,3 +82,8 @@ Optional scripts/verify-hardening.cjs uses an existing Newman tool (ROCKEY_NEWMA
 Inputs: ROCKEY_HARDENING_ADMIN_EMAIL/PASSWORD privately; ROCKEY_HARDENING_API_URL default http://127.0.0.1:18080/api; disposable ROCKEY_DB_URL.
 It refuses non-disposable/non-loopback configuration, prints safe counts and exports only generated credential-free OpenAPI into ignored target/.
 This guide does not authorize resetting another database, installing services or deploying.
+
+
+## Required testing seed and deployment
+
+The [guarded seed runner and exact private inputs](REQUIRED_COMPLETION.md#testing-seed-execution-pending-approval) require explicit write approval; no seed/reset is authorized by setup instructions. Jenkins and same-origin HTTPS deployment are prepared in [the required completion plan](REQUIRED_COMPLETION.md), but no external service is configured or running.
