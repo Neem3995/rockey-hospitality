@@ -15,6 +15,10 @@ import java.util.*;
  * This layer fetches work; TaskService still decides ownership and allowed transitions.
  */
 public interface TaskRepository extends JpaRepository<Task, Long> {
+    @Query("select t from Task t where (:owner is null or t.assignedUser.id = :owner) and (:status is null or t.status = :status)")
+    org.springframework.data.domain.Page<Task> findScoped(@Param("owner") Long owner, @Param("status") Task.Status status,
+            org.springframework.data.domain.Pageable pageable);
+
     List<Task> findAllByOrderByIdDesc();
     List<Task> findByAssignedUserIdOrderByIdDesc(Long id);
     @Lock(LockModeType.PESSIMISTIC_WRITE)

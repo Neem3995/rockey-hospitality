@@ -6,6 +6,8 @@ import com.rockey.hospitality.entity.Task;
 import com.rockey.hospitality.exception.ApiException.*;
 import com.rockey.hospitality.repository.*;
 import java.util.List;
+import com.rockey.hospitality.dto.PageResponse;
+import org.springframework.data.domain.Sort;
 import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +37,15 @@ public class UserService {
     }
     public User account(Long id) {
         return users.findById(id).orElseThrow(() -> new ResourceNotFoundException("User account not found."));
+    }
+
+    /** Bounded list: authorization is established before the repository count and content query. */
+    @Transactional(readOnly = true)
+    public PageResponse<UserResponse> page(Long actorId, int page, int size) {
+        User actor = requireSupervisor(actorId);
+        var request = PageResponse.request(page, size, Sort.by("name").ascending().and(Sort.by("id")));
+        var rows = actor.getRole() == User.Role.ADMIN ? users.findAll(request) : users.findByRole(User.Role.USER, request);
+        return PageResponse.from(rows.map(UserService::response));
     }
 
     @Transactional(readOnly = true)

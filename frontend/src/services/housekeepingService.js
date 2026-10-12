@@ -60,14 +60,57 @@ function checkedList(value, valid) {
   if (!Array.isArray(value) || !value.every(valid)) throw new ApiError(502);
   return value;
 }
+/** @template T @typedef {{items:T[],page:number,size:number,totalElements:number,totalPages:number}} Page */
+/** The envelope is checked before rows reach React. An empty out-of-range page keeps its totals.
+ * @template T @param {unknown} value @param {(row:unknown)=>boolean} valid @param {number} page @param {number} size @returns {Page<T>}
+ */
+function checkedPage(value, valid, page, size) {
+  if (!object(value) || value.page !== page || value.size !== size
+      || typeof value.totalElements !== 'number' || !Number.isSafeInteger(value.totalElements) || value.totalElements < 0
+      || value.totalPages !== Math.ceil(value.totalElements / size)) throw new ApiError(502);
+  const items = checkedList(value.items, valid);
+  if (items.length !== Math.min(size, Math.max(0, value.totalElements - page * size))) throw new ApiError(502);
+  return /** @type {Page<T>} */ (value);
+}
+/** @template T @param {string} path @param {(row:unknown)=>boolean} valid @param {AbortSignal} [signal]
+ * @param {number} [page] @param {number} [size] @param {string} [query] @returns {Promise<Page<T>>}
+ */
+async function readPage(path, valid, signal, page = 0, size = 20, query = '') {
+  return checkedPage(await read(path + '?page=' + page + '&size=' + size + query, signal), valid, page, size);
+}
+/** @param {AbortSignal} [signal] @param {number} [page] @param {string} [status] @param {number} [size] @returns {Promise<Page<Task>>} */
+export function listTaskPage(signal, page = 0, status = '', size = 20) {
+  return readPage('/tasks', taskShape, signal, page, size, status ? '&status=' + encodeURIComponent(status) : '');
+}
+/** @param {AbortSignal} [signal] @param {number} [page] @param {number} [size] @returns {Promise<Page<Room>>} */
+export function listRoomPage(signal, page = 0, size = 20) { return readPage('/rooms', roomShape, signal, page, size); }
+/** @param {AbortSignal} [signal] @param {number} [page] @param {number} [size] @returns {Promise<Page<TeamUser>>} */
+export function listUserPage(signal, page = 0, size = 20) { return readPage('/users', userShape, signal, page, size); }
+/** @param {number} id @param {AbortSignal} [signal] @param {number} [page] @param {number} [size] @returns {Promise<Page<Inspection>>} */
+export function listInspectionPage(id, signal, page = 0, size = 20) { return readPage('/rooms/' + id + '/inspections', inspectionShape, signal, page, size); }
+/** Dashboard and form choices need complete scoped data, never an estimate from page one.
+ * Fetch bounded pages in order; reject changing totals or duplicate ids rather than show incomplete counts.
+ * @template {{id:number}} T @param {(page:number)=>Promise<Page<T>>} load @returns {Promise<T[]>}
+ */
+async function collectPages(load) {
+  const first = await load(0);
+  const rows = [...first.items];
+  for (let page = 1; page < first.totalPages; page++) {
+    const next = await load(page);
+    if (next.totalElements !== first.totalElements) throw new ApiError(502);
+    rows.push(...next.items);
+  }
+  if (new Set(rows.map(row => row.id)).size !== first.totalElements) throw new ApiError(502);
+  return rows;
+}
 /** @param {AbortSignal} [signal] @returns {Promise<Task[]>} */
-export async function listTasks(signal) { return /** @type {Task[]} */ (checkedList(await read('/tasks', signal), taskShape)); }
+export function listTasks(signal) { return collectPages(page => listTaskPage(signal, page, '', 100)); }
 /** @param {AbortSignal} [signal] @returns {Promise<Room[]>} */
-export async function listRooms(signal) { return /** @type {Room[]} */ (checkedList(await read('/rooms', signal), roomShape)); }
+export function listRooms(signal) { return collectPages(page => listRoomPage(signal, page, 100)); }
 /** @param {AbortSignal} [signal] @returns {Promise<TeamUser[]>} */
-export async function listUsers(signal) { return /** @type {TeamUser[]} */ (checkedList(await read('/users', signal), userShape)); }
+export function listUsers(signal) { return collectPages(page => listUserPage(signal, page, 100)); }
 /** @param {number} id @param {AbortSignal} [signal] @returns {Promise<Inspection[]>} */
-export async function listInspections(id, signal) { return /** @type {Inspection[]} */ (checkedList(await read('/rooms/' + id + '/inspections', signal), inspectionShape)); }
+export function listInspections(id, signal) { return collectPages(page => listInspectionPage(id, signal, page, 100)); }
 /** @param {'tasks'|'rooms'|'users'} domain @param {number|null} id @param {unknown} body */
 export function save(domain, id, body) { return write('/' + domain + (id === null ? '' : '/' + id), id === null ? 'POST' : 'PUT', body); }
 /** @param {'tasks'|'rooms'|'users'} domain @param {number} id */

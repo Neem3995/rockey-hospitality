@@ -29,7 +29,7 @@ No dormant removed-domain scaffolds. Backend role/ownership checks are authorita
 
 Only the assigned USER sees start/complete controls; MANAGER/ADMIN create, assign/reassign, edit, cancel and inspect instead.
 Task start/complete changes Room on backend; UI re-reads authorized lists. PASS makes READY; FAIL permits rework.
-Lists are arrays; local task status filter, no pagination engine or analytics endpoint.
+Lists use bounded server page envelopes; task status filtering is server-scoped. Previous/Next controls navigate task/room/team pages. Dashboard and form choices collect authorized pages without extrapolating counts. See [contract and limits](../docs/REQUIRED_COMPLETION.md#pagination-contract-and-decision-record).
 useState: UI/form state; useEffect/useContext: authenticated reads; useReducer: task draft; useMemo: counts; useCallback: cancellable loaders.
 
 Private client access JWT stays in memory. HttpOnly cookie handles refresh. 401 refresh/retry once (shared), ordinary 403 never refreshes.

@@ -391,7 +391,7 @@
         "tags": [
           "user-controller"
         ],
-        "description": "MANAGER: USER accounts only. ADMIN: all accounts.",
+        "description": "MANAGER: USER accounts only. ADMIN: all accounts. Bounded zero-based pagination, default size 20, maximum 100. Totals use the same caller scope. Fixed stable ordering; sort/owner query parameters do not widen scope.",
         "operationId": "list",
         "responses": {
           "200": {
@@ -399,15 +399,64 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/UserResponse"
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "page",
+                    "size",
+                    "totalElements",
+                    "totalPages"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UserResponse"
+                      }
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "size": {
+                      "type": "integer"
+                    },
+                    "totalElements": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    }
                   }
                 }
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000,
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -444,7 +493,7 @@
         "tags": [
           "task-controller"
         ],
-        "description": "USER: own assigned tasks only. MANAGER/ADMIN: all tasks.",
+        "description": "USER: own assigned tasks only. MANAGER/ADMIN: all tasks. Bounded zero-based pagination, default size 20, maximum 100. Totals use the same caller scope. Fixed stable ordering; sort/owner query parameters do not widen scope.",
         "operationId": "list_1",
         "responses": {
           "200": {
@@ -452,15 +501,78 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/TaskResponse"
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "page",
+                    "size",
+                    "totalElements",
+                    "totalPages"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TaskResponse"
+                      }
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "size": {
+                      "type": "integer"
+                    },
+                    "totalElements": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    }
                   }
                 }
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000,
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ASSIGNED",
+                "IN_PROGRESS",
+                "COMPLETED",
+                "CANCELLED"
+              ]
+            }
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -497,7 +609,7 @@
         "tags": [
           "room-controller"
         ],
-        "description": "MANAGER/ADMIN: list rooms.",
+        "description": "MANAGER/ADMIN: list rooms. Bounded zero-based pagination, default size 20, maximum 100. Totals use the same caller scope. Fixed stable ordering; sort/owner query parameters do not widen scope.",
         "operationId": "list_2",
         "responses": {
           "200": {
@@ -505,15 +617,64 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/RoomResponse"
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "page",
+                    "size",
+                    "totalElements",
+                    "totalPages"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RoomResponse"
+                      }
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "size": {
+                      "type": "integer"
+                    },
+                    "totalElements": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    }
                   }
                 }
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000,
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -550,7 +711,7 @@
         "tags": [
           "room-controller"
         ],
-        "description": "MANAGER/ADMIN: read retained room inspection history.",
+        "description": "MANAGER/ADMIN: read retained room inspection history. Bounded zero-based pagination, default size 20, maximum 100. Totals use the same caller scope. Fixed stable ordering; sort/owner query parameters do not widen scope.",
         "operationId": "inspections",
         "parameters": [
           {
@@ -561,6 +722,28 @@
               "type": "integer",
               "format": "int64"
             }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000,
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
           }
         ],
         "responses": {
@@ -569,9 +752,34 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/InspectionResponse"
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "page",
+                    "size",
+                    "totalElements",
+                    "totalPages"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/InspectionResponse"
+                      }
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "size": {
+                      "type": "integer"
+                    },
+                    "totalElements": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    }
                   }
                 }
               }
@@ -1441,6 +1649,130 @@
           "email",
           "password"
         ]
+      },
+      "PageResponseUserResponse": {
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "size",
+          "totalElements",
+          "totalPages"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserResponse"
+            }
+          },
+          "page": {
+            "type": "integer"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "totalElements": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalPages": {
+            "type": "integer"
+          }
+        }
+      },
+      "PageResponseRoomResponse": {
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "size",
+          "totalElements",
+          "totalPages"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RoomResponse"
+            }
+          },
+          "page": {
+            "type": "integer"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "totalElements": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalPages": {
+            "type": "integer"
+          }
+        }
+      },
+      "PageResponseTaskResponse": {
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "size",
+          "totalElements",
+          "totalPages"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskResponse"
+            }
+          },
+          "page": {
+            "type": "integer"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "totalElements": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalPages": {
+            "type": "integer"
+          }
+        }
+      },
+      "PageResponseInspectionResponse": {
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "size",
+          "totalElements",
+          "totalPages"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InspectionResponse"
+            }
+          },
+          "page": {
+            "type": "integer"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "totalElements": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalPages": {
+            "type": "integer"
+          }
+        }
       }
     },
     "securitySchemes": {

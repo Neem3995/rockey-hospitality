@@ -32,10 +32,10 @@ Public registration creates USER only. Backend role/ownership checks are authori
 Access JWTs stay in browser memory; refresh tokens stay in HttpOnly cookies, with hash-only rotation/revocation on User.
 No credentials/auth tokens are stored in localStorage/sessionStorage. Only a non-sensitive theme preference persists.
 
-Lists return complete arrays, not pagination wrappers. Dashboard counts use authorized lists, not a separate analytics domain.
+Lists return bounded page envelopes (default page 0/size 20, maximum size 100). Dashboard counts traverse complete authorized pages; no Analytics domain. See [required completion and deployment plan](docs/REQUIRED_COMPLETION.md).
 Maven verify enforces **≥70% production line coverage** (≥80% target), without exclusions.
 Opt-in live checks reset only disposable rockey_hospitality_hardening; skips are not passes.
-AWS is explicitly instructor-waived because of insufficient training. This does not waive CI/CD, deployment, accessible URLs or branch protection; those expectations remain pending clarification.
+AWS is explicitly instructor-waived because of insufficient training. This does not waive CI/CD, deployment, accessible URLs or branch protection; those requirements remain REQUIRED; execution is pending authorized external access.
 
 ## Current local checks
 

@@ -408,7 +408,7 @@ In [apiClient.js](../frontend/src/services/apiClient.js), `await fetch(\`${API_B
 
 First auth actions create a new epoch and explicitly allowlist login/register fields. The response's access token stays in the module-private variable. `establishSession` validates the response and requests `/auth/me` before publishing a safe account snapshot. `safeUser` tests current id/role/active shape and discards unknown fields. A protected `apiRequest` attaches Bearer, sends, and only on 401 may share a refresh and retry once with matching identity/scope. A 403 or uncertain network/server failure is not automatically replayed.
 
-[housekeepingService.js](../frontend/src/services/housekeepingService.js) builds frozen domain paths/bodies and checks list response fields actually used by the UI. `checkedList(await read('/tasks', signal), taskShape)` first reads JSON, then requires an array of valid consumed shapes. The JSDoc cast to Task[] does not perform that check; the functions do. These checks are not a complete server schema/security validator. Save/action responses lead the page to reload authoritative lists rather than calculate new lifecycle state locally.
+[housekeepingService.js](../frontend/src/services/housekeepingService.js) builds frozen domain paths/bodies and checks list response fields actually used by the UI. `checkedPage` verifies page metadata and consumed row shapes. `listTaskPage` reads one bounded page; `listTasks` traverses all scoped size-100 pages for dashboard/choice completeness and rejects changing totals or duplicates. The JSDoc cast to Task[] does not perform that check; the functions do. These checks are not a complete server schema/security validator. Save/action responses lead the page to reload authoritative lists rather than calculate new lifecycle state locally.
 
 Auth changes abort lifetime-bound requests. Checks after awaits prevent late old-session data from becoming current data. Promise sharing coalesces refresh within this module/tab, not across tabs or devices. Refresh still rotates the backend's one stored session; storage is not used to coordinate auth or persist JWTs.
 
@@ -428,9 +428,9 @@ In [useRead.js](../frontend/src/hooks/useRead.js), `const reload = useCallback((
 
 First a page supplies its session/scope key and a stable loader. useRead starts an AbortController and marks that effect active. It calls load and schedules success/error state only if still active. Cleanup sets active=false and aborts. Key changes hide old data immediately; same-key refresh can keep loaded rows while showing refreshing. An error clears private data. These layers handle both transport cancellation and stale completion, not just one.
 
-`pages/TasksPage.jsx` memoizes its loader with `[supervisor]`, fetching tasks and, for supervisors only, room/worker choices. Changing that value refreshes the loader; creating a new function each render would repeatedly retrigger an effect. The draft reducer uses `{ field, value }` or `{ reset }` to return new form data. Status filtering is local to the returned authorized list; it is not a new backend filter/pagination contract.
+`pages/TasksPage.jsx` memoizes its loader with `[supervisor, page, filter]`, fetching tasks and, for supervisors only, room/worker choices. Changing that value refreshes the loader; creating a new function each render would repeatedly retrigger an effect. The draft reducer uses `{ field, value }` or `{ reset }` to return new form data. Status filtering is a bounded server query; changing it resets page to zero. Ownership never comes from query parameters.
 
-`pages/RoomsPage.jsx` adds a history loader keyed by selected room/mode and validates reconciliation against inspection history. `pages/TeamPage.jsx` uses listUsers and the existing role rules. `pages/DashboardPage.jsx` derives simple housekeeping counts with useMemo from the authorized arrays: USER's own tasks; supervisor tasks plus active rooms. There is no Analytics backend domain/endpoint here. “Today”/overdue use hotel time when calculated, not a new timed background polling service.
+`pages/RoomsPage.jsx` adds a history loader keyed by selected room/mode and validates reconciliation against inspection history. `pages/TeamPage.jsx` uses listUserPage and the existing role rules. `pages/DashboardPage.jsx` derives simple housekeeping counts with useMemo from the authorized arrays: USER's own tasks; supervisor tasks plus active rooms. There is no Analytics backend domain/endpoint here. “Today”/overdue use hotel time when calculated, not a new timed background polling service.
 
 **Housekeeping example.** A same-session reload keeps row opener buttons mounted while the loading status announces refreshing. A switch to another account must not keep those private rows visible.
 
@@ -499,3 +499,8 @@ The first ADMIN is a separate reviewed local setup action: register a USER, stop
 - If a browser loses a successful response, what do we trust next? A fresh authorized list/history read, not guessed local state.
 
 Use the questions to trace a value or state change in the actual file. A good explanation can say both what a line does and what it deliberately leaves to the next layer.
+
+
+## Required pagination and delivery update
+
+The existing operation paths now use the [bounded pagination contract and deployment decision record](REQUIRED_COMPLETION.md#pagination-contract-and-decision-record). This intentionally replaces bare-array HTTP lists; internal complete reads collect authorized pages. New testing seed and required external execution are documented there. Earlier dated measurements stay in SECURITY_AND_QUALITY.md.

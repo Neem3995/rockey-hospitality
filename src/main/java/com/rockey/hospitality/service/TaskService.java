@@ -8,6 +8,8 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import com.rockey.hospitality.dto.PageResponse;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +31,14 @@ public class TaskService {
     private final Clock clock;
     public TaskService(TaskRepository tasks, RoomRepository rooms, UserRepository accounts, UserService users, Clock clock) {
         this.tasks = tasks; this.rooms = rooms; this.accounts = accounts; this.users = users; this.clock = clock;
+    }
+
+    /** Bounded list: authorization is established before the repository count and content query. */
+    @Transactional(readOnly = true)
+    public PageResponse<TaskResponse> page(Long actorId, int page, int size, Task.Status status) {
+        User actor = activeActor(actorId);
+        var request = PageResponse.request(page, size, Sort.by("id").descending());
+        return PageResponse.from(tasks.findScoped(actor.getRole() == User.Role.USER ? actorId : null, status, request).map(TaskService::response));
     }
 
     @Transactional(readOnly = true)

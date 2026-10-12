@@ -47,8 +47,10 @@ public class AuthService {
     public AuthSession login(String email, String password, String clientIp) {
         String normalized = email.trim().toLowerCase(Locale.ROOT);
         limiter.checkLoginAllowed(clientIp, normalized);
+        // Lock the primary key first (same order as account edits), then recheck the locked row's email.
         // Hold the account lock through password validation and refresh-session replacement.
-        User user = users.findForLogin(normalized).orElse(null);
+        User user = users.findIdByEmail(normalized).flatMap(users::findForUpdate)
+                .filter(locked -> normalized.equalsIgnoreCase(locked.getEmail())).orElse(null);
         if (user == null || !user.isActive() || !passwords.matches(password, user.getPasswordHash())) {
             limiter.recordLoginFailure(clientIp, normalized);
             throw new InvalidCredentialsException();
@@ -61,8 +63,10 @@ public class AuthService {
     public AuthSession refresh(String raw, String clientIp) {
         limiter.consumeRefreshAttempt(clientIp);
         if (raw == null || raw.isBlank()) throw new InvalidRefreshTokenException();
-        // The locked hash lookup ensures only one concurrent request can rotate this session.
-        User user = users.findByRefreshTokenHash(refreshTokens.hash(raw))
+        // Lock the candidate's primary key, then recheck its current hash: one concurrent rotation wins.
+        String hash = refreshTokens.hash(raw);
+        User user = users.findIdByRefreshTokenHash(hash).flatMap(users::findForUpdate)
+                .filter(locked -> hash.equals(locked.getRefreshTokenHash()))
                 .orElseThrow(InvalidRefreshTokenException::new);
         if (!user.isActive() || user.getRefreshTokenExpiresAt() == null
                 || !user.getRefreshTokenExpiresAt().isAfter(refreshTokens.currentDatabaseTime())) {

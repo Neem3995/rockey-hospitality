@@ -16,7 +16,7 @@ function Inspector() {
 it('StrictMode provider shares bootstrap, publishes safe context and unsubscribes on unmount', async () => {
   const token = crypto.randomUUID();
   const mock = vi.spyOn(globalThis, 'fetch')
-    .mockImplementation(async () => new Response(JSON.stringify([]), { status: 200 }))
+    .mockImplementation(async () => new Response(JSON.stringify({items:[],page:0,size:100,totalElements:0,totalPages:0}), { status: 200 }))
     .mockResolvedValueOnce(new Response(JSON.stringify({ accessToken: token, tokenType: 'Bearer', accessExpiresAt: new Date(Date.now() + 60000).toISOString() }), { status: 200 }))
     .mockResolvedValueOnce(new Response(JSON.stringify(testUser()), { status: 200 }));
   const storage = vi.spyOn(Storage.prototype, 'setItem');

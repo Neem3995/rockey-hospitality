@@ -2,6 +2,7 @@ package com.rockey.hospitality.configuration;
 
 import com.rockey.hospitality.controller.*;
 import com.rockey.hospitality.dto.AuthDtos.*;
+import com.rockey.hospitality.dto.PageResponse;
 import com.rockey.hospitality.dto.UserDtos.*;
 import com.rockey.hospitality.dto.RoomDtos.*;
 import com.rockey.hospitality.dto.TaskDtos.*;
@@ -136,11 +137,11 @@ class HousekeepingApiTest {
         mvc.perform(post("/api/tasks").header(HttpHeaders.AUTHORIZATION, bearer(User.Role.USER)))
                 .andExpect(status().isForbidden()); verifyNoInteractions(tasks);
     }
-    @Test void workerReadsArrayWithoutPaginationWrapper() throws Exception {
-        when(tasks.list(1L)).thenReturn(List.of(task()));
+    @Test void workerReadsBoundedPageWithAuthorizedTotals() throws Exception {
+        when(tasks.page(1L,0,20,null)).thenReturn(new PageResponse<>(List.of(task()),0,20,1,1));
         mvc.perform(get("/api/tasks").header(HttpHeaders.AUTHORIZATION, bearer(User.Role.USER)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$[0].assignedUser.id").value(1))
-                .andExpect(jsonPath("$[0].room.status").value("DIRTY")).andExpect(jsonPath("$[0].passwordHash").doesNotExist());
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].assignedUser.id").value(1))
+                .andExpect(jsonPath("$.items[0].room.status").value("DIRTY")).andExpect(jsonPath("$.items[0].passwordHash").doesNotExist());
     }
     @Test void workerReadsTaskAndUpdatesStatusOnly() throws Exception {
         when(tasks.get(1L, 5L)).thenReturn(task()); when(tasks.status(1L, 5L, Task.Status.IN_PROGRESS)).thenReturn(task());
@@ -162,10 +163,10 @@ class HousekeepingApiTest {
     }
     @Test void managementAccountCrudUsesSafeDtos() throws Exception {
         UserResponse result = new UserResponse(2L, "Test person", "person@example.test", User.Role.USER, true);
-        when(users.list(1L)).thenReturn(List.of(result)); when(users.get(1L, 2L)).thenReturn(result);
+        when(users.page(1L,0,20)).thenReturn(new PageResponse<>(List.of(result),0,20,1,1)); when(users.get(1L, 2L)).thenReturn(result);
         when(users.create(eq(1L), any())).thenReturn(result); when(users.update(eq(1L), eq(2L), any())).thenReturn(result);
         String token = bearer(User.Role.ADMIN);
-        mvc.perform(get("/api/users").header(HttpHeaders.AUTHORIZATION, token)).andExpect(status().isOk()).andExpect(jsonPath("$[0].active").value(true));
+        mvc.perform(get("/api/users").header(HttpHeaders.AUTHORIZATION, token)).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].active").value(true));
         mvc.perform(get("/api/users/2").header(HttpHeaders.AUTHORIZATION, token)).andExpect(status().isOk());
         mvc.perform(post("/api/users").header(HttpHeaders.AUTHORIZATION, token).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"Test person\",\"email\":\"person@example.test\",\"password\":\"synthetic-password\",\"role\":\"USER\"}"))
@@ -176,11 +177,11 @@ class HousekeepingApiTest {
         mvc.perform(delete("/api/users/2").header(HttpHeaders.AUTHORIZATION, token)).andExpect(status().isNoContent());
     }
     @Test void managerRoomAndInspectionCrud() throws Exception {
-        when(rooms.list(1L)).thenReturn(List.of(room())); when(rooms.get(1L,4L)).thenReturn(room());
+        when(rooms.page(1L,0,20)).thenReturn(new PageResponse<>(List.of(room()),0,20,1,1)); when(rooms.get(1L,4L)).thenReturn(room());
         when(rooms.create(eq(1L), any())).thenReturn(room()); when(rooms.update(eq(1L),eq(4L),any())).thenReturn(room());
         when(rooms.status(1L,4L,Room.Status.DIRTY)).thenReturn(room());
         InspectionResponse inspection = new InspectionResponse(7L,4L,5L,new UserSummary(1L,"Supervisor"),Inspection.Result.PASS,"Ready",time);
-        when(rooms.inspect(eq(1L),eq(4L),any())).thenReturn(inspection); when(rooms.inspectionHistory(1L,4L)).thenReturn(List.of(inspection));
+        when(rooms.inspect(eq(1L),eq(4L),any())).thenReturn(inspection); when(rooms.inspectionPage(1L,4L,0,20)).thenReturn(new PageResponse<>(List.of(inspection),0,20,1,1));
         String token = bearer(User.Role.MANAGER);
         mvc.perform(get("/api/rooms").header(HttpHeaders.AUTHORIZATION,token)).andExpect(status().isOk());
         mvc.perform(get("/api/rooms/4").header(HttpHeaders.AUTHORIZATION,token)).andExpect(status().isOk());
@@ -192,7 +193,7 @@ class HousekeepingApiTest {
                 .content("{\"taskId\":5,\"result\":\"PASS\",\"notes\":\"Ready\"}")).andExpect(status().isCreated())
                 .andExpect(jsonPath("$.inspectedBy.id").value(1)).andExpect(jsonPath("$.result").value("PASS"));
         mvc.perform(get("/api/rooms/4/inspections").header(HttpHeaders.AUTHORIZATION,token)).andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].inspectedAt").exists());
+                .andExpect(jsonPath("$.items[0].inspectedAt").exists());
         mvc.perform(delete("/api/rooms/4").header(HttpHeaders.AUTHORIZATION,token)).andExpect(status().isNoContent());
     }
     @Test void managerTaskCrud() throws Exception {
@@ -251,5 +252,19 @@ class HousekeepingApiTest {
     }
     @Test void undocumentedPathsAreDenied() throws Exception {
         mvc.perform(get("/api/unapproved").header(HttpHeaders.AUTHORIZATION,bearer(User.Role.ADMIN))).andExpect(status().isForbidden());
+    }
+
+    @Test void paginationCannotReplaceAuthenticatedOwner() throws Exception {
+        when(tasks.page(1L,2,10,null)).thenReturn(new PageResponse<>(List.of(),2,10,11,2));
+        mvc.perform(get("/api/tasks?page=2&size=10&assignedUserId=999&actorId=999")
+                .header("Authorization",bearer(User.Role.USER)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty())
+                .andExpect(jsonPath("$.totalElements").value(11)).andExpect(jsonPath("$.page").value(2));
+        verify(tasks).page(1L,2,10,null);
+    }
+    @Test void malformedPageAndStatusAreBadRequests() throws Exception {
+        String token = bearer(User.Role.USER);
+        mvc.perform(get("/api/tasks?page=abc").header("Authorization",token)).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/tasks?status=UNKNOWN").header("Authorization",token)).andExpect(status().isBadRequest());
     }
 }

@@ -80,7 +80,7 @@ Names above are grouping references. The actual production/test files are under 
 | Maintainability | Controller -> Service -> Repository -> Entity, DTO boundary, constructor injection, checked JS and small local state. No generic mutation/workflow framework or new dependency. |
 | Time | Authentication uses UTC Instant; operational offset-free LocalDateTime uses JVM America/New_York per local setup. UI must not relabel those values as UTC. |
 | Quality | Maven production line gate >=70%, Excellent target >=80%; success/failure/security cases. Use canonical measured results, not historical totals as fresh evidence. |
-| Scalability | Pagination is a documented capstone phase task but currently blocked awaiting waiver/approved contract. Do not claim it is implemented. |
+| Scalability | REQUIRED, locally implemented bounded pagination with scoped totals; live MySQL/deployed verification remains pending. |
 | Performance | No current benchmark/SLA evidence: PENDING measurement/accepted target. Do not invent response-time claims. |
 | Reproducibility | Fresh four-table schema, private first-ADMIN procedure and pinned project runtimes documented. Old nine-table data is incompatible, not automatically migrated/reset. |
 
@@ -197,7 +197,7 @@ Hooks have specific uses: useState for local UI/errors; useEffect for reads/rout
 
 [OpenAPI snapshot](rockey-openapi.json), [24-operation table and DTO/error guide](BACKEND_GUIDE.md#api--24-operations), [Postman collection](../postman/Rockey-Housekeeping.postman_collection.json).
 
-Auth: register/login/refresh/me/logout. Users: list/create/detail/update/deactivate. Rooms: list/create/detail/update/deactivate/status, history/list and inspection/create. Tasks: list/create/detail/update/cancel/status. Lists remain complete arrays; no unapproved page wrappers/filters/count endpoint are added.
+Auth: register/login/refresh/me/logout. Users: list/create/detail/update/deactivate. Rooms: list/create/detail/update/deactivate/status, history/list and inspection/create. Tasks: list/create/detail/update/cancel/status. Lists now return bounded page envelopes with scoped totals; task status filtering is server-side. No count/Analytics endpoint was added.
 
 Six UI routes: /login, /register, /dashboard, /tasks, /rooms, /team; unknown routes show Page not found. Rooms/Team are supervisor-only; task ownership is enforced server-side. All four core tables and twenty-four operations remain unchanged.
 
@@ -214,60 +214,59 @@ Six UI routes: /login, /register, /dashboard, /tasks, /rooms, /team; unknown rou
 | Checked JavaScript and ordinary React hooks | Course-aligned readable components; no TypeScript rewrite, schema library or generic mutation framework. |
 | Fixed safe field messages / dependency-free response checks | Prevent arbitrary server internals entering UI and reject malformed consumed shapes without duplicating business validation. |
 | Read reconciliation after uncertain write | A lost response may follow a committed mutation. No network/5xx replay; blocked writes require a successful explicit read, while existing legitimate 401 recovery remains. |
-| Keep array contract while pagination is unresolved | Both audits require clarification; this document does not waive the phase task or authorize contract changes. |
+| Bounded page contract | Required-completion instruction authorizes replacing bare arrays; defaults, scope and compatibility are documented in REQUIRED_COMPLETION.md. |
 | AWS waiver only | Instructor waived AWS due insufficient training; CI/CD, deployment, accessible URL and branch protection are not automatically waived. |
 
-## Requirement/evidence matrix and unresolved gates
+## Submission closeout checklist - 2026-10-12
 
-| Official expectation | Evidence / current status |
-|---|---|
-| 8+ stories, Excellent 10+; 10+ FRs; NFRs | Current sections above: 15 stories and 16 FRs, with acceptance/implementation mapping. Instructor grading is not claimed. |
-| Architecture, ERD, component diagram, API design | Current logical diagrams/full schema attributes above; linked OpenAPI and backend guide. Hosted-state diagram PENDING accepted deployment plan. |
-| Four-table Excellent target | Four core tables, actual constraints/cardinality/indexes documented. Mapping/cascade rationale recorded; no speculative extra relationship added. |
-| React/Vite, 5+ routes, reusable UI/hooks | Six routes, named reusable components and actual hook uses above; source/tests under frontend. |
-| Java/MySQL/JPA/service/controller/validation/errors/JWT/RBAC/testing | Existing production implementation and tests; measured current offline evidence in canonical quality record. |
-| >=70% coverage, >=80% Excellent target | See canonical measured run/scope; skipped live tests are not passes. |
-| Postman operations | Current collection has all 24 operations; static audit and historical/live execution distinguished in quality record. |
-| Pagination | **PENDING** instructor waiver or explicit response/filter/count contract approval; currently not implemented. |
-| Test seed-data script | **PENDING** accepted form/implementation. SQL files are schema and private bootstrap template only; API fixtures are not claimed to be an approved standalone seed-script substitute. |
-| Current Sonar requirement | **PENDING** authorization/environment and fresh analysis of housekeeping source; old nine-table dispositions are historical. |
-| AWS services | **WAIVED — instructor confirmed**. No AWS implementation planned in this pass. |
-| Non-AWS CI/CD | **PENDING** instructor decision; official phase tasks name CodePipeline, Excellent criteria name Jenkins. |
-| Deployment/frontend + backend accessible URLs | **PENDING** accepted non-AWS approach and actual URLs; localhost is not a public deployment. |
-| Branch protection | **PENDING** authorized policy/settings. Read-only GitHub checks on 2026-10-09 confirmed main unprotected, with no parent-inclusive rulesets or active branch rules. No GitHub setting changed. |
-| Presentation slides/PDF, 5–10 minute delivery | **PENDING** actual artifacts; local demo/presentation outline below is a plan, not completed delivery. |
-| Two peer reviews; feedback given/received/incorporated | **PENDING** genuine evidence; agent verification is not automatically two peer reviews. |
-| Jira shared board, final story status, closed sprint | **PENDING** actual instructor-accessible evidence. |
-| Self-assessment/Canvas submission/deadline | **PENDING** actual completion and current instructor deadline. |
-| Demo credentials | **PENDING** private setup/delivery; never put credential values in this file. |
+One current inventory, based on the supplied official 13-page rubric and current project records. AWS is waived as explicitly supplied by the user; no other waiver is inferred. Local/main source revision: `aa8d2b9c7e2ee43b20b88fc895a613f12d18c8e7`, independently matched through GitHub. Fresh changed-source measurements are in [the canonical quality record](SECURITY_AND_QUALITY.md#required-completion-verification---2026-10-12); [current contract and external plan](REQUIRED_COMPLETION.md) supersede the earlier closeout. Later disposable-MySQL seed and live-suite results, and the auth lock-order correction they exposed, are in [MySQL seed and live verification](SECURITY_AND_QUALITY.md#mysql-seed-and-live-verification---2026-10-12) and [the dated correction](FINAL_AUDIT_REMEDIATION.md#auth-lock-order-correction-and-live-verification---2026-10-12). External status is NOT VERIFIED when evidence is unavailable; local existence does not establish instructor acceptance or Canvas delivery.
 
-## Local demo plan (not executed in this polish pass)
+| Requirement | Status | Evidence location | Remaining action |
+|---|---|---|---|
+| Custom proposal / instructor approval | LOCAL CONTENT PRESENT; approval NOT VERIFIED | Problem, users and boundaries above; README | Supply written current-scope approval/acceptance. |
+| 8+ stories / 10+ functional requirements / NFRs | LOCAL CONTENT PRESENT | 15 stories, 16 FRs and NFRs above | Instructor review; performance/scalability limitations remain stated. |
+| Architecture, four-table ERD, React component diagram | LOCAL CONTENT PRESENT | Diagrams above; database/schema.sql | Submit current diagrams; deployment view depends on accepted delivery plan. |
+| API docs / exported Postman JSON | STATIC PASS, live Postman NOT RUN | rockey-openapi.json, BACKEND_GUIDE.md, postman/Rockey-Housekeeping.postman_collection.json | 24 operations and 58 refs checked; approve disposable live suite separately. |
+| Setup / README / decisions | LOCAL CONTENT PRESENT | README, LOCAL_SETUP.md, decisions above | Validate reviewer access; deployment/rollback guide depends on hosting decision. |
+| Backend / frontend source and safe verification | VERIFIED for stated offline scope: backend verify 180 entries, 155 passed, 25 skipped (opt-in live suite), 0 failures/errors, JaCoCo gate passed; frontend 226 passed | SECURITY_AND_QUALITY.md (local logs are ignored and unpublished) | Submit measured counts/coverage and limitations; no readiness claim. |
+| Eight persisted account/session races | REQUIRED / VERIFIED: all 8 passed in live run 2 (26/26). The first live run's 2 deadlock failures are retained separately and were fixed by the auth lock-order correction | HousekeepingMySqlTest.java; [dated correction](FINAL_AUDIT_REMEDIATION.md#auth-lock-order-correction-and-live-verification---2026-10-12) | Covers the tested interleavings only; not a universal deadlock-free guarantee. |
+| Sonar / quality gate / major-critical findings | REQUIRED / PENDING EXECUTION (NOT RUN; no authorized project) | Quality record, no current report-task.txt | Provide authorized existing host/project; scan corrected revision and retain task/gate/findings. Instructor must decide any alternative. |
+| Pagination | REQUIRED / IMPLEMENTED; unit, MockMvc, jsdom and 4 persisted MySQL tests VERIFIED (live run 2); authenticated browser check NOT RUN | PageResponse, repositories/services/controllers, frontend navigation, HousekeepingMySqlTest pagination tests | Authenticated browser and deployed verification pending an approved environment. |
+| Standalone test seed | REQUIRED / VERIFIED: executed on an empty disposable MySQL database as a least-privilege account and inspected read-only (counts, roles, foreign keys, task/room states, PASS/FAIL outcomes, no ADMIN) | database/seed-test.sql; scripts/seed-test.cjs; [MySQL seed and live verification](SECURITY_AND_QUALITY.md#mysql-seed-and-live-verification---2026-10-12) | Seeded rows were later removed by approved live-test fixtures and reset; re-seeding needs a new approval. |
+| AWS infrastructure / monitoring | WAIVED per supplied instruction | Current request and recorded exception | Retain instructor waiver with submission. |
+| Jenkins / non-AWS deployment / URLs / rollback | REQUIRED / CONFIGURATION PREPARED; PENDING EXECUTION (NOT RUN) | Jenkinsfile, deployment templates, REQUIRED_COMPLETION.md | Approve access/resources/installations/deployment; only a platform replacement needs instructor acceptance. |
+| Git / original main protection | REQUIRED / PENDING EXECUTION: SHA MATCH; protection ABSENT | Read-only GitHub metadata: protected=false, protection 404, no rules | Approve policy/settings separately; code already on main at verified SHA. |
+| Slides and required presentation PDF | PREPARED / LOCAL QA PASS; delivery NOT VERIFIED | docs/submission final PPTX/PDF and presenter notes | Rehearse; submit matching pair and retain Canvas receipt. |
+| 5-10 minute delivery / rehearsal | OUTLINE PREPARED, rehearsal NOT RUN | Nine-minute plan below | Rehearse with approved fixtures; time delivery and fallback. |
+| Two peer reviews / feedback given, received, incorporated | NOT VERIFIED | No supplied current peer-review evidence | Provide two genuine reviews and incorporation references. |
+| Jira shared board / final stories / closed sprint | NOT VERIFIED | External system unavailable | Supply instructor-accessible link, final status and closed-sprint evidence. |
+| Self-assessment | NOT VERIFIED | External submission unavailable | Complete and retain actual artifact/receipt. |
+| Canvas repository URL / documentation / slides PDF / Postman | NOT VERIFIED | No current Canvas receipts | Upload accepted artifacts; retain receipts. |
+| Current deadline | NOT VERIFIED | Rubric: end of final class; actual class date unavailable | Confirm instructor's date/time. |
+| Private demo access | LOCAL SESSION WORKS; delivery NOT VERIFIED | LOCAL_DEMO_WALKTHROUGH.md and fresh USER browser check | Provide credentials privately and verify intended reviewer access. Never include secrets in submission docs. |
 
-Use [LOCAL_SETUP.md](LOCAL_SETUP.md), Java 17/MySQL 8 and a fresh explicitly selected four-table database. Any disposable fixture/reset/live test execution needs approval. Do not import over older or user data.
+## Nine-minute presentation and rehearsal
 
-1. Prepare first ADMIN privately using the reviewed USER registration/bootstrap procedure; no hardcoded password or bootstrap API.
-2. ADMIN provisions one MANAGER and two USER accounts through existing Team operations. Keep credentials private.
-3. MANAGER creates DIRTY room and cleaning task assigned to USER A. USER B sees only their own work; approved denial checks confirm backend ownership.
-4. USER A starts/completes the task: CLEANING then INSPECTION. Show that supervisors manage work but cannot execute it.
-5. MANAGER records FAIL; room becomes DIRTY. Create a new cleaning cycle, have USER complete it, then record PASS -> READY. Show both history entries and authenticated inspector.
-6. Show non-terminal reassignment/cancellation and active-work deactivation guards without deleting historical data.
-7. Show safe field errors, keyboard navigation/modal focus, theme, and authorized dashboard counts. If demonstrating uncertainty, reconcile through reads rather than replay a write blindly.
-8. Use the approved disposable Postman suite only after authorization. Never display tokens, passwords or hashes during the presentation.
+| Time | Segment | Prepared route / evidence |
+|---|---|---|
+| 0:00-1:00 | Problem, users, bounded housekeeping scope | Problem/stories above; USER executes, MANAGER/ADMIN supervise. |
+| 1:00-2:30 | Architecture and four entities | Existing logical architecture, ERD and component diagram; local stack honestly labeled. |
+| 2:30-5:30 | Prepared cleaning/inspection walkthrough | Existing Room 204 completed/PASS and Room 205 completed/FAIL plus assigned rework from LOCAL_DEMO_WALKTHROUGH.md. Show existing views. Start/complete/inspect rework only after explicit disposable-fixture mutation approval; otherwise narrate verified sequence. |
+| 5:30-6:30 | Retained history and one rejected invalid action | Manager history requires private login; demonstrate USER navigation to /rooms yielding Access denied (freshly observed, read-only). |
+| 6:30-8:00 | Transactions, ownership, locks and testing | User -> Room -> Task ordering; separate login/logout account locks; offline 155 backend passes (25 opt-in live entries skipped)/226 frontend passes; live MySQL suite 26/26 after the deadlock fix (first run's failures disclosed); no current Sonar. |
+| 8:00-9:00 | Lessons and limitations | Scope discipline, retained history, uncertain-write read reconciliation; required external scan/pipeline/deployment/protection and genuine artifact completion. |
 
-Suggested nine-minute outline: problem/users (1), architecture/model/security (2), cleaning/inspection demo (3), transaction/ownership/resilience challenge (2), lessons and honest pending gates (1). Slides/PDF and actual delivery remain PENDING.
+Rehearsal checklist:
 
-## Final submission checklist
+- [ ] Confirm final deck/PDF pair and instructor timing; outline totals exactly 9 minutes.
+- [ ] Start only the existing loopback demo, Java 17, ddl-auto=validate; never run schema/reset scripts over demo data.
+- [ ] Privately verify manager and housekeeper sign-in; keep passwords, tokens, hashes, .env and network responses off-screen.
+- [ ] Confirm Room 204/205 history before rehearsal; do not recreate or erase existing fixtures.
+- [ ] Obtain explicit disposable-fixture approval before demonstrating start/complete/inspect or forced uncertain writes; otherwise use the read-only walkthrough.
+- [ ] Check remaining supervisor modal Tab/Shift+Tab/Escape, pending-close and opener/fallback restoration in the native browser; do not substitute jsdom proof.
+- [ ] Use the existing safe historical screenshot at target/frontend-demo-completed.png for fallback: it visibly shows completed Room 204 READY, completed FAIL Room 205 DIRTY, and assigned rework. It was visually inspected this closeout and contains no passwords/tokens/hashes. Copy it to the approved presentation package before deleting generated outputs. No recording exists in this inspected evidence.
+- [ ] Rehearse failure fallback and questions; explain that screenshots are historical and fresh verification has its own stated scope.
 
-- [ ] Instructor review of this current-scope requirements/diagram/decision package.
-- [ ] Pagination waiver or approved implementation; accepted seed-data script form.
-- [ ] Independent re-verification of the polish working tree and fresh authorized live/browser checks as required.
-- [ ] Current housekeeping Sonar results reviewed; no historical certification substituted.
-- [ ] Non-AWS CI/CD/deployment/access URL expectations clarified and evidenced.
-- [ ] Branch-protection policy approved/configured; final reviewed code publication separately authorized.
-- [ ] Genuine two-peer feedback given/received and incorporation evidence.
-- [ ] Jira board shared; stories finalized and sprint closed with evidence.
-- [ ] Presentation slides/PDF and 5–10 minute demo rehearsed/delivered.
-- [ ] Private demo credentials delivered through an approved channel.
-- [ ] Self-assessment and all required Canvas artifacts submitted by instructor's deadline.
+## Remaining actions in priority order
 
-Unchecked items are intentionally **PENDING**. This draft does not create approvals, measurements, credentials or external artifacts.
+See [the required completion plan](REQUIRED_COMPLETION.md#final-materials-and-shortest-path) for exact service access, approval-gated commands, deployment security/rollback, protection policy and user-owned artifacts. AWS is the only waiver; no other requirement is a waiver candidate. These changes remain uncommitted and unpushed.
