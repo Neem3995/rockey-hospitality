@@ -16,6 +16,10 @@ import java.util.*;
  */
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmailIgnoreCase(String email);
+    /** Session writes must serialize with account edits; ordinary identity reads remain unlocked. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.email = :email")
+    Optional<User> findForLogin(@Param("email") String email);
     boolean existsByEmailIgnoreCase(String email);
     boolean existsByEmailIgnoreCaseAndIdNot(String email, Long id);
     List<User> findByRoleOrderByNameAsc(User.Role role);

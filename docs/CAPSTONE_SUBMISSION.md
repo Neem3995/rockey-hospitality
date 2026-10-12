@@ -234,7 +234,7 @@ Six UI routes: /login, /register, /dashboard, /tasks, /rooms, /team; unknown rou
 | AWS services | **WAIVED — instructor confirmed**. No AWS implementation planned in this pass. |
 | Non-AWS CI/CD | **PENDING** instructor decision; official phase tasks name CodePipeline, Excellent criteria name Jenkins. |
 | Deployment/frontend + backend accessible URLs | **PENDING** accepted non-AWS approach and actual URLs; localhost is not a public deployment. |
-| Branch protection | **PENDING** authorized policy/settings; audit found main unprotected. No GitHub setting changed. |
+| Branch protection | **PENDING** authorized policy/settings. Read-only GitHub checks on 2026-10-09 confirmed main unprotected, with no parent-inclusive rulesets or active branch rules. No GitHub setting changed. |
 | Presentation slides/PDF, 5–10 minute delivery | **PENDING** actual artifacts; local demo/presentation outline below is a plan, not completed delivery. |
 | Two peer reviews; feedback given/received/incorporated | **PENDING** genuine evidence; agent verification is not automatically two peer reviews. |
 | Jira shared board, final story status, closed sprint | **PENDING** actual instructor-accessible evidence. |

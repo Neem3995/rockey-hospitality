@@ -72,7 +72,7 @@ Review: relative documentation links/anchors resolved; ERD attributes matched al
 
 Coverage percentages describe the measured scope/run, not universal correctness or performance. Current offline test discovery reports 13 disabled live entries: twelve ordinary tests and one parameterized entry. Enabled, the latter expands into MANAGER and ADMIN cases, producing fourteen live executions. Thus a fully enabled historical run can report 155 cases while an offline run reports 154 entries. Do not count disabled entries as executed.
 
-No commit/push, service start, database reset, Sonar scan or deployment is performed by this polish pass. Main remains at the base commit. Local environment files remain private/untracked/ignored as applicable.
+At the time of that local polish measurement, no commit/push, service start, database reset, Sonar scan or deployment was performed, and main remained at the base commit. This is historical checkpoint context: the source was subsequently published and main advanced to `9373d7370fe188d6854035384eb8a72e9c9b8596`. Local environment files remain private/untracked/ignored as applicable.
 
 ## Historical pre-polish housekeeping live evidence
 
@@ -90,3 +90,87 @@ The following measurements were already recorded before the main promotion/polis
 - Credential-candidate scan over 99 eligible project text files found no candidates; active source scan found no removed-domain/old-role references.
 - That measurement pass recorded **new-model Sonar and real-browser UI checks NOT RUN**. Later user-reported housekeeping approval/browser verification is not a fresh browser run of this polish working tree.
 - The earlier statement that no commit/push had occurred applied to that historical pass. Housekeeping source was subsequently published and promoted to main; it is not an outstanding publication blocker.
+
+## Remediation verification 2026-10-09
+
+Remediation implementation checkpoint: `fix/final-audit-remediation`, based on `9373d7370fe188d6854035384eb8a72e9c9b8596`, measured with uncommitted AuthService/UserRepository and focused test changes before source publication. Documentation records the historical-main correction, measured evidence and pending decisions. Existing untracked environment example/archive were preserved. No commit/push occurred during this implementation checkpoint. The subsequent reviewed commit, fast-forward integration and normal origin/main push are separately user-authorized; their exact revision is recorded in Git history and the publication handoff. No GitHub setting changes, deployments, database resets or service installations were performed. See [the finding checklist and remaining plan](FINAL_AUDIT_REMEDIATION.md).
+
+Validated code/test/contract fingerprint (SHA-256 over sorted tracked source paths and working-file bytes, including frontend/database/Postman/scripts/pom/OpenAPI, excluding root/docs Markdown and untracked files): `310f51bc8f448f57f6ad41fe84e5db4c14c8b1c28f22212b6b7e90c8ed089e86`. The fingerprint identifies this dirty validation scope; it is not a Git commit SHA.
+
+Runtime: process-local Temurin Java 17.0.20.1 and Maven Wrapper 3.9.16; Node 22.18.0 and npm 10.9.3. Default machine Java remains 25; no PATH/runtime installation or machine configuration change was made.
+
+Actual commands (repository root unless noted; stdout/stderr redirected to ignored target logs for test runs):
+
+```text
+# Process-local JAVA_HOME selected the existing Java 17 runtime.
+# ROCKEY_HARDENING_LIVE=false explicitly disabled database fixtures.
+.\mvnw.cmd -v
+.\mvnw.cmd -q verify
+# frontend directory:
+npm.cmd --version
+npm.cmd run test:coverage -- --maxWorkers=1
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run build
+# repository root:
+python target/audit-remediation-static.py
+node scripts/verify-hardening.cjs --audit-only
+git diff --check
+# Temporary loopback browser verification only; stopped after inspection:
+# frontend directory:
+npm.cmd run dev
+```
+
+| Check | Actual result and scope |
+|---|---|
+| Backend verify / tests | PASS, exit 0: 162 reported entries; 141 executed/passed, 0 failures, 0 errors, 21 skipped. The eight added persisted interleaving tests are among the skips. |
+| JaCoCo | PASS: line 93.85%, branch 80.24%, instruction 93.33%; all production Java, no exclusions; append=false; unchanged >=70% line gate and >=80% target. |
+| Frontend tests / coverage | PASS, exit 0: 9 files, 217 passed, 0 failed/skipped; V8 line 99.14% (581/586), branch 92.16% (729/791), statements 96.82% (763/788), functions 96.31% (235/244). Scope `src/**/*.{js,jsx}`, excluding test sources and main entry. |
+| Lint / typecheck / build | PASS, exit 0 for all three commands. Build's embedded typecheck also passed; both original PNG logos were bundled. |
+| Static contract / references | PASS: 24/24 controller route/method pairs match frozen OpenAPI; 54 local schema references resolve. Static Postman operation coverage remains 24/24; no live requests run. |
+| Documentation / imports / whitespace | 56 relative Markdown paths/anchors verified after final doc edits; imports compiled with backend/frontend checks. Complete scoped diff reviewed; `git diff --check` passed. |
+| Live MySQL / Postman | NOT RUN; no permission for disposable fixture reset was assumed. New tests compile but provide no executed persisted proof. |
+| Sonar | NOT RUN; current loopback server unavailable and no current task/provenance metadata found. No old-model findings represented as current vulnerabilities or quality-gate evidence. |
+| Native browser | LIMITED PASS on actual session-unavailable shell at 390x844, 768x1024 and 1440x900: no horizontal overflow in dark mode; light mode checked at desktop/mobile; both logos loaded; initial main focus and Tab/Shift+Tab between theme/retry controls observed. Theme preference and viewport restored. Backend was unreachable, so authenticated route/modal/session/write-reconciliation behavior is NOT RUN. jsdom coverage is separate. |
+| GitHub protection | Read-only original-repo main metadata: protected=false at the audited SHA; classic protection 404; parent-inclusive rulesets and active main rules empty. No enforcement established and no setting changed. |
+
+One initial static-verifier assertion matched annotation names inside controller comments; the verifier was corrected to remove comments before comparing routes and then passed. This was a verifier issue, not an application failure. Offline Maven emitted an expected exception-handler log for a negative MVC test; Surefire recorded zero errors/failures.
+
+The offline live-test entry count is now 21 (the former 13 plus eight new ordinary tests). If explicitly enabled, the existing MANAGER/ADMIN parameterized test expands one discovery entry into two executions. Actual enabled execution must establish its own counts and outcomes; no live total or pass is claimed here.
+
+F01's stale-write coordination is corrected in code and F08's historical wording is corrected. No API/schema/dependency contract change was introduced. Real MySQL lock behavior and current Sonar remain unverified; pagination/seed acceptance, effective protection, non-AWS delivery and genuine submission artifacts remain mandatory unresolved gates. No submission-readiness verdict is asserted.
+
+
+## Publication gate 2026-10-09 — blocked
+
+Fresh publication verification was executed on `fix/final-audit-remediation` at baseline HEAD `9373d7370fe188d6854035384eb8a72e9c9b8596`, with the same uncommitted code/test/contract fingerprint recorded above. Prior passing measurements remain historical evidence and do not override this failed gate. Documentation wording was prepared to remain accurate after publication; publication did not occur.
+
+Runtime: Temurin Java 17.0.20.1 (process-local JAVA_HOME), Maven Wrapper 3.9.16, Node 22.18.0, npm 10.9.3. Explicit `ROCKEY_HARDENING_LIVE=false`; no fixture reset. Actual commands: `.\mvnw.cmd -v`, `.\mvnw.cmd -q verify`, frontend `npm.cmd run test:coverage -- --maxWorkers=1`, root `python target/audit-remediation-static.py`, `node scripts/verify-hardening.cjs --audit-only` and `git diff --check`. Backend and frontend test commands ran concurrently; a load-related cause is not established.
+
+| Check | Fresh publication result |
+|---|---|
+| Backend verify | PASS, exit 0: 162 entries; 141 passed, 21 skipped, 0 failed, 0 errors. Eight added persisted regressions remain skipped. |
+| JaCoCo | PASS, unchanged all-production scope/gate: line 93.85%, branch 80.24%, instruction 93.33%. |
+| Frontend tests | FAIL, exit 1: 214 passed, 3 failed, 0 skipped out of 217; 8 files passed, 1 failed. Failed assertions/timeouts are listed below; no separate runner error was reported. |
+| Frontend coverage | No completed coverage summary from the failed fresh run. The earlier 99.14% line/92.16% branch result is historical, not fresh publication coverage. |
+| Frontend lint/typecheck/build | NOT RUN in the publication pass: the command chain stopped immediately after the failed test command. Earlier passing results remain historical. |
+| Static checks | PASS: 54 OpenAPI references; 24 controller/API operations; 24/24 Postman operation coverage; 56 relative documentation paths/anchors; normal configured `git diff --check`. Final documentation checks rerun after recording this failure. |
+| Live MySQL/Postman/Sonar/authenticated browser | NOT RUN. Separate reset/environment authorization remains pending. No new browser run was attempted. |
+| Publication | BLOCKED before staging/commit/fast-forward/push under the user's explicit failed-executable-check stop rule. |
+
+All three failures were in `frontend/src/tests/authUi.test.jsx`, group `FE-02 forms and guards`:
+
+- `public registration has no role selector and validates name/password lengths`: exceeded the existing 5000ms timeout.
+- `renders safe API field errors, clears password and preserves focus`: exceeded the existing 5000ms timeout.
+- `prevents duplicate submits while pending and ignores stale completion`: could not find the expected accessible `Signing in…` button.
+
+These are actual test-gate failures, not newly established application vulnerabilities. No frontend source, timeout, dependency or assertion was changed; the accepted Java remediation was not changed. No retry was used to replace the failed result.
+
+Ignored local evidence: `target/publication-backend-verify.log`, `target/publication-frontend-verify.log`, `target/publication-verification-results.json` and `target/audit-publication-state.json`, plus Surefire/JaCoCo outputs. No source/credential files or raw secret-bearing reports are staged. No commit, push, merge, force-push, GitHub setting change, deployment, service installation, privilege change or database reset occurred in this publication attempt. Existing untracked environment example/archive were preserved byte-for-byte. No published-source handoff was generated because no remediation commit was published.
+
+## Publication verification - 2026-10-12
+
+The current local demo and 217-test frontend verification supersede the historical unauthenticated browser/test status above for their stated scope; see LOCAL_DEMO_WALKTHROUGH.md. The login/logout locking changes require no schema migration. Removed local diagnostic SQL appended after the four table definitions; database/schema.sql retains the canonical definitions only. Live concurrency reset tests and Sonar remain outside this publication scope.
+
+
+Fresh publication checks on 2026-10-12: Maven verify passed (141 passed, 21 opt-in live tests skipped, zero failures/errors). The concurrent single-worker frontend run had one five-second registration-test timeout (216 passed); a separate run after backend completion passed all 217 with unchanged tests, then lint and production build (including typecheck) passed. Concurrent-load causation is not established. Read-only demo metadata confirmed 4 application tables, 5 foreign keys and 2 CHECK constraints; no database writes or destructive tests occurred. Private configuration, generated target/dist artifacts, the audit ZIP and frontend/.env.example are excluded from publication.

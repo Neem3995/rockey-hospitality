@@ -55,21 +55,23 @@ class AuthServiceTest {
         assertThrows(BadRequestException.class, () -> service.hashPassword(value));
     }
     @Test void loginChecksPasswordAndRotatesSession() {
-        session(); when(users.findByEmailIgnoreCase("worker3@example.test")).thenReturn(Optional.of(user));
+        session(); when(users.findForLogin("worker3@example.test")).thenReturn(Optional.of(user));
         when(passwords.matches("test-password", user.getPasswordHash())).thenReturn(true);
         assertNotNull(service.login("worker3@example.test", "test-password", "ip").getResponse());
         verify(limiter).resetLoginFailures("ip", "worker3@example.test");
+        verify(users).findForLogin("worker3@example.test");
+        verify(users, never()).findByEmailIgnoreCase(anyString());
     }
     @Test void absentLoginFailsGenerically() {
         assertThrows(InvalidCredentialsException.class, () -> service.login("missing@example.test", "test-password", "ip"));
         verify(limiter).recordLoginFailure("ip", "missing@example.test");
     }
     @Test void wrongPasswordFails() {
-        when(users.findByEmailIgnoreCase("worker3@example.test")).thenReturn(Optional.of(user));
+        when(users.findForLogin("worker3@example.test")).thenReturn(Optional.of(user));
         assertThrows(InvalidCredentialsException.class, () -> service.login("worker3@example.test", "wrong", "ip"));
     }
     @Test void inactiveLoginFails() {
-        user.deactivate(); when(users.findByEmailIgnoreCase("worker3@example.test")).thenReturn(Optional.of(user));
+        user.deactivate(); when(users.findForLogin("worker3@example.test")).thenReturn(Optional.of(user));
         assertThrows(InvalidCredentialsException.class, () -> service.login("worker3@example.test", "test-password", "ip"));
     }
     @Test void refreshRotatesOnlyValidSession() {
@@ -110,9 +112,11 @@ class AuthServiceTest {
         assertThrows(InvalidCredentialsException.class, () -> service.getCurrentUser(3L));
     }
     @Test void logoutClearsBothFieldsAndIsIdempotent() {
-        user.replaceRefreshSession("test-hash", LocalDateTime.now()); when(users.findById(3L)).thenReturn(Optional.of(user));
+        user.replaceRefreshSession("test-hash", LocalDateTime.now()); when(users.findForUpdate(3L)).thenReturn(Optional.of(user));
         service.logout(3L); service.logout(3L);
         assertNull(user.getRefreshTokenHash()); assertNull(user.getRefreshTokenExpiresAt());
+        verify(users, times(2)).findForUpdate(3L);
+        verify(users, never()).findById(anyLong());
     }
     @Test void logoutMissing404() { assertThrows(ResourceNotFoundException.class, () -> service.logout(99L)); }
 }

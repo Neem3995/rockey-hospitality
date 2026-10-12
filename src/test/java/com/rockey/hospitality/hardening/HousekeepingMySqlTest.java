@@ -7,10 +7,12 @@ import com.rockey.hospitality.entity.*;
 import com.rockey.hospitality.exception.ApiException.*;
 import com.rockey.hospitality.repository.*;
 import com.rockey.hospitality.service.*;
+import com.rockey.hospitality.security.RefreshTokenService;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -18,8 +20,14 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.*;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /** Opt-in persisted workflow/rollback/race checks; only the disposable hardening schema may be used. */
 @SpringBootTest
@@ -33,7 +41,10 @@ class HousekeepingMySqlTest {
     @Autowired TaskService tasks;
     @Autowired UserService users;
     @Autowired AuthService auth;
+    @Autowired RefreshTokenService refreshTokens;
     @Autowired JdbcTemplate jdbc;
+    @Autowired PlatformTransactionManager transactionManager;
+    @MockitoSpyBean PasswordEncoder passwords;
     Long adminId, managerId, workerId, otherId, roomId;
 
     @DynamicPropertySource
@@ -176,6 +187,203 @@ class HousekeepingMySqlTest {
         assertEquals(1,results.stream().filter(ConflictException.class::isInstance).count());
         assertTrue(rooms.get(managerId,roomId).getActive() || taskRows.count() == 0);
     }
+    @Test
+    void loginThenDeactivationCannotResurrectAccount() throws Exception {
+        List<Object> results = orderedAccountRace(
+                () -> auth.login("worker@example.test", "test-fixture-password", "login-deactivate"),
+                () -> { users.deactivate(adminId, workerId); return "deactivated"; }, true);
+        assertInstanceOf(AuthService.AuthSession.class, results.get(0));
+        assertEquals("deactivated", results.get(1));
+        User worker = accounts.findById(workerId).orElseThrow();
+        assertFalse(worker.isActive());
+        assertNull(worker.getRefreshTokenHash());
+        assertThrows(InvalidCredentialsException.class,
+                () -> auth.login("worker@example.test", "test-fixture-password", "inactive-login"));
+    }
+
+    @Test
+    void loginThenIdentityChangePreservesAdministrativeValues() throws Exception {
+        List<Object> results = orderedAccountRace(
+                () -> auth.login("worker@example.test", "test-fixture-password", "login-update"),
+                () -> users.update(adminId, workerId,
+                        new UpdateUserRequest("Changed worker", "changed@example.test", User.Role.MANAGER, true)), true);
+        assertInstanceOf(AuthService.AuthSession.class, results.get(0));
+        assertInstanceOf(UserResponse.class, results.get(1));
+        User worker = accounts.findById(workerId).orElseThrow();
+        assertEquals("Changed worker", worker.getName());
+        assertEquals("changed@example.test", worker.getEmail());
+        assertEquals(User.Role.MANAGER, worker.getRole());
+        assertNull(worker.getRefreshTokenHash());
+    }
+
+    @Test
+    void deactivationThenLoginReadsCommittedInactiveState() throws Exception {
+        List<Object> results = orderedAccountRace(
+                () -> { users.deactivate(adminId, workerId); return "deactivated"; },
+                () -> auth.login("worker@example.test", "test-fixture-password", "deactivate-login"), false);
+        assertEquals("deactivated", results.get(0));
+        assertInstanceOf(InvalidCredentialsException.class, results.get(1));
+        User worker = accounts.findById(workerId).orElseThrow();
+        assertFalse(worker.isActive());
+        assertNull(worker.getRefreshTokenHash());
+    }
+
+    @Test
+    void identityChangeThenLoginCannotUseOldEmailOrRole() throws Exception {
+        List<Object> results = orderedAccountRace(
+                () -> users.update(adminId, workerId,
+                        new UpdateUserRequest("Changed worker", "changed@example.test", User.Role.MANAGER, true)),
+                () -> auth.login("worker@example.test", "test-fixture-password", "update-login"), false);
+        assertInstanceOf(UserResponse.class, results.get(0));
+        assertInstanceOf(InvalidCredentialsException.class, results.get(1));
+        var session = auth.login("changed@example.test", "test-fixture-password", "current-email-login");
+        assertEquals(User.Role.MANAGER, session.getResponse().getUser().getRole());
+        assertEquals("changed@example.test", session.getResponse().getUser().getEmail());
+    }
+
+    @Test
+    void loginThenRefreshRejectsPreviousSession() throws Exception {
+        String oldCookie = auth.login("worker@example.test", "test-fixture-password", "initial-session")
+                .getRawRefreshToken();
+        List<Object> results = orderedAccountRace(
+                () -> auth.login("worker@example.test", "test-fixture-password", "replace-session"),
+                () -> auth.refresh(oldCookie, "old-session-refresh"), true);
+        var winner = assertInstanceOf(AuthService.AuthSession.class, results.get(0));
+        assertInstanceOf(InvalidRefreshTokenException.class, results.get(1));
+        assertCurrentSession(winner);
+    }
+
+    @Test
+    void refreshThenLoginRetainsOnlyLastSession() throws Exception {
+        String oldCookie = auth.login("worker@example.test", "test-fixture-password", "initial-refresh")
+                .getRawRefreshToken();
+        List<Object> results = orderedAccountRace(
+                () -> auth.refresh(oldCookie, "rotate-session"),
+                () -> auth.login("worker@example.test", "test-fixture-password", "login-after-refresh"), false);
+        var rotated = assertInstanceOf(AuthService.AuthSession.class, results.get(0));
+        var winner = assertInstanceOf(AuthService.AuthSession.class, results.get(1));
+        assertCurrentSession(winner);
+        assertThrows(InvalidRefreshTokenException.class,
+                () -> auth.refresh(rotated.getRawRefreshToken(), "superseded-refresh"));
+    }
+
+    @Test
+    void loginThenLogoutRevokesNewRefreshSession() throws Exception {
+        List<Object> results = orderedAccountRace(
+                () -> auth.login("worker@example.test", "test-fixture-password", "login-before-logout"),
+                () -> { auth.logout(workerId); return "logged-out"; }, true);
+        var session = assertInstanceOf(AuthService.AuthSession.class, results.get(0));
+        assertEquals("logged-out", results.get(1));
+        User worker = accounts.findById(workerId).orElseThrow();
+        assertTrue(worker.isActive());
+        assertNull(worker.getRefreshTokenHash());
+        assertNull(worker.getRefreshTokenExpiresAt());
+        assertThrows(InvalidRefreshTokenException.class,
+                () -> auth.refresh(session.getRawRefreshToken(), "logged-out-refresh"));
+    }
+
+    @Test
+    void logoutThenLoginCreatesNewRefreshSession() throws Exception {
+        auth.login("worker@example.test", "test-fixture-password", "before-logout");
+        List<Object> results = orderedAccountRace(
+                () -> { auth.logout(workerId); return "logged-out"; },
+                () -> auth.login("worker@example.test", "test-fixture-password", "after-logout"), false);
+        assertEquals("logged-out", results.get(0));
+        assertCurrentSession(assertInstanceOf(AuthService.AuthSession.class, results.get(1)));
+    }
+
+    private void assertCurrentSession(AuthService.AuthSession session) {
+        assertEquals(refreshTokens.hash(session.getRawRefreshToken()),
+                accounts.findById(workerId).orElseThrow().getRefreshTokenHash());
+    }
+
+    /**
+     * Holds the first real service transaction, then proves that the second connection waits for
+     * its database lock before releasing it. No mocked repository saves or timing-only sleeps.
+     * The live database account must be able to read performance_schema.data_lock_waits/threads.
+     */
+    private List<Object> orderedAccountRace(Callable<?> first, Callable<?> second, boolean pausePassword)
+            throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch firstReady = new CountDownLatch(1);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        CountDownLatch secondStarted = new CountDownLatch(1);
+        AtomicLong secondConnection = new AtomicLong();
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        transaction.setTimeout(25);
+        if (pausePassword) {
+            doAnswer(invocation -> {
+                firstReady.countDown();
+                awaitLatch(releaseFirst);
+                return invocation.callRealMethod();
+            }).when(passwords).matches(eq("test-fixture-password"), anyString());
+        }
+        try {
+            Future<Object> firstResult = pool.submit(() -> transactionResult(transaction, () -> {
+                Object result = first.call();
+                if (!pausePassword) {
+                    firstReady.countDown();
+                    awaitLatch(releaseFirst);
+                }
+                return result;
+            }));
+            assertTrue(firstReady.await(10, TimeUnit.SECONDS), "First transaction did not reach its gate.");
+            Future<Object> secondResult = pool.submit(() -> transactionResult(transaction, () -> {
+                secondConnection.set(jdbc.queryForObject("SELECT CONNECTION_ID()", Long.class));
+                secondStarted.countDown();
+                return second.call();
+            }));
+            assertTrue(secondStarted.await(10, TimeUnit.SECONDS), "Second transaction did not start.");
+            awaitDatabaseLockWait(secondConnection.get(), secondResult);
+            releaseFirst.countDown();
+            return List.of(firstResult.get(30, TimeUnit.SECONDS), secondResult.get(30, TimeUnit.SECONDS));
+        } finally {
+            releaseFirst.countDown();
+            pool.shutdownNow();
+            assertTrue(pool.awaitTermination(30, TimeUnit.SECONDS), "Transaction workers did not stop.");
+            reset(passwords);
+        }
+    }
+
+    private Object transactionResult(TransactionTemplate transaction, Callable<?> action) {
+        try {
+            return transaction.execute(status -> {
+                try {
+                    return action.call();
+                } catch (RuntimeException failure) {
+                    throw failure;
+                } catch (Exception failure) {
+                    throw new IllegalStateException(failure);
+                }
+            });
+        } catch (RuntimeException failure) {
+            return failure;
+        }
+    }
+
+    private void awaitDatabaseLockWait(long connection, Future<?> result) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (System.nanoTime() < deadline) {
+            Integer waits = jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM performance_schema.data_lock_waits w
+                    JOIN performance_schema.threads t ON t.THREAD_ID = w.REQUESTING_THREAD_ID
+                    WHERE t.PROCESSLIST_ID = ?
+                    """, Integer.class, connection);
+            if (waits != null && waits > 0) {
+                return;
+            }
+            assertFalse(result.isDone(), "Competing service completed without waiting for the account lock.");
+            Thread.yield();
+        }
+        fail("Competing service did not enter a database lock wait.");
+    }
+
+    private static void awaitLatch(CountDownLatch latch) throws InterruptedException {
+        if (!latch.await(20, TimeUnit.SECONDS)) {
+            throw new IllegalStateException("Transaction gate timed out.");
+        }
+    }
+
     private List<Object> race(Callable<?> first, Callable<?> second) throws Exception {
         ExecutorService pool = Executors.newFixedThreadPool(2); CountDownLatch ready = new CountDownLatch(2), start = new CountDownLatch(1);
         try {

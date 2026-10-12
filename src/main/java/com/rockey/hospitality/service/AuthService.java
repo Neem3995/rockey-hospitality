@@ -47,7 +47,8 @@ public class AuthService {
     public AuthSession login(String email, String password, String clientIp) {
         String normalized = email.trim().toLowerCase(Locale.ROOT);
         limiter.checkLoginAllowed(clientIp, normalized);
-        User user = users.findByEmailIgnoreCase(normalized).orElse(null);
+        // Hold the account lock through password validation and refresh-session replacement.
+        User user = users.findForLogin(normalized).orElse(null);
         if (user == null || !user.isActive() || !passwords.matches(password, user.getPasswordHash())) {
             limiter.recordLoginFailure(clientIp, normalized);
             throw new InvalidCredentialsException();
@@ -79,7 +80,7 @@ public class AuthService {
 
     @Transactional
     public void logout(Long id) {
-        User user = users.findById(id).orElseThrow(() -> new ResourceNotFoundException("User account not found."));
+        User user = users.findForUpdate(id).orElseThrow(() -> new ResourceNotFoundException("User account not found."));
         user.clearRefreshSession();
         users.save(user);
     }
