@@ -292,6 +292,76 @@ class HousekeepingMySqlTest {
         assertCurrentSession(assertInstanceOf(AuthService.AuthSession.class, results.get(1)));
     }
 
+    // Persisted pagination: real service page methods and repository queries; no mocked paging.
+    @Test void taskPagesScopeRowsAndTotalsToTheAuthenticatedWorker() {
+        Long room102 = rooms.create(managerId,new RoomRequest("102",1,Room.Status.DIRTY,true)).getId();
+        Long room103 = rooms.create(managerId,new RoomRequest("103",1,Room.Status.DIRTY,true)).getId();
+        Long room104 = rooms.create(managerId,new RoomRequest("104",1,Room.Status.DIRTY,true)).getId();
+        Long completed = completeTask();
+        Long assigned = tasks.create(managerId,taskIn(room102,workerId)).getId();
+        Long cancelled = tasks.create(managerId,taskIn(room103,workerId)).getId(); tasks.cancel(managerId,cancelled);
+        Long reassigned = tasks.create(managerId,taskIn(room103,workerId)).getId();
+        Long othersTask = tasks.create(managerId,taskIn(room104,otherId)).getId();
+
+        var first = tasks.page(workerId,0,2,null); var second = tasks.page(workerId,1,2,null);
+        assertEquals(4,first.totalElements()); assertEquals(2,first.totalPages()); assertEquals(4,second.totalElements());
+        assertEquals(List.of(reassigned,cancelled),taskIds(first)); assertEquals(List.of(assigned,completed),taskIds(second));
+        assertTrue(first.items().stream().allMatch(t -> t.getAssignedUser().getId().equals(workerId)));
+        var assignedOnly = tasks.page(workerId,0,20,Task.Status.ASSIGNED);
+        assertEquals(List.of(reassigned,assigned),taskIds(assignedOnly)); assertEquals(2,assignedOnly.totalElements());
+        assertEquals(1,tasks.page(workerId,0,20,Task.Status.CANCELLED).totalElements());
+        var beyond = tasks.page(workerId,5,2,null);
+        assertTrue(beyond.items().isEmpty()); assertEquals(5,beyond.page()); assertEquals(4,beyond.totalElements()); assertEquals(2,beyond.totalPages());
+        assertEquals(List.of(othersTask),taskIds(tasks.page(otherId,0,20,null)));
+
+        List<Long> all = List.of(othersTask,reassigned,cancelled,assigned,completed);
+        assertEquals(all,taskIds(tasks.page(managerId,0,20,null))); assertEquals(all,taskIds(tasks.page(adminId,0,20,null)));
+        assertEquals(List.of(othersTask,reassigned,assigned),taskIds(tasks.page(managerId,0,20,Task.Status.ASSIGNED)));
+        assertEquals(5,tasks.page(managerId,2,2,null).totalElements());
+    }
+    @Test void accountPagesLimitManagersToUserAccountsWithStableNameTieBreak() {
+        Long twin = users.create(adminId,new CreateUserRequest("Test worker","twin@example.test","test-fixture-password",User.Role.USER)).getId();
+        var managed = users.page(managerId,0,20);
+        assertEquals(List.of(otherId,workerId,twin),userIds(managed)); assertEquals(3,managed.totalElements());
+        assertTrue(managed.items().stream().allMatch(u -> u.getRole() == User.Role.USER));
+        var beyond = users.page(managerId,3,2);
+        assertTrue(beyond.items().isEmpty()); assertEquals(3,beyond.totalElements()); assertEquals(2,beyond.totalPages());
+        assertEquals(List.of(otherId,adminId,managerId,workerId,twin),userIds(users.page(adminId,0,20)));
+        var adminMiddle = users.page(adminId,1,2);
+        assertEquals(List.of(managerId,workerId),userIds(adminMiddle)); assertEquals(5,adminMiddle.totalElements()); assertEquals(3,adminMiddle.totalPages());
+        assertThrows(ForbiddenException.class, () -> users.page(workerId,0,20));
+    }
+    @Test void roomPagesUsePersistedRoomNumberOrderAndTotals() {
+        rooms.create(managerId,new RoomRequest("103",1,Room.Status.READY,true));
+        rooms.create(managerId,new RoomRequest("1001",10,Room.Status.READY,true));
+        rooms.create(managerId,new RoomRequest("102",1,Room.Status.READY,true));
+        var first = rooms.page(managerId,0,2); var second = rooms.page(adminId,1,2);
+        assertEquals(List.of("1001","101"),roomNumbers(first)); assertEquals(List.of("102","103"),roomNumbers(second));
+        assertEquals(4,first.totalElements()); assertEquals(2,first.totalPages()); assertEquals(4,second.totalElements());
+        var beyond = rooms.page(managerId,9,2); assertTrue(beyond.items().isEmpty()); assertEquals(4,beyond.totalElements());
+        assertThrows(ForbiddenException.class, () -> rooms.page(workerId,0,20));
+    }
+    @Test void inspectionHistoryPagesAcrossPassAndFailCycles() {
+        Long firstTask = completeTask(); Long firstFail = rooms.inspect(adminId,roomId,new InspectionRequest(firstTask,Inspection.Result.FAIL,"Rework")).getId();
+        Long secondTask = completeTask(); Long secondFail = rooms.inspect(managerId,roomId,new InspectionRequest(secondTask,Inspection.Result.FAIL,"Again")).getId();
+        Long thirdTask = completeTask(); Long pass = rooms.inspect(managerId,roomId,new InspectionRequest(thirdTask,Inspection.Result.PASS,"Ready")).getId();
+        Long otherRoom = rooms.create(managerId,new RoomRequest("102",1,Room.Status.READY,true)).getId();
+
+        var newest = rooms.inspectionPage(managerId,roomId,0,2); var oldest = rooms.inspectionPage(adminId,roomId,1,2);
+        assertEquals(List.of(pass,secondFail),newest.items().stream().map(InspectionResponse::getId).toList());
+        assertEquals(List.of(Inspection.Result.PASS,Inspection.Result.FAIL),newest.items().stream().map(InspectionResponse::getResult).toList());
+        assertEquals(List.of(firstFail),oldest.items().stream().map(InspectionResponse::getId).toList());
+        assertEquals(3,newest.totalElements()); assertEquals(2,newest.totalPages()); assertEquals(3,oldest.totalElements());
+        var beyond = rooms.inspectionPage(managerId,roomId,4,2); assertTrue(beyond.items().isEmpty()); assertEquals(3,beyond.totalElements());
+        var empty = rooms.inspectionPage(managerId,otherRoom,0,20); assertEquals(0,empty.totalElements()); assertEquals(0,empty.totalPages());
+        assertThrows(ResourceNotFoundException.class, () -> rooms.inspectionPage(managerId,Long.MAX_VALUE,0,20));
+        assertThrows(ForbiddenException.class, () -> rooms.inspectionPage(workerId,roomId,0,20));
+    }
+    TaskRequest taskIn(Long room, Long owner) { return new TaskRequest("Clean room","Routine clean",Task.Priority.MEDIUM,owner,room,LocalDateTime.now().plusHours(1)); }
+    static List<Long> taskIds(com.rockey.hospitality.dto.PageResponse<TaskResponse> page) { return page.items().stream().map(TaskResponse::getId).toList(); }
+    static List<Long> userIds(com.rockey.hospitality.dto.PageResponse<UserResponse> page) { return page.items().stream().map(UserResponse::getId).toList(); }
+    static List<String> roomNumbers(com.rockey.hospitality.dto.PageResponse<RoomResponse> page) { return page.items().stream().map(RoomResponse::getRoomNumber).toList(); }
+
     private void assertCurrentSession(AuthService.AuthSession session) {
         assertEquals(refreshTokens.hash(session.getRawRefreshToken()),
                 accounts.findById(workerId).orElseThrow().getRefreshTokenHash());

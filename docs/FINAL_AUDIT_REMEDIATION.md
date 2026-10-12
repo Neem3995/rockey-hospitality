@@ -26,8 +26,8 @@ Official requirement evidence inspected: workspace `00_CAPSTONE_REQUIREMENTS.md`
 
 ## Changes and concurrency reasoning
 
-- [UserRepository](../src/main/java/com/rockey/hospitality/repository/UserRepository.java), lines 19–22: separate `findForLogin`, with bound JPQL `u.email = :email` and `PESSIMISTIC_WRITE`. Registration/team writes and login input normalize email; the equality predicate can use the existing unique email key rather than wrapping the indexed column in a case function. The ordinary `findByEmailIgnoreCase` at line 18 remains unlocked for identity loading.
-- [AuthService](../src/main/java/com/rockey/hospitality/service/AuthService.java), `login` lines 47–58: acquire the account lock before active/password validation and hold it through `startSession` (line 96) and transaction commit. `logout` lines 82–86 uses existing `findForUpdate` before clearing refresh state. Refresh retains its existing locked hash lookup.
+- [UserRepository](../src/main/java/com/rockey/hospitality/repository/UserRepository.java): *Corrected 2026-10-12; see [the auth lock-order correction](#auth-lock-order-correction-and-live-verification---2026-10-12).* The original correction added a separate locking `findForLogin` (bound JPQL `u.email = :email`, `PESSIMISTIC_WRITE`). That method and the locking refresh-hash lookup have been removed. `findIdByEmail` and `findIdByRefreshTokenHash` now return only a candidate id, through bound, non-locking scalar JPQL, and `findForUpdate(id)` takes the account lock. Registration/team writes and login input still normalize email, and the ordinary `findByEmailIgnoreCase` stays unlocked for identity loading.
+- [AuthService](../src/main/java/com/rockey/hospitality/service/AuthService.java), `login`: acquire the account lock before active/password validation and hold it through `startSession` and transaction commit. `logout` uses existing `findForUpdate` before clearing refresh state. *As corrected 2026-10-12, login and refresh both lock through `findForUpdate(id)` after a non-locking id lookup; refresh no longer uses a locking hash lookup.*
 - [AuthServiceTest](../src/test/java/com/rockey/hospitality/service/AuthServiceTest.java): changed login/logout repository stubs and verified that these paths do not use the ordinary email/id lookups.
 - [HousekeepingMySqlTest](../src/test/java/com/rockey/hospitality/hardening/HousekeepingMySqlTest.java), lines 190–384: added both transaction orders for login/deactivation, identity changes, refresh and logout. Real Spring transaction management, repositories and database persistence are used. Only BCrypt matching is spied to pause a login after its real lookup. Latches coordinate the gates; database metadata must show the competing connection waiting before release. Assertions check account state, revoked/superseded cookies and the last session's persisted hash.
 
@@ -59,3 +59,37 @@ Local ignored evidence: `target/audit-remediation-backend.log`, `target/audit-re
 A fresh frontend run passed 217/217 tests, lint, typecheck, and production build. The older failed publication-gate result above is historical; no publication was performed. Real local browser/API/MySQL demo evidence and remaining check limitations are recorded in LOCAL_DEMO_WALKTHROUGH.md. This does not certify unrelated submission requirements.
 
 Fresh publication checks on 2026-10-12: Maven verify passed (141 passed, 21 opt-in live tests skipped, zero failures/errors). The concurrent single-worker frontend run had one five-second registration-test timeout (216 passed); a separate run after backend completion passed all 217 with unchanged tests, then lint and production build (including typecheck) passed. Concurrent-load causation is not established. Read-only demo metadata confirmed 4 application tables, 5 foreign keys and 2 CHECK constraints; no database writes or destructive tests occurred. Private configuration, generated target/dist artifacts, the audit ZIP and frontend/.env.example are excluded from publication.
+
+## Auth lock-order correction and live verification - 2026-10-12
+
+This section supersedes the earlier claims above that login/refresh introduced "no inverse lock order", and that the persisted account/session tests were NOT RUN.
+
+**First live run (failed, preserved).** The first live `HousekeepingMySqlTest` run had 26 executions: 24 passed and 2 failed with MySQL deadlocks (error 1213, surfaced as `CannotAcquireLockException`):
+- `identityChangeThenLoginCannotUseOldEmailOrRole`: login's `findForLogin` locked the `uk_users_email` entry before the primary key. The account update holds the primary key and rewrites that email entry at commit.
+- `loginThenRefreshRejectsPreviousSession`: refresh's locking `findByRefreshTokenHash` locked the `uk_users_refresh_hash` entry before the primary key. Login's session replacement holds the primary key and rewrites that hash entry at commit.
+
+In both, the two transactions locked the same account in opposite index orders. Lock-wait metadata was observed in all eight interleaving tests, so the failures were not caused by `performance_schema` visibility. The failed run's log and Surefire report are kept unchanged, separately from the rerun. That run is not described as passing.
+
+**Correction.** [AuthService](../src/main/java/com/rockey/hospitality/service/AuthService.java) `login` and `refresh` now take these steps:
+1. Resolve a candidate user id with a bound, non-locking scalar lookup (`findIdByEmail` or `findIdByRefreshTokenHash` in [UserRepository](../src/main/java/com/rockey/hospitality/repository/UserRepository.java)). The lookup loads no entity, takes no write lock and never authorizes the request.
+2. Lock the account through the existing `findForUpdate(id)`, the same primary-key-first order used by account edits and logout.
+3. Revalidate against the locked current row before authentication or mutation:
+   - Login rechecks the normalized email, active state and password. A missing candidate, a vanished account or a changed email gives the existing generic `InvalidCredentialsException`.
+   - Refresh rechecks the supplied token's hash against the account's current refresh hash, then active state and expiration. A missing, changed or revoked session gives `InvalidRefreshTokenException`.
+
+Raw tokens and hashes are not logged. The primary-key account lock remains held through password checking and session replacement. Transaction boundaries, rate-limiter calls, single-session behavior, cookie/API contracts and ordinary unlocked JWT identity reads are unchanged. No locking was removed, isolation was not changed, no retry or deadlock-to-credential mapping was added, and no dependency was added.
+
+[AuthServiceTest](../src/test/java/com/rockey/hospitality/service/AuthServiceTest.java) now verifies the order: candidate lookup, then primary-key lock, then password check, then save. It adds cases for a candidate that disappears before the lock and for a changed email or hash on the locked account, in both login and refresh. Two existing refresh tests (inactive account, missing expiration) now give the user the matching hash, so they still reach the branch they target.
+
+**Offline verification.** Full backend `verify` on Java 17 with `ROCKEY_HARDENING_LIVE=false` discovered 180 entries: 155 passed, 0 failures, 0 errors, 25 skipped (the opt-in live suite). That full verify evaluated and passed the JaCoCo gate. `scripts/verify-submission.py` and `git diff --check` passed.
+
+**Live rerun (passed).** A single rerun of `.\mvnw.cmd -B "-Dtest=HousekeepingMySqlTest" test` ran against the disposable `rockey_hospitality_hardening` database on 127.0.0.1 as a dedicated least-privilege account, not root. It passed 26/26 executions with 0 failures, errors or skips, including:
+- the four persisted pagination tests;
+- the eight account/session interleaving tests;
+- both `supervisorsManageAndInspectButCannotExecute` parameterized cases (MANAGER and ADMIN).
+
+The log contained no deadlock or lock-acquisition errors. The only SQL error was the expected one from the intentional oversized-notes rollback test. This targeted command did not evaluate the JaCoCo gate. Its per-test fixture deletions removed the earlier seed-verification rows. A later, separately approved guarded reset left the disposable database empty; seeded rows do not persist.
+
+**Provenance.** These tests ran against `a032bbd7ec157a1b5dc383723c218eec67461157` plus four uncommitted changed files: AuthService, UserRepository, AuthServiceTest and HousekeepingMySqlTest. They are not results for an unchanged committed revision. File hashes, run logs and sanitized results are kept only in the local, git-ignored `target/` directory and have not been published.
+
+**Limits.** This verifies the tested interleavings. It is not a universal guarantee that no deadlock can occur. Live Postman/Newman, Sonar analysis and quality gate, Jenkins execution, non-AWS deployment and rollback, and authenticated browser checks remain **NOT RUN**. Branch protection and the external submission items (peer reviews, Jira, self-assessment, Canvas, rehearsal, private demo access) remain outstanding.

@@ -54,52 +54,97 @@ class AuthServiceTest {
         String value = "é".repeat(40);
         assertThrows(BadRequestException.class, () -> service.hashPassword(value));
     }
+    void lockedCandidate() {
+        when(users.findIdByEmail("worker3@example.test")).thenReturn(Optional.of(3L));
+        when(users.findForUpdate(3L)).thenReturn(Optional.of(user));
+    }
+    void lockedRefresh(String hash) {
+        when(users.findIdByRefreshTokenHash(hash)).thenReturn(Optional.of(3L));
+        when(users.findForUpdate(3L)).thenReturn(Optional.of(user));
+    }
     @Test void loginChecksPasswordAndRotatesSession() {
-        session(); when(users.findForLogin("worker3@example.test")).thenReturn(Optional.of(user));
+        session(); lockedCandidate();
         when(passwords.matches("test-password", user.getPasswordHash())).thenReturn(true);
         assertNotNull(service.login("worker3@example.test", "test-password", "ip").getResponse());
         verify(limiter).resetLoginFailures("ip", "worker3@example.test");
-        verify(users).findForLogin("worker3@example.test");
+        InOrder order = inOrder(users, passwords);
+        order.verify(users).findIdByEmail("worker3@example.test");
+        order.verify(users).findForUpdate(3L);
+        order.verify(passwords).matches("test-password", user.getPasswordHash());
+        order.verify(users).save(user);
         verify(users, never()).findByEmailIgnoreCase(anyString());
     }
     @Test void absentLoginFailsGenerically() {
         assertThrows(InvalidCredentialsException.class, () -> service.login("missing@example.test", "test-password", "ip"));
         verify(limiter).recordLoginFailure("ip", "missing@example.test");
+        verify(users, never()).findForUpdate(anyLong());
+    }
+    @Test void loginFailsGenericallyWhenCandidateDisappearsBeforeLock() {
+        when(users.findIdByEmail("worker3@example.test")).thenReturn(Optional.of(3L));
+        assertThrows(InvalidCredentialsException.class, () -> service.login("worker3@example.test", "test-password", "ip"));
+        verify(limiter).recordLoginFailure("ip", "worker3@example.test");
+        verifyNoInteractions(passwords); verify(users, never()).save(any());
+    }
+    @Test void loginRechecksEmailOnLockedAccount() {
+        lockedCandidate(); user.update("Test worker", "changed@example.test", User.Role.USER, true);
+        assertThrows(InvalidCredentialsException.class, () -> service.login("worker3@example.test", "test-password", "ip"));
+        verify(limiter).recordLoginFailure("ip", "worker3@example.test");
+        verifyNoInteractions(passwords); verify(users, never()).save(any());
     }
     @Test void wrongPasswordFails() {
-        when(users.findForLogin("worker3@example.test")).thenReturn(Optional.of(user));
+        lockedCandidate();
         assertThrows(InvalidCredentialsException.class, () -> service.login("worker3@example.test", "wrong", "ip"));
     }
     @Test void inactiveLoginFails() {
-        user.deactivate(); when(users.findForLogin("worker3@example.test")).thenReturn(Optional.of(user));
+        user.deactivate(); lockedCandidate();
         assertThrows(InvalidCredentialsException.class, () -> service.login("worker3@example.test", "test-password", "ip"));
     }
     @Test void refreshRotatesOnlyValidSession() {
         session(); user.replaceRefreshSession("old", LocalDateTime.now().plusDays(1));
-        when(refresh.hash("old-cookie")).thenReturn("old");
-        when(users.findByRefreshTokenHash("old")).thenReturn(Optional.of(user));
+        when(refresh.hash("old-cookie")).thenReturn("old"); lockedRefresh("old");
         when(refresh.currentDatabaseTime()).thenReturn(LocalDateTime.now());
         service.refresh("old-cookie", "ip"); assertEquals("test-refresh-hash", user.getRefreshTokenHash());
+        InOrder order = inOrder(users);
+        order.verify(users).findIdByRefreshTokenHash("old"); order.verify(users).findForUpdate(3L); order.verify(users).save(user);
     }
     @Test void nullRefreshRejected() { assertThrows(InvalidRefreshTokenException.class, () -> service.refresh(null, "ip")); }
     @Test void blankRefreshRejected() { assertThrows(InvalidRefreshTokenException.class, () -> service.refresh(" ", "ip")); }
     @Test void unknownRefreshRejected() {
         when(refresh.hash("unknown")).thenReturn("unknown-hash");
         assertThrows(InvalidRefreshTokenException.class, () -> service.refresh("unknown", "ip"));
+        verify(users, never()).findForUpdate(anyLong());
+    }
+    @Test void refreshRejectedWhenCandidateDisappearsBeforeLock() {
+        when(refresh.hash("cookie")).thenReturn("old"); when(users.findIdByRefreshTokenHash("old")).thenReturn(Optional.of(3L));
+        assertThrows(InvalidRefreshTokenException.class, () -> service.refresh("cookie", "ip"));
+        verify(users, never()).save(any()); verify(refresh, never()).issueRefreshToken();
+    }
+    @Test void refreshRechecksHashOnLockedAccount() {
+        user.replaceRefreshSession("rotated", LocalDateTime.now().plusDays(1));
+        when(refresh.hash("cookie")).thenReturn("old"); lockedRefresh("old");
+        assertThrows(InvalidRefreshTokenException.class, () -> service.refresh("cookie", "ip"));
+        assertEquals("rotated", user.getRefreshTokenHash());
+        verify(users, never()).save(any()); verify(refresh, never()).issueRefreshToken();
+    }
+    @Test void refreshRejectedAfterLogoutRevokedLockedSession() {
+        when(refresh.hash("cookie")).thenReturn("old"); lockedRefresh("old");
+        assertThrows(InvalidRefreshTokenException.class, () -> service.refresh("cookie", "ip"));
+        verify(users, never()).save(any());
     }
     @Test void expiredRefreshRejected() {
         user.replaceRefreshSession("old", LocalDateTime.now().minusDays(1));
-        when(refresh.hash("cookie")).thenReturn("old"); when(users.findByRefreshTokenHash("old")).thenReturn(Optional.of(user));
+        when(refresh.hash("cookie")).thenReturn("old"); lockedRefresh("old");
         when(refresh.currentDatabaseTime()).thenReturn(LocalDateTime.now());
         assertThrows(InvalidRefreshTokenException.class, () -> service.refresh("cookie", "ip"));
     }
     @Test void inactiveRefreshRejected() {
-        user.deactivate(); when(refresh.hash("cookie")).thenReturn("old");
-        when(users.findByRefreshTokenHash("old")).thenReturn(Optional.of(user));
+        user.replaceRefreshSession("old", LocalDateTime.now().plusDays(1)); user.deactivate();
+        when(refresh.hash("cookie")).thenReturn("old"); lockedRefresh("old");
         assertThrows(InvalidRefreshTokenException.class, () -> service.refresh("cookie", "ip"));
     }
     @Test void missingExpirationRejected() {
-        when(refresh.hash("cookie")).thenReturn("old"); when(users.findByRefreshTokenHash("old")).thenReturn(Optional.of(user));
+        user.replaceRefreshSession("old", null);
+        when(refresh.hash("cookie")).thenReturn("old"); lockedRefresh("old");
         assertThrows(InvalidRefreshTokenException.class, () -> service.refresh("cookie", "ip"));
     }
     @Test void profileIsSafe() {
